@@ -362,3 +362,5 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /ButterBror.Host/appsettings.json
+/all_files.txt
+/shit.py
