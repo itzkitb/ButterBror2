@@ -32,17 +32,15 @@ public class CommandProcessor : ICommandProcessor
 
         try
         {
-            // Получаем или создаем пользователя
             var user = await _userService.GetOrCreateUserAsync(
                 context.User.Id,
                 context.Platform,
                 context.User.DisplayName
             );
 
-            // Создаем расширенный контекст с unified user ID
             var extendedContext = new ExtendedCommandContext(context, user.UnifiedUserId);
 
-            // Диспетчеризация команды
+            // Command Dispatch
             var result = await _commandDispatcher.DispatchAsync(extendedContext);
 
             stopwatch.Stop();
@@ -52,7 +50,7 @@ public class CommandProcessor : ICommandProcessor
                 "Command '{CommandName}' executed by user {UserId} in {ExecutionTime}ms. Result: {Success}",
                 context.CommandName, user.UnifiedUserId, stopwatch.ElapsedMilliseconds, result.Success);
 
-            // Обновляем статистику пользователя
+            // Updating user statistics
             await _userService.UpdateUserStatisticsAsync(
                 user.UnifiedUserId,
                 context.CommandName,

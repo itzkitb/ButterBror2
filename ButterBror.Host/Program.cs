@@ -1,29 +1,50 @@
-﻿// ButterBror.Host/Program.cs
-using ButterBror.Application.Commands;
+﻿using ButterBror.Application.Commands;
 using ButterBror.Application.Services;
 using ButterBror.Core.Interfaces;
-using ButterBror.Core.Models.Commands;
 using ButterBror.Host;
+using ButterBror.Host.Logging;
 using ButterBror.Infrastructure.Configuration;
 using ButterBror.Infrastructure.Data;
+using ButterBror.Infrastructure.Resilience;
 using ButterBror.Infrastructure.Services;
 using ButterBror.Infrastructure.Storage;
 using ButterBror.Platforms.Twitch.Services;
-using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Добавляем логирование
-builder.Logging.AddConsole();
+// Logging
+builder.Logging.AddConsole(options =>
+{
+    options.FormatterName = CustomConsoleFormatter.FormatterName;
+});
+builder.Services.Configure<CustomConsoleFormatterOptions>(options =>
+{
+    if (Environment.GetEnvironmentVariable("CI") == "true" ||
+        Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+    {
+        options.UseColors = false;
+    }
 
-// Регистрация сервисов
-builder.Services.AddSingleton<AppDataStorageProvider>();
+    // options.UseTrueColor = true;
+});
+builder.Logging.AddConsoleFormatter<CustomConsoleFormatter, CustomConsoleFormatterOptions>();
+
+// Services
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
 builder.Services.AddSingleton<ConfigService>();
+builder.Services.AddSingleton<AppDataStorageProvider>();
+builder.Services.AddSingleton<IPlatformModule, TwitchModule>();
+builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
+builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
+builder.Services.AddSingleton<IPlatformModuleRegistry, PlatformModuleRegistry>();
 
 // Redis
 var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
@@ -36,32 +57,20 @@ builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(UserInfoCommand).Assembly);
 });
 
-// Репозитории
+// Repositories
+builder.Services.RegisterResilienceStrategies();
 builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
 
-// Сервисы пользователей
-builder.Services.AddScoped<IUserService, UserService>();
-
-// Новые сервисы с разделенной ответственностью
-builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
-builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
-builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
-
-// Ядро бота
+// Core
 builder.Services.AddSingleton<IBotCore, BotCoreService>();
 
-// Регистрация модулей платформ
-builder.Services.AddSingleton<IPlatformModuleRegistry, PlatformModuleRegistry>();
-builder.Services.AddSingleton<IPlatformModule, TwitchModule>();
-
-// Twitch конкретные сервисы
+// Twitch
+// TODO: Need to delete this
 builder.Services.AddSingleton<ITwitchClient, TwitchLibClient>();
 builder.Services.AddSingleton<ICommandParser, TwitchCommandParser>();
-
-// Конфигурация Twitch
 builder.Services.Configure<TwitchConfiguration>(builder.Configuration.GetSection("Twitch"));
 
-// Background сервис для запуска бота
+// Background service
 builder.Services.AddHostedService<BotHostedService>();
 
 var host = builder.Build();

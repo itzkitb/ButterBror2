@@ -20,7 +20,6 @@ public class TwitchCommandParser : ICommandParser
     private void RegisterDefaultCommands()
     {
         _commandTypes.Add("userinfo", typeof(UserInfoCommand));
-        // Добавляем другие команды по мере необходимости
     }
 
     public ICommand? ParseCommand(ICommandContext context)
@@ -32,7 +31,7 @@ public class TwitchCommandParser : ICommandParser
             return null;
         }
 
-        // Для UserInfoCommand создаем экземпляр с правильными параметрами
+        // For UserInfoCommand, we create an instance with the correct parameters
         if (commandType == typeof(UserInfoCommand))
         {
             var targetUsername = context.Arguments.Length > 0
@@ -42,7 +41,6 @@ public class TwitchCommandParser : ICommandParser
             return new UserInfoCommand(targetUsername);
         }
 
-        // Для других команд используем DI
         return (ICommand)_serviceProvider.GetRequiredService(commandType);
     }
 }

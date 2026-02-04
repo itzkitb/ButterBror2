@@ -55,7 +55,7 @@ public class TwitchModule : IPlatformModule
 
             try
             {
-                await _twitchClient.ConnectAsync(_config.BotUsername, _config.OauthToken, _config.Channel);
+                await _twitchClient.ConnectAsync(_config.BotUsername, _config.OauthToken, _config.ClientId, _config.Channel);
             }
             catch (Exception ex)
             {
@@ -71,18 +71,19 @@ public class TwitchModule : IPlatformModule
 
     private async void OnConnected(object? sender, OnConnectedEventArgs e)
     {
-        _logger.LogInformation("Connected to Twitch: {Username}", e.BotUsername);
         // Отправка приветственного сообщения
+        _ = SafeHandleConnectAsync(e).ContinueWith(
+            t => _logger.LogError(t.Exception, "Unhandled exception in connect handler"),
+            TaskContinuationOptions.OnlyOnFaulted
+        );
+    }
+
+    private async Task SafeHandleConnectAsync(OnConnectedEventArgs e)
+    {
+        _logger.LogInformation("Connected to Twitch: {Username}", e.BotUsername);
         if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
         {
-            try
-            {
-                await libClient.SendMessageAsync(_config.Channel, $"Bot connected successfully!");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send welcome message");
-            }
+            await libClient.SendMessageAsync(_config.Channel, $"Bot connected successfully!");
         }
     }
 
@@ -91,20 +92,37 @@ public class TwitchModule : IPlatformModule
         _logger.LogWarning("Disconnected from Twitch");
     }
 
-    private async void OnMessageReceived(object? sender, OnMessageReceivedArgs e)
+    private void OnMessageReceived(object? sender, OnMessageReceivedArgs e)
     {
-        try
+        // Безопасный fire-and-forget с логированием
+        _ = SafeHandleMessageAsync(e).ContinueWith(
+            t => _logger.LogError(t.Exception, "Unhandled exception in message handler"),
+            TaskContinuationOptions.OnlyOnFaulted
+        );
+    }
+
+    private async Task SafeHandleMessageAsync(OnMessageReceivedArgs e)
+    {
+        // Вся логика здесь — без внешнего try-catch
+        if (TryParseCommand(e.ChatMessage.Message, out var commandName, out var arguments))
         {
-            // Парсим команду напрямую из сообщения
-            if (TryParseCommand(e.ChatMessage.Message, out var commandName, out var arguments))
+            var context = CreateCommandContext(e.ChatMessage, commandName, arguments);
+
+            // Получаем результат выполнения команды
+            var result = await _botCore.ProcessCommandAsync(context).ConfigureAwait(false);
+
+            // Отправляем результат обратно в чат
+            if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
             {
-                var context = CreateCommandContext(e.ChatMessage, commandName, arguments);
-                await _botCore.ProcessCommandAsync(context);
+                try
+                {
+                    await libClient.SendMessageAsync(e.ChatMessage.Channel, result.Message ?? "Command executed");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send command result back to channel {Channel}", e.ChatMessage.Channel);
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing Twitch message");
         }
     }
 

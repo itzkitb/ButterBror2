@@ -1,5 +1,4 @@
-﻿// ButterBror.Host/BotHostedService.cs
-using ButterBror.Core.Interfaces;
+﻿using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 

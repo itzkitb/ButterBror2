@@ -1,5 +1,6 @@
 ﻿using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
+using ButterBror.Core.Models.Commands;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Services;
@@ -34,9 +35,9 @@ public class BotCoreService : IBotCore
         _logger.LogInformation("Bot core started successfully");
     }
 
-    public async Task ProcessCommandAsync(ICommandContext context)
+    public async Task<CommandResult> ProcessCommandAsync(ICommandContext context)
     {
-        await _commandProcessor.ProcessCommandAsync(context);
+        return await _commandProcessor.ProcessCommandAsync(context);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)

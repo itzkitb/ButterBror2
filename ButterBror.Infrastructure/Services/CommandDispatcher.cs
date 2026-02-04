@@ -28,7 +28,7 @@ public class CommandDispatcher : ICommandDispatcher
 
         try
         {
-            // Парсим команду в конкретный тип команды
+            // Parse the command into a specific command type
             var command = _commandParser.ParseCommand(context);
 
             if (command == null)
@@ -36,7 +36,7 @@ public class CommandDispatcher : ICommandDispatcher
                 return CommandResult.Failure($"Command '{context.CommandName}' not found");
             }
 
-            // Используем MediatR для обработки команды
+            // Using MediatR to process the command
             var result = await _mediator.Send(command);
             result.ExecutionTime = stopwatch.Elapsed;
 

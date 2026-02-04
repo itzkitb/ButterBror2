@@ -17,8 +17,6 @@ public class UserService : IUserService
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Initializing user service...");
-        // Здесь можно добавить инициализацию, если нужно
     }
 
     public async Task<UserProfile> GetOrCreateUserAsync(string platformId, string platform, string displayName)
@@ -28,12 +26,11 @@ public class UserService : IUserService
         if (user != null)
         {
             user.LastActive = DateTime.UtcNow;
-            user.DisplayName = displayName; // Обновляем displayName если изменился
+            user.DisplayName = displayName;
             await _userRepository.CreateOrUpdateAsync(user);
             return user;
         }
 
-        // Создаем нового пользователя
         var newUser = new UserProfile
         {
             UnifiedUserId = Guid.NewGuid(),
@@ -57,7 +54,7 @@ public class UserService : IUserService
             return;
         }
 
-        // Обновляем статистику команд
+        // Updating team statistics
         var commandKey = $"commands.{commandName}";
         if (!user.Statistics.ContainsKey(commandKey))
         {
@@ -66,7 +63,7 @@ public class UserService : IUserService
 
         user.Statistics[commandKey] = (int)user.Statistics[commandKey] + 1;
 
-        // Обновляем общую статистику
+        // Updating general statistics
         var totalCommandsKey = "commands.total";
         if (!user.Statistics.ContainsKey(totalCommandsKey))
         {

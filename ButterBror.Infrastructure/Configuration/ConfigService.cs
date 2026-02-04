@@ -1,8 +1,5 @@
 ﻿using ButterBror.Infrastructure.Storage;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Text.Json;
 
 namespace ButterBror.Infrastructure.Configuration;
@@ -38,7 +35,7 @@ public class ConfigService
                 return config;
             }
 
-            // Создаем конфиг по умолчанию
+            // Create a default config
             var defaultConfig = new T();
             SaveConfig(configName, defaultConfig);
             return defaultConfig;

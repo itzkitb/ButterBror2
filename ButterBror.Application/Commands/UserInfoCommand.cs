@@ -1,6 +1,4 @@
-﻿using ButterBror.Core.Models;
-using ButterBror.Core.Models.Commands;
-using ButterBror.Domain.Entities;
+﻿using ButterBror.Core.Models.Commands;
 using ButterBror.Infrastructure.Data;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -24,14 +22,20 @@ public class UserInfoCommandHandler : IRequestHandler<UserInfoCommand, CommandRe
     {
         try
         {
-            var allUsers = await _userRepository.GetAllUsersAsync();
-            var user = allUsers.FirstOrDefault(u =>
-                u.DisplayName.Equals(command.TargetUsername, StringComparison.OrdinalIgnoreCase) ||
-                u.PlatformIds.Values.Any(id => id.Equals(command.TargetUsername, StringComparison.OrdinalIgnoreCase)));
+            // 1. Сначала ищем по индексу платформы (быстрый путь)
+            var user = await _userRepository.GetByPlatformIdAsync("twitch", command.TargetUsername);
 
+            // 2. Если не найдено - ищем по отображаемому имени
             if (user == null)
             {
-                return CommandResult.Failure($"User '{command.TargetUsername}' not found");
+                user = await _userRepository.GetByDisplayNameAsync(command.TargetUsername);
+            }
+
+            // 3. Если всё ещё не найдено - возвращаем ошибку
+            if (user == null)
+            {
+                return CommandResult.Failure($"User '{command.TargetUsername}' not found. " +
+                    "Try using exact username or Twitch ID.");
             }
 
             var stats = user.Statistics

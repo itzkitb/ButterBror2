@@ -2,7 +2,10 @@
 using ButterBror.Platforms.Twitch.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Registry;
 using System.Text.RegularExpressions;
+using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Enums;
 using TwitchLib.Client.Events;
@@ -10,18 +13,22 @@ using TwitchLib.Client.Interfaces;
 using TwitchLib.Client.Models;
 using TwitchLib.Communication.Clients;
 using TwitchLib.Communication.Models;
+using TwitchLib.EventSub.Websockets;
 
 namespace ButterBror.Platforms.Twitch.Services;
 
 public class TwitchLibClient : ITwitchClient, IDisposable
 {
     private readonly TwitchClient _client;
+    private readonly TwitchAPI _clientAPI;
     private readonly TwitchConfiguration _config;
+    private readonly EventSubWebsocketClient _eventSubClient;
+    private readonly ResiliencePipeline _twitchPipeline;
     private readonly ILogger<TwitchLibClient> _logger;
     private bool _isDisposed;
-    private int _reconnectAttempts;
-    private const int MaxReconnectAttempts = 5;
-    private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(5);
+
+    private string _username;
+    private string _id;
 
     public event EventHandler<OnMessageReceivedArgs>? OnMessageReceived;
     public event EventHandler<OnConnectedEventArgs>? OnConnected;
@@ -37,16 +44,20 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
     public TwitchLibClient(
         IOptions<TwitchConfiguration> config,
+        ResiliencePipelineProvider<string> pipelineProvider,
         ILogger<TwitchLibClient> logger)
     {
         _config = config.Value;
         _logger = logger;
+        _twitchPipeline = pipelineProvider.GetPipeline("twitch");
 
         // Настройка клиента с параметрами для надежности
         var clientOptions = new ClientOptions();
 
         var websocketClient = new WebSocketClient(clientOptions);
         _client = new TwitchClient(websocketClient);
+        _clientAPI = new TwitchAPI();
+        _eventSubClient = new EventSubWebsocketClient();
 
         // Подписка на события TwitchLib
         _client.OnMessageReceived += OnTwitchMessageReceived;
@@ -66,20 +77,19 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         _logger.LogInformation("TwitchLib client initialized");
     }
 
-    public async Task ConnectAsync(string username, string oauthToken, string channel)
+    public async Task ConnectAsync(string username, string oauthToken, string clientId, string channel)
     {
         if (_isDisposed)
             throw new ObjectDisposedException(nameof(TwitchLibClient));
 
         try
         {
-            _reconnectAttempts = 0;
             _logger.LogInformation("Attempting to connect to Twitch channel: {Channel}", channel);
 
             // Проверка конфигурации
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(oauthToken))
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(oauthToken) || string.IsNullOrWhiteSpace(clientId))
             {
-                throw new InvalidOperationException("Twitch username and OAuth token are required");
+                throw new InvalidOperationException("Twitch username and OAuth token/ClientId are required");
             }
 
             // Настройка credentials
@@ -104,12 +114,55 @@ public class TwitchLibClient : ITwitchClient, IDisposable
             await connectTask;
 
             _logger.LogInformation("Successfully connected to Twitch channel: {Channel}", channel);
+
+            _ = InitializeAPI(clientId, oauthToken);
+            _ = InitializeEventSub();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to connect to Twitch channel: {Channel}", channel);
             throw;
         }
+    }
+
+    private async Task InitializeAPI(string clientId, string oauthToken)
+    {
+        _clientAPI.Settings.ClientId = clientId;
+        _clientAPI.Settings.AccessToken = oauthToken.Substring("oauth:".Length);
+
+        _username = _client.TwitchUsername;
+        _id = await _twitchPipeline.ExecuteAsync(async ct =>
+            (await _clientAPI.Helix.Users.GetUsersAsync(logins: [_username])).Users[0].Id
+        );
+        _logger.LogInformation("Twitch API initialized");
+    }
+
+    private async Task InitializeEventSub()
+    {
+        _eventSubClient.WebsocketConnected += async (s, e) =>
+        {
+            // Subscribe to whispers for your user account
+            await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
+                "user.whisper.message", "1",
+                new Dictionary<string, string> { { "user_id", _id } },
+                TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
+                _eventSubClient.SessionId
+            );
+        };
+
+        // 2. Hook into the whisper event itself
+        _eventSubClient.UserWhisperMessage += async (s, e) =>
+        {
+            var msg = e.Payload.Event;
+            _logger.LogDebug($"Whisper from {msg.FromUserName}: {msg.Whisper.Text}");
+            _ = SendWhisperAsync(msg.FromUserId, "Hi!");
+
+            await Task.CompletedTask;
+        };
+
+        // 3. Connect to the Twitch EventSub server
+        await _eventSubClient.ConnectAsync();
+        _logger.LogInformation("Twitch EventSub initialized");
     }
 
     public async Task DisconnectAsync()
@@ -159,7 +212,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
     }
 
-    public async Task SendWhisperAsync(string recipient, string message)
+    public async Task SendWhisperAsync(string recipientUserId, string message)
     {
         if (_isDisposed)
             throw new ObjectDisposedException(nameof(TwitchLibClient));
@@ -170,12 +223,15 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         try
         {
             var sanitizedMessage = SanitizeMessage(message);
-            //await _client.SendWhisperAsync(recipient, sanitizedMessage); // Twitch removed whispers in IRC, only helix API
-            _logger.LogDebug("Sent whisper to {Recipient}: {Message}", recipient, sanitizedMessage);
+
+            await _twitchPipeline.ExecuteAsync(async ct =>
+                await _clientAPI.Helix.Whispers.SendWhisperAsync(_id, recipientUserId, message, true)
+            );
+            _logger.LogDebug("Sent whisper to {Recipient}: {Message}", recipientUserId, sanitizedMessage);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send whisper to {Recipient}", recipient);
+            _logger.LogError(ex, "Failed to send whisper to {Recipient}", recipientUserId);
             throw;
         }
     }
@@ -209,7 +265,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
     }
 
-    private async Task OnTwitchConnected(object? sender, TwitchLib.Client.Events.OnConnectedEventArgs e)
+    private async Task OnTwitchConnected(object? sender, OnConnectedEventArgs e)
     {
         try
         {
@@ -432,7 +488,7 @@ public interface ITwitchClient
     event EventHandler<OnConnectedEventArgs> OnConnected;
     event EventHandler<OnDisconnectedArgs> OnDisconnected;
 
-    Task ConnectAsync(string username, string oauthToken, string channel);
+    Task ConnectAsync(string username, string oauthToken, string clientId, string channel);
     Task DisconnectAsync();
 }
 
