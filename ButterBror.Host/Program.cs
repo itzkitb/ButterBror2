@@ -1,13 +1,17 @@
-﻿using ButterBror.Application.Commands;
+using ButterBror.Application.Commands;
 using ButterBror.Application.Services;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Registration;
+using ButterBror.Core.Services;
+using ButterBror.Data;
+using ButterBror.Domain;
 using ButterBror.Host;
 using ButterBror.Host.Logging;
 using ButterBror.Infrastructure.Configuration;
-using ButterBror.Infrastructure.Data;
 using ButterBror.Infrastructure.Resilience;
 using ButterBror.Infrastructure.Services;
 using ButterBror.Infrastructure.Storage;
+using ButterBror.Platforms.Twitch.Models;
 using ButterBror.Platforms.Twitch.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +24,7 @@ using StackExchange.Redis;
 var builder = Host.CreateApplicationBuilder(args);
 
 // Logging
+builder.Logging.ClearProviders(); // Удаляем все стандартные провайдеры
 builder.Logging.AddConsole(options =>
 {
     options.FormatterName = CustomConsoleFormatter.FormatterName;
@@ -42,9 +47,12 @@ builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
 builder.Services.AddSingleton<ConfigService>();
 builder.Services.AddSingleton<AppDataStorageProvider>();
 builder.Services.AddSingleton<IPlatformModule, TwitchModule>();
-builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
+// Use the new unified command dispatcher adapter
+builder.Services.AddSingleton<IUnifiedCommandDispatcher, UnifiedCommandDispatcher>();
+builder.Services.AddSingleton<ICommandDispatcher, UnifiedCommandDispatcherAdapter>();
 builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
 builder.Services.AddSingleton<IPlatformModuleRegistry, PlatformModuleRegistry>();
+builder.Services.AddSingleton<ICommandRegistry, CommandRegistry>();
 
 // Redis
 var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
@@ -60,18 +68,35 @@ builder.Services.AddMediatR(cfg =>
 // Repositories
 builder.Services.RegisterResilienceStrategies();
 builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
+builder.Services.AddScoped<ICommandUsageRepository, RedisCommandUsageRepository>();
 
 // Core
 builder.Services.AddSingleton<IBotCore, BotCoreService>();
 
+// Register commands
+builder.Services.AddCommands();
+builder.Services.AddSingleton<ICommandTypeRegistry, CommandTypeRegistry>();
+
 // Twitch
 // TODO: Need to delete this
 builder.Services.AddSingleton<ITwitchClient, TwitchLibClient>();
-builder.Services.AddSingleton<ICommandParser, TwitchCommandParser>();
 builder.Services.Configure<TwitchConfiguration>(builder.Configuration.GetSection("Twitch"));
 
 // Background service
 builder.Services.AddHostedService<BotHostedService>();
 
 var host = builder.Build();
+
+// Register all commands after services are built
+using (var scope = host.Services.CreateScope())
+{
+    var commandRegistry = scope.ServiceProvider.GetRequiredService<ICommandRegistry>();
+    var commandTypeRegistry = scope.ServiceProvider.GetRequiredService<ICommandTypeRegistry>();
+    
+    CommandRegistration.RegisterAllCommands(commandRegistry);
+    
+    // Register command types
+    commandTypeRegistry.RegisterCommandType("userinfo", typeof(UnifiedUserInfoCommand));
+}
+
 await host.RunAsync();

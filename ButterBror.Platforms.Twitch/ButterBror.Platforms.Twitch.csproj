@@ -21,4 +21,8 @@
     <ProjectReference Include="..\ButterBror.Infrastructure\ButterBror.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Models/" />
+  </ItemGroup>
+
 </Project>

@@ -13,7 +13,7 @@ public class TwitchCommandContext : ICommandContext
         User = user;
         Channel = channel;
         ExecutedAt = executedAt;
-        Platform = "Twitch";
+        Platform = "sillyapps:twitch";
         CorrelationId = Guid.NewGuid();
     }
 

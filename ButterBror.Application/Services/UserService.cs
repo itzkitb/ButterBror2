@@ -1,17 +1,20 @@
 ﻿using ButterBror.Domain.Entities;
-using ButterBror.Infrastructure.Data;
+using ButterBror.Data;
 using Microsoft.Extensions.Logging;
+using ButterBror.Domain;
 
 namespace ButterBror.Application.Services;
 
 public class UserService : IUserService
 {
     private readonly IUserRepository _userRepository;
+    private readonly ICommandUsageRepository _commandUsageRepository;
     private readonly ILogger<UserService> _logger;
 
-    public UserService(IUserRepository userRepository, ILogger<UserService> logger)
+    public UserService(IUserRepository userRepository, ICommandUsageRepository commandUsageRepository, ILogger<UserService> logger)
     {
         _userRepository = userRepository;
+        _commandUsageRepository = commandUsageRepository;
         _logger = logger;
     }
 
@@ -55,7 +58,7 @@ public class UserService : IUserService
         }
 
         // Updating team statistics
-        var commandKey = $"commands.{commandName}";
+        var commandKey = $"commands.{commandName}".ToLower();
         if (!user.Statistics.ContainsKey(commandKey))
         {
             user.Statistics[commandKey] = 0;
@@ -83,6 +86,19 @@ public class UserService : IUserService
             user.Statistics[successfulCommandsKey] = (int)user.Statistics[successfulCommandsKey] + 1;
         }
 
+        // Track the last time this command was used
+        await _commandUsageRepository.SetLastUsedAsync(commandName, DateTime.UtcNow);
+
         await _userRepository.CreateOrUpdateAsync(user);
+    }
+
+    public async Task<DateTime?> GetCommandLastUsedAsync(string commandName)
+    {
+        return await _commandUsageRepository.GetLastUsedAsync(commandName);
+    }
+
+    public async Task SetCommandLastUseAsync(string commandName, DateTime date)
+    {
+        await _commandUsageRepository.SetLastUsedAsync(commandName, date);
     }
 }

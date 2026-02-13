@@ -5,7 +5,7 @@ using Polly.Registry;
 using StackExchange.Redis;
 using System.Text.Json;
 
-namespace ButterBror.Infrastructure.Data;
+namespace ButterBror.Data;
 
 public class RedisUserRepository : IUserRepository
 {
@@ -90,6 +90,23 @@ public class RedisUserRepository : IUserRepository
             string indexKey = $"{DisplayNameIndexPrefix}{normalized}";
             RedisValue unifiedId = await db.StringGetAsync(indexKey);
             return unifiedId.HasValue ? await GetByUnifiedIdAsync(Guid.Parse(unifiedId.ToString())) : null;
+        });
+    }
+
+    public async Task<UserProfile?> FindUserAsync(string platform, string identifier)
+    {
+        return await _redisPipeline.ExecuteAsync(async ct =>
+        {
+            // S0: Searching by the platform index (the fastest way)
+            var user = await GetByPlatformIdAsync(platform, identifier);
+
+            // S1: If not found, search by the displayed name
+            if (user == null)
+            {
+                user = await GetByDisplayNameAsync(identifier);
+            }
+
+            return user;
         });
     }
 

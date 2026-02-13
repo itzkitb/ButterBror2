@@ -32,7 +32,7 @@ public class CustomConsoleFormatter : ConsoleFormatter
         StringBuilder logLine = new StringBuilder();
 
         // Timestamp
-        logLine.Append(DateTime.Now.ToString("HH:mm:ss"));
+        logLine.Append(DateTime.Now.ToString(@"dd\/MM\/yy HH:mm:ss"));
         logLine.Append(' ');
 
         // Log level with color
@@ -103,13 +103,13 @@ public class CustomConsoleFormatter : ConsoleFormatter
 
     private static string GetLogLevelAbbreviation(LogLevel logLevel) => logLevel switch
     {
-        LogLevel.Trace => "trce",
-        LogLevel.Debug => "dbug",
-        LogLevel.Information => "info",
-        LogLevel.Warning => "warn",
-        LogLevel.Error => "fail",
-        LogLevel.Critical => "crit",
-        _ => "none"
+        LogLevel.Trace => "t",
+        LogLevel.Debug => "d",
+        LogLevel.Information => "i",
+        LogLevel.Warning => "w",
+        LogLevel.Error => "f",
+        LogLevel.Critical => "c",
+        _ => "n"
     };
 
     // Базовые 8-цветные ANSI коды (максимальная совместимость)
@@ -144,15 +144,12 @@ public class CustomConsoleFormatter : ConsoleFormatter
 
     private static string HexToAnsiEscape(string hex, bool isBold = false)
     {
-        // Убираем # если есть
         hex = hex.TrimStart('#');
 
-        // Парсим RGB
         int r = Convert.ToInt32(hex.Substring(0, 2), 16);
         int g = Convert.ToInt32(hex.Substring(2, 2), 16);
         int b = Convert.ToInt32(hex.Substring(4, 2), 16);
 
-        // Формируем ANSI escape sequence
         string boldPrefix = isBold ? "\x1b[1m" : "";
         return $"{boldPrefix}\x1b[38;2;{r};{g};{b}m";
     }

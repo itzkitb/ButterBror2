@@ -6,7 +6,7 @@ namespace ButterBror.Domain.Entities;
 
 public class UserProfile
 {
-    public Guid UnifiedUserId { get; set; } // Уникальный ID для всех платформ
+    public Guid UnifiedUserId { get; set; }
     public Dictionary<string, string> PlatformIds { get; } = new(); // platform -> platformSpecificId
     public string DisplayName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }

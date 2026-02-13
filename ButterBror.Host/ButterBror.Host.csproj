@@ -28,6 +28,8 @@
   <ItemGroup>
     <ProjectReference Include="..\ButterBror.Application\ButterBror.Application.csproj" />
     <ProjectReference Include="..\ButterBror.Core\ButterBror.Core.csproj" />
+    <ProjectReference Include="..\ButterBror.Data\ButterBror.Data.csproj" />
+    <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />
     <ProjectReference Include="..\ButterBror.Infrastructure\ButterBror.Infrastructure.csproj" />
     <ProjectReference Include="..\ButterBror.Platforms.Twitch\ButterBror.Platforms.Twitch.csproj" />
   </ItemGroup>

@@ -1,6 +1,8 @@
 ﻿using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 using ButterBror.Infrastructure.Services;
+using ButterBror.Platforms.Twitch.Events;
+using ButterBror.Platforms.Twitch.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TwitchLib.Client.Events;
@@ -9,21 +11,18 @@ namespace ButterBror.Platforms.Twitch.Services;
 
 public class TwitchModule : IPlatformModule
 {
-    public string PlatformName => "Twitch";
+    public string PlatformName => "sillyapps:twitch";
     private readonly ITwitchClient _twitchClient;
     private IBotCore _botCore;
-    private readonly ICommandParser _commandParser;
     private readonly ILogger<TwitchModule> _logger;
     private readonly TwitchConfiguration _config;
 
     public TwitchModule(
         ITwitchClient twitchClient,
-        ICommandParser commandParser,
         IOptions<TwitchConfiguration> config,
         ILogger<TwitchModule> logger)
     {
         _twitchClient = twitchClient;
-        _commandParser = commandParser;
         _config = config.Value;
         _logger = logger;
     }
@@ -31,12 +30,12 @@ public class TwitchModule : IPlatformModule
     public async Task InitializeAsync(IBotCore core)
     {
         _botCore = core;
-        // Подписка на основные события
+        // Main events
         _twitchClient.OnMessageReceived += OnMessageReceived;
         _twitchClient.OnConnected += OnConnected;
         _twitchClient.OnDisconnected += OnDisconnected;
 
-        // Подписка на дополнительные события для расширенной функциональности
+        // Subscribing to additional features
         if (_twitchClient is TwitchLibClient libClient)
         {
             libClient.OnNewSubscriber += OnNewSubscriber;
@@ -71,7 +70,7 @@ public class TwitchModule : IPlatformModule
 
     private async void OnConnected(object? sender, OnConnectedEventArgs e)
     {
-        // Отправка приветственного сообщения
+        // Send a welcome message
         _ = SafeHandleConnectAsync(e).ContinueWith(
             t => _logger.LogError(t.Exception, "Unhandled exception in connect handler"),
             TaskContinuationOptions.OnlyOnFaulted
@@ -92,26 +91,27 @@ public class TwitchModule : IPlatformModule
         _logger.LogWarning("Disconnected from Twitch");
     }
 
-    private void OnMessageReceived(object? sender, OnMessageReceivedArgs e)
+    private void OnMessageReceived(object? sender, Events.OnMessageReceivedArgs e)
     {
-        // Безопасный fire-and-forget с логированием
         _ = SafeHandleMessageAsync(e).ContinueWith(
             t => _logger.LogError(t.Exception, "Unhandled exception in message handler"),
             TaskContinuationOptions.OnlyOnFaulted
         );
     }
 
-    private async Task SafeHandleMessageAsync(OnMessageReceivedArgs e)
+    private async Task SafeHandleMessageAsync(Events.OnMessageReceivedArgs e)
     {
-        // Вся логика здесь — без внешнего try-catch
         if (TryParseCommand(e.ChatMessage.Message, out var commandName, out var arguments))
         {
             var context = CreateCommandContext(e.ChatMessage, commandName, arguments);
-
-            // Получаем результат выполнения команды
             var result = await _botCore.ProcessCommandAsync(context).ConfigureAwait(false);
 
-            // Отправляем результат обратно в чат
+            if (!result.SendResult)
+            {
+                _logger.LogInformation("The command has requested not to send the result: {result}", result.Message ?? "[]");
+                return;
+            }
+
             if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
             {
                 try
@@ -126,7 +126,6 @@ public class TwitchModule : IPlatformModule
         }
     }
 
-    // Восстанавливаем метод TryParseCommand в модуле
     private bool TryParseCommand(string message, out string commandName, out string[] arguments)
     {
         commandName = string.Empty;
@@ -149,15 +148,13 @@ public class TwitchModule : IPlatformModule
         return !string.IsNullOrWhiteSpace(commandName);
     }
 
-    // Обработка новых событий (остается без изменений)
-    private async void OnNewSubscriber(object? sender, OnNewSubscriberArgs e)
+    private async void OnNewSubscriber(object? sender, Events.OnNewSubscriberArgs e)
     {
         if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
         {
             try
             {
-                string message = $"{e.Username} just subscribed with {e.SubscriptionPlan}! Thank you for {e.Months} months!";
-                await libClient.SendMessageAsync(_config.Channel, message);
+                // TODO: Add something here idk
             }
             catch (Exception ex)
             {
@@ -166,14 +163,13 @@ public class TwitchModule : IPlatformModule
         }
     }
 
-    private async void OnGiftedSubscription(object? sender, OnGiftedSubscriptionArgs e)
+    private async void OnGiftedSubscription(object? sender, Events.OnGiftedSubscriptionArgs e)
     {
         if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
         {
             try
             {
-                string message = $"{e.GifterUsername} gifted a subscription to {e.RecipientUsername}!";
-                await libClient.SendMessageAsync(_config.Channel, message);
+                // TODO: Add something here idk
             }
             catch (Exception ex)
             {
@@ -182,14 +178,13 @@ public class TwitchModule : IPlatformModule
         }
     }
 
-    private async void OnRaidNotification(object? sender, OnRaidNotificationArgs e)
+    private async void OnRaidNotification(object? sender, Events.OnRaidNotificationArgs e)
     {
         if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
         {
             try
             {
-                string message = $"raidW 🚨 RAID from {e.RaiderUsername} with {e.ViewerCount} viewers! Welcome everyone!";
-                await libClient.SendMessageAsync(_config.Channel, message);
+                // TODO: Add something here idk
             }
             catch (Exception ex)
             {
@@ -204,8 +199,7 @@ public class TwitchModule : IPlatformModule
         {
             try
             {
-                string message = $"{e.Username} just cheered {e.Bits} bits! Thank you so much!";
-                await libClient.SendMessageAsync(_config.Channel, message);
+                // TODO: Add something here idk
             }
             catch (Exception ex)
             {
@@ -238,7 +232,7 @@ public class TwitchModule : IPlatformModule
         {
             try
             {
-                await libClient.SendWhisperAsync(message.Sender.DisplayName, "Hello! I received your message.");
+                // TODO: Add something here idk
             }
             catch (Exception ex)
             {

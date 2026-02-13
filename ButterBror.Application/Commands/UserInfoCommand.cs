@@ -1,11 +1,29 @@
-﻿using ButterBror.Core.Models.Commands;
-using ButterBror.Infrastructure.Data;
+﻿using ButterBror.Core.Abstractions;
+using ButterBror.Core.Contracts;
+using ButterBror.Core.Enums;
+using ButterBror.Core.Models.Commands;
+using ButterBror.Data;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Commands;
 
-public record UserInfoCommand(string TargetUsername) : ICommand;
+public record UserInfoCommand(string TargetUsername) : IMetadataCommand
+{
+    public ICommandMetadata GetMetadata() => new UserInfoCommandMetadata();
+
+    private class UserInfoCommandMetadata : ICommandMetadata
+    {
+        public string Name => "userinfo";
+        public List<string> Aliases => new List<string> { "ui", "whois" };
+        public int CooldownSeconds => 10;
+        public List<string> RequiredPermissions => new List<string>();
+        public string ArgumentsHelpText => "<username>";
+        public string Id => "sillyapps:userinfo";
+        public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
+        public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch", "sillyapps:discord", "sillyapps:telegram" };
+    }
+}
 
 public class UserInfoCommandHandler : IRequestHandler<UserInfoCommand, CommandResult>
 {
@@ -22,16 +40,8 @@ public class UserInfoCommandHandler : IRequestHandler<UserInfoCommand, CommandRe
     {
         try
         {
-            // 1. Сначала ищем по индексу платформы (быстрый путь)
-            var user = await _userRepository.GetByPlatformIdAsync("twitch", command.TargetUsername);
+            var user = await _userRepository.FindUserAsync("twitch", command.TargetUsername);
 
-            // 2. Если не найдено - ищем по отображаемому имени
-            if (user == null)
-            {
-                user = await _userRepository.GetByDisplayNameAsync(command.TargetUsername);
-            }
-
-            // 3. Если всё ещё не найдено - возвращаем ошибку
             if (user == null)
             {
                 return CommandResult.Failure($"User '{command.TargetUsername}' not found. " +

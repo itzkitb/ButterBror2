@@ -1,6 +1,6 @@
 ﻿using ButterBror.Domain.Entities;
 
-namespace ButterBror.Infrastructure.Data;
+namespace ButterBror.Data;
 
 public interface IUserRepository
 {
@@ -9,4 +9,5 @@ public interface IUserRepository
     Task<UserProfile?> GetByDisplayNameAsync(string displayName);
     Task<UserProfile> CreateOrUpdateAsync(UserProfile user);
     Task<bool> UserExistsAsync(Guid unifiedId);
+    Task<UserProfile?> FindUserAsync(string platform, string identifier);
 }

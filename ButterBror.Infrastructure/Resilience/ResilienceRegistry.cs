@@ -34,8 +34,23 @@ public static class ResilienceRegistry
             });
         });
 
-        // Twitch API
-        services.AddResiliencePipeline("twitch", builder =>
+        // API
+        services.AddResiliencePipeline("api", builder =>
+        {
+            builder.AddRetry(new()
+            {
+                MaxRetryAttempts = 2,
+                Delay = TimeSpan.FromSeconds(1),
+                ShouldHandle = new PredicateBuilder()
+                    .Handle<TimeoutException>()
+                    .Handle<HttpRequestException>()
+            });
+
+            builder.AddTimeout(TimeSpan.FromSeconds(10));
+        });
+
+        // Platform
+        services.AddResiliencePipeline("platform", builder =>
         {
             builder.AddRetry(new()
             {

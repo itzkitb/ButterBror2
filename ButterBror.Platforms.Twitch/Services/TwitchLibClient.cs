@@ -1,5 +1,5 @@
-﻿using ButterBror.Core.Interfaces;
-using ButterBror.Platforms.Twitch.Services;
+﻿using ButterBror.Platforms.Twitch.Events;
+using ButterBror.Platforms.Twitch.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
@@ -7,9 +7,7 @@ using Polly.Registry;
 using System.Text.RegularExpressions;
 using TwitchLib.Api;
 using TwitchLib.Client;
-using TwitchLib.Client.Enums;
 using TwitchLib.Client.Events;
-using TwitchLib.Client.Interfaces;
 using TwitchLib.Client.Models;
 using TwitchLib.Communication.Clients;
 using TwitchLib.Communication.Models;
@@ -19,27 +17,27 @@ namespace ButterBror.Platforms.Twitch.Services;
 
 public class TwitchLibClient : ITwitchClient, IDisposable
 {
-    private readonly TwitchClient _client;
-    private readonly TwitchAPI _clientAPI;
+    private TwitchClient _client;
+    private  TwitchAPI _clientAPI;
+    private EventSubWebsocketClient _eventSubClient;
     private readonly TwitchConfiguration _config;
-    private readonly EventSubWebsocketClient _eventSubClient;
+    
     private readonly ResiliencePipeline _twitchPipeline;
+    private readonly ResiliencePipeline _apiPipeline;
     private readonly ILogger<TwitchLibClient> _logger;
     private bool _isDisposed;
 
     private string _username;
     private string _id;
 
-    public event EventHandler<OnMessageReceivedArgs>? OnMessageReceived;
+    public event EventHandler<Events.OnMessageReceivedArgs>? OnMessageReceived;
     public event EventHandler<OnConnectedEventArgs>? OnConnected;
     public event EventHandler<OnDisconnectedArgs>? OnDisconnected;
-
-    // Дополнительные события для расширенной функциональности
-    public event EventHandler<OnUserJoinedArgs>? OnUserJoined;
-    public event EventHandler<OnUserLeftArgs>? OnUserLeft;
-    public event EventHandler<OnNewSubscriberArgs>? OnNewSubscriber;
-    public event EventHandler<OnGiftedSubscriptionArgs>? OnGiftedSubscription;
-    public event EventHandler<OnRaidNotificationArgs>? OnRaidNotification;
+    public event EventHandler<Events.OnUserJoinedArgs>? OnUserJoined;
+    public event EventHandler<Events.OnUserLeftArgs>? OnUserLeft;
+    public event EventHandler<Events.OnNewSubscriberArgs>? OnNewSubscriber;
+    public event EventHandler<Events.OnGiftedSubscriptionArgs>? OnGiftedSubscription;
+    public event EventHandler<Events.OnRaidNotificationArgs>? OnRaidNotification;
     public event EventHandler<OnBitsReceivedArgs>? OnBitsReceived;
 
     public TwitchLibClient(
@@ -49,17 +47,27 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         _config = config.Value;
         _logger = logger;
-        _twitchPipeline = pipelineProvider.GetPipeline("twitch");
+        _twitchPipeline = pipelineProvider.GetPipeline("platform");
+        _apiPipeline = pipelineProvider.GetPipeline("api");
 
-        // Настройка клиента с параметрами для надежности
+        SetupClient();
+        SetupSubscribes();
+        
+        _logger.LogInformation("Hello, Twitch! <3");
+    }
+
+    private void SetupClient()
+    {
         var clientOptions = new ClientOptions();
 
         var websocketClient = new WebSocketClient(clientOptions);
         _client = new TwitchClient(websocketClient);
         _clientAPI = new TwitchAPI();
         _eventSubClient = new EventSubWebsocketClient();
+    }
 
-        // Подписка на события TwitchLib
+    private void SetupSubscribes()
+    {
         _client.OnMessageReceived += OnTwitchMessageReceived;
         _client.OnConnected += OnTwitchConnected;
         _client.OnDisconnected += OnTwitchDisconnected;
@@ -70,11 +78,6 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         _client.OnGiftedSubscription += OnTwitchGiftedSubscription;
         _client.OnRaidNotification += OnTwitchRaidNotification;
         _client.OnBitsBadgeTier += OnTwitchBitsReceived;
-
-        // Настройка обработчика команд
-        _client.OnChatCommandReceived += OnTwitchChatCommandReceived;
-
-        _logger.LogInformation("TwitchLib client initialized");
     }
 
     public async Task ConnectAsync(string username, string oauthToken, string clientId, string channel)
@@ -86,22 +89,22 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         {
             _logger.LogInformation("Attempting to connect to Twitch channel: {Channel}", channel);
 
-            // Проверка конфигурации
+            // Config check
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(oauthToken) || string.IsNullOrWhiteSpace(clientId))
             {
                 throw new InvalidOperationException("Twitch username and OAuth token/ClientId are required");
             }
 
-            // Настройка credentials
+            // Setup credentials
             var credentials = new ConnectionCredentials(
                 twitchUsername: username,
                 twitchOAuth: oauthToken,
-                disableUsernameCheck: true // Разрешаем любой юзернейм для ботов
+                disableUsernameCheck: true
             );
 
             _client.Initialize(credentials, channel);
 
-            // Подключение с таймаутом
+            // Connecting
             var connectTask = _client.ConnectAsync();
             var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
 
@@ -141,16 +144,18 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         _eventSubClient.WebsocketConnected += async (s, e) =>
         {
-            // Subscribe to whispers for your user account
-            await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
-                "user.whisper.message", "1",
-                new Dictionary<string, string> { { "user_id", _id } },
-                TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
-                _eventSubClient.SessionId
+            // Subscribe to whispers
+            await _apiPipeline.ExecuteAsync(async ct =>
+                await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
+                    "user.whisper.message", "1",
+                    new Dictionary<string, string> { { "user_id", _id } },
+                    TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
+                    _eventSubClient.SessionId
+                )
             );
         };
 
-        // 2. Hook into the whisper event itself
+        // Hook whisper event
         _eventSubClient.UserWhisperMessage += async (s, e) =>
         {
             var msg = e.Payload.Event;
@@ -160,7 +165,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
             await Task.CompletedTask;
         };
 
-        // 3. Connect to the Twitch EventSub server
+        // Connect to the EventSub
         await _eventSubClient.ConnectAsync();
         _logger.LogInformation("Twitch EventSub initialized");
     }
@@ -174,7 +179,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
             if (_client.IsConnected)
             {
                 await _client.DisconnectAsync();
-                _logger.LogInformation("Disconnected from Twitch");
+                _logger.LogInformation("Bye bye Twitch peepoSad");
             }
         }
         catch (Exception ex)
@@ -193,10 +198,10 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
         try
         {
-            // Очистка сообщения от запрещенных символов
+            // Clearing a message of prohibited characters
             var sanitizedMessage = SanitizeMessage(message);
 
-            // Проверка длины сообщения
+            // Checking the length of the message
             if (sanitizedMessage.Length > 500)
             {
                 sanitizedMessage = sanitizedMessage[..497] + "...";
@@ -242,8 +247,8 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         try
         {
-            // Конвертация в наш формат события
-            var chatMessage = new ChatMessage
+            // Convert twitchlib shit
+            var chatMessage = new Models.ChatMessage
             {
                 Username = e.ChatMessage.Username,
                 UserId = e.ChatMessage.UserId,
@@ -257,7 +262,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
                 Color = e.ChatMessage.HexColor
             };
 
-            OnMessageReceived?.Invoke(this, new OnMessageReceivedArgs { ChatMessage = chatMessage });
+            OnMessageReceived?.Invoke(this, new Events.OnMessageReceivedArgs { ChatMessage = chatMessage });
         }
         catch (Exception ex)
         {
@@ -302,7 +307,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         try
         {
-            var args = new OnNewSubscriberArgs
+            var args = new Events.OnNewSubscriberArgs
             {
                 Channel = e.Channel,
                 Username = e.Subscriber.Login,
@@ -321,7 +326,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         try
         {
-            var args = new OnGiftedSubscriptionArgs
+            var args = new Events.OnGiftedSubscriptionArgs
             {
                 Channel = e.Channel,
                 GifterUsername = e.GiftedSubscription.Login,
@@ -340,7 +345,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         try
         {
-            var args = new OnRaidNotificationArgs
+            var args = new Events.OnRaidNotificationArgs
             {
                 Channel = e.Channel,
                 RaiderUsername = e.RaidNotification.Login,
@@ -373,15 +378,8 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
     }
 
-    private async Task OnTwitchChatCommandReceived(object? sender, OnChatCommandReceivedArgs e)
-    {
-        // Этот обработчик нужен для внутренней логики TwitchLib
-        // Основная обработка команд будет в TwitchModule через OnMessageReceived
-    }
-
     private string SanitizeMessage(string message)
     {
-        // Удаляем запрещенные символы и избыточные пробелы
         return Regex.Replace(message, @"\s+", " ")
             .Replace("\r", "")
             .Replace("\n", " ")
@@ -419,7 +417,6 @@ public class TwitchLibClient : ITwitchClient, IDisposable
                 _client.OnGiftedSubscription -= OnTwitchGiftedSubscription;
                 _client.OnRaidNotification -= OnTwitchRaidNotification;
                 _client.OnBitsBadgeTier -= OnTwitchBitsReceived;
-                _client.OnChatCommandReceived -= OnTwitchChatCommandReceived;
 
                 _logger.LogInformation("TwitchLib client disposed successfully");
             }
@@ -436,77 +433,4 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         Dispose(false);
     }
-}
-
-// Дополнительные аргументы событий для расширенной функциональности
-public class OnUserJoinedArgs : EventArgs
-{
-    public string Channel { get; set; } = string.Empty;
-    public string Username { get; set; } = string.Empty;
-}
-
-public class OnUserLeftArgs : EventArgs
-{
-    public string Channel { get; set; } = string.Empty;
-    public string Username { get; set; } = string.Empty;
-}
-
-public class OnNewSubscriberArgs : EventArgs
-{
-    public string Channel { get; set; } = string.Empty;
-    public string Username { get; set; } = string.Empty;
-    public string SubscriptionPlan { get; set; } = string.Empty;
-    public int Months { get; set; }
-}
-
-public class OnGiftedSubscriptionArgs : EventArgs
-{
-    public string Channel { get; set; } = string.Empty;
-    public string GifterUsername { get; set; } = string.Empty;
-    public string RecipientUsername { get; set; } = string.Empty;
-    public string SubscriptionPlan { get; set; } = string.Empty;
-}
-
-public class OnRaidNotificationArgs : EventArgs
-{
-    public string Channel { get; set; } = string.Empty;
-    public string RaiderUsername { get; set; } = string.Empty;
-    public int ViewerCount { get; set; }
-}
-
-public class OnBitsReceivedArgs : EventArgs
-{
-    public string Channel { get; set; } = string.Empty;
-    public string Username { get; set; } = string.Empty;
-    public int Bits { get; set; }
-    public string Message { get; set; } = string.Empty;
-}
-
-public interface ITwitchClient
-{
-    event EventHandler<OnMessageReceivedArgs> OnMessageReceived;
-    event EventHandler<OnConnectedEventArgs> OnConnected;
-    event EventHandler<OnDisconnectedArgs> OnDisconnected;
-
-    Task ConnectAsync(string username, string oauthToken, string clientId, string channel);
-    Task DisconnectAsync();
-}
-
-public class OnMessageReceivedArgs : EventArgs
-{
-    public ChatMessage ChatMessage { get; set; } = new ChatMessage();
-}
-
-public class ChatMessage
-{
-    public string Username { get; set; } = string.Empty;
-    public string UserId { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
-    public string Channel { get; set; } = string.Empty;
-    public bool IsModerator { get; internal set; }
-    public bool IsBroadcaster { get; internal set; }
-    public bool IsSubscriber { get; internal set; }
-    public bool IsVIP { get; internal set; }
-    public List<KeyValuePair<string, string>> Badges { get; internal set; }
-    public string Color { get; internal set; }
 }

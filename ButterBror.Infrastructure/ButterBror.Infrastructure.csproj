@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ButterBror.Core\ButterBror.Core.csproj" />
+    <ProjectReference Include="..\ButterBror.Data\ButterBror.Data.csproj" />
     <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />
   </ItemGroup>
 

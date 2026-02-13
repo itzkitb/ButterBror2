@@ -1,4 +1,4 @@
-﻿using ButterBror.Core.Interfaces;
+using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 using ButterBror.Core.Models.Commands;
 using MediatR;
@@ -10,15 +10,18 @@ public class CommandDispatcher : ICommandDispatcher
 {
     private readonly IMediator _mediator;
     private readonly ILogger<CommandDispatcher> _logger;
-    private readonly ICommandParser _commandParser;
+    private readonly IUnifiedCommandDispatcher _unifiedCommandDispatcher;
+    private readonly IServiceProvider _serviceProvider;
 
     public CommandDispatcher(
         IMediator mediator,
-        ICommandParser commandParser,
+        IUnifiedCommandDispatcher unifiedCommandDispatcher,
+        IServiceProvider serviceProvider,
         ILogger<CommandDispatcher> logger)
     {
         _mediator = mediator;
-        _commandParser = commandParser;
+        _unifiedCommandDispatcher = unifiedCommandDispatcher;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -28,16 +31,15 @@ public class CommandDispatcher : ICommandDispatcher
 
         try
         {
-            // Parse the command into a specific command type
-            var command = _commandParser.ParseCommand(context);
-
-            if (command == null)
-            {
-                return CommandResult.Failure($"Command '{context.CommandName}' not found");
-            }
-
-            // Using MediatR to process the command
-            var result = await _mediator.Send(command);
+            // Dispatch using the unified command dispatcher
+            var result = await _unifiedCommandDispatcher.DispatchAsync(
+                context.CommandName,
+                context.Channel,
+                context.Arguments.ToList(),
+                context.User,
+                _serviceProvider
+            );
+            
             result.ExecutionTime = stopwatch.Elapsed;
 
             return result;
