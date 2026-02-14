@@ -38,7 +38,7 @@ public class RedisCommandUsageRepository : ICommandUsageRepository
 
             try
             {
-                return DateTime.Parse(value.ToString());
+                return DateTime.Parse(value.ToString()).ToUniversalTime();
             }
             catch (FormatException ex)
             {
