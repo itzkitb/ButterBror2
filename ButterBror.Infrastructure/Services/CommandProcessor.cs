@@ -115,8 +115,7 @@ public class CommandProcessor : ICommandProcessor
         }
 
         // S2: Validating permissions
-        var userPermissions = user.Permissions;
-        if (!_commandRegistry.UserHasPermissionForCommand(commandName, userPermissions))
+        if (!await _commandRegistry.UserHasPermissionForCommandAsync(commandName, user.UnifiedUserId))
         {
             return CommandResult.Failure($"You don't have permission to execute command '{commandName}'.");
         }

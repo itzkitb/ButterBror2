@@ -20,7 +20,7 @@ public interface ICommandRegistry
     string GetCommandModuleId(string commandName);
     IEnumerable<string> GetRegisteredCommands();
     bool IsCommandCompatibleWithPlatform(string commandName, string platformId);
-    bool UserHasPermissionForCommand(string commandName, List<string> userPermissions);
+    Task<bool> UserHasPermissionForCommandAsync(string commandName, Guid unifiedUserId);
 
     // Legacy methods for backward compatibility
     void RegisterCommand(string name, ICommand command);

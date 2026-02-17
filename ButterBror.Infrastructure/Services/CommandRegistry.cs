@@ -1,18 +1,25 @@
 using ButterBror.Core.Contracts;
 using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.Infrastructure.Services;
 
 public class CommandRegistry : ICommandRegistry
 {
     private readonly Dictionary<string, CommandEntry> _commands = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IServiceProvider _serviceProvider;
 
     private record CommandEntry(
         Func<ICommand> Factory,
         ICommandMetadata Metadata,
         string ModuleId
     );
+
+    public CommandRegistry(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
 
     public void RegisterGlobalCommand(string commandName, Func<ICommand> factory, ICommandMetadata metadata)
     {
@@ -83,7 +90,7 @@ public class CommandRegistry : ICommandRegistry
         }
     }
 
-    public bool UserHasPermissionForCommand(string commandName, List<string> userPermissions)
+    public async Task<bool> UserHasPermissionForCommandAsync(string commandName, Guid unifiedUserId)
     {
         if (!_commands.TryGetValue(commandName, out var entry))
         {
@@ -98,9 +105,20 @@ public class CommandRegistry : ICommandRegistry
             return true;
         }
 
-        // Check if user has any of the required permissions
-        return metadata.RequiredPermissions.Any(requiredPerm =>
-            userPermissions.Contains(requiredPerm, StringComparer.OrdinalIgnoreCase));
+        // Use scoped PermissionManager for permission check
+        using var scope = _serviceProvider.CreateScope();
+        var permissionManager = scope.ServiceProvider.GetRequiredService<IPermissionManager>();
+
+        // Check if user has any of the required permissions using PermissionManager
+        foreach (var requiredPerm in metadata.RequiredPermissions)
+        {
+            if (await permissionManager.HasPermissionAsync(unifiedUserId, requiredPerm))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Legacy methods for backward compatibility
