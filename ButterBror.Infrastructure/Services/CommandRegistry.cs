@@ -142,10 +142,4 @@ public class CommandRegistry : ICommandRegistry
     {
         return GetCommandMetadata(name);
     }
-
-    public void RegisterCommandMetadata(ICommandMetadata metadata)
-    {
-        // For backward compatibility with CommandAutoRegistrar
-        // In new architecture, metadata is registered together with command factory
-    }
 }

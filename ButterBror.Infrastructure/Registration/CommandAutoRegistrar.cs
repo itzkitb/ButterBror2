@@ -1,8 +1,5 @@
 using ButterBror.Core.Attributes;
-using ButterBror.Core.Contracts;
-using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
-using ButterBror.Core.Models.Commands;
 using ButterBror.Infrastructure.Wrappers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,11 +16,13 @@ public class CommandAutoRegistrar : ICommandAutoRegistrar
 {
     private readonly ICommandRegistry _commandRegistry;
     private readonly ILogger<CommandAutoRegistrar> _logger;
+    private readonly IServiceProvider _serviceProvider;
 
-    public CommandAutoRegistrar(ICommandRegistry commandRegistry, ILogger<CommandAutoRegistrar> logger)
+    public CommandAutoRegistrar(ICommandRegistry commandRegistry, ILogger<CommandAutoRegistrar> logger, IServiceProvider serviceProvider)
     {
         _commandRegistry = commandRegistry;
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
 
     public void RegisterAllCommands(IServiceCollection services)
@@ -39,7 +38,10 @@ public class CommandAutoRegistrar : ICommandAutoRegistrar
             if (attribute != null)
             {
                 var metadata = new CommandMetadataWrapper(attribute);
-                _commandRegistry.RegisterCommandMetadata(metadata);
+                
+                // Register command with factory
+                var factory = () => (ICommand)ActivatorUtilities.CreateInstance(_serviceProvider, commandType);
+                _commandRegistry.RegisterGlobalCommand(attribute.Name, factory, metadata);
 
                 _logger.LogInformation("Auto-registered command '{CommandName}' from type {TypeName}",
                     metadata.Name, commandType.Name);

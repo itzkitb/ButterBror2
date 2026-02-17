@@ -23,9 +23,7 @@ public interface ICommandRegistry
     Task<bool> UserHasPermissionForCommandAsync(string commandName, Guid unifiedUserId);
 
     // Legacy methods for backward compatibility
-    void RegisterCommand(string name, ICommand command);
     bool TryGetUnifiedCommand(string name, out ICommand command);
     IEnumerable<string> GetRegisteredCommandNames();
     ICommandMetadata? GetCommand(string name);
-    void RegisterCommandMetadata(ICommandMetadata metadata);
 }
