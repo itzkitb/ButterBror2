@@ -1,14 +1,13 @@
-﻿using ButterBror.Core.Interfaces;
+using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 using ButterBror.Core.Models.Commands;
 using ButterBror.Core.Abstractions;
-using ButterBror.Core.Services;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using ButterBror.Data;
 using ButterBror.Domain.Entities;
 
-namespace ButterBror.Application.Services;
+namespace ButterBror.Infrastructure.Services;
 
 public interface ICommandProcessor
 {
@@ -19,14 +18,14 @@ public class CommandProcessor : ICommandProcessor
 {
     private readonly ICommandDispatcher _commandDispatcher;
     private readonly IUserService _userService;
-    private readonly ICommandRegistry _commandRegistry;
+    private readonly IUnifiedCommandRegistry _commandRegistry;
     private readonly ILogger<CommandProcessor> _logger;
     private readonly IUserRepository _userRepository;
 
     public CommandProcessor(
         ICommandDispatcher commandDispatcher,
         IUserService userService,
-        ICommandRegistry commandRegistry,
+        IUnifiedCommandRegistry commandRegistry,
         ILogger<CommandProcessor> logger,
         IUserRepository userRepository)
     {
@@ -59,11 +58,11 @@ public class CommandProcessor : ICommandProcessor
                 return validationResult;
             }
 
-            // If validation passes, proceed with user management and command execution
+            // S2: Proceed with user management and command execution
 
             var extendedContext = new ExtendedCommandContext(context, user.UnifiedUserId);
 
-            // Command Dispatch
+            // S3: Command Dispatch
             var result = await _commandDispatcher.DispatchAsync(extendedContext);
 
             stopwatch.Stop();
@@ -73,7 +72,7 @@ public class CommandProcessor : ICommandProcessor
                 "Command '{CommandName}' executed by user {UserId} in {ExecutionTime}ms. Result: {Success}",
                 context.CommandName, user.UnifiedUserId, stopwatch.ElapsedMilliseconds, result.Success);
 
-            // Updating user statistics
+            // S4: Updating user statistics
             await _userService.UpdateUserStatisticsAsync(
                 user.UnifiedUserId,
                 context.CommandName,
@@ -102,7 +101,7 @@ public class CommandProcessor : ICommandProcessor
         var commandName = context.CommandName;
 
         // S0: Validating that command exists
-        var commandMetadata = _commandRegistry.GetCommand(commandName);
+        var commandMetadata = _commandRegistry.GetCommandMetadata(commandName);
         if (commandMetadata == null)
         {
             return CommandResult.Failure($"Command '{commandName}' not found.", sendResult:false);

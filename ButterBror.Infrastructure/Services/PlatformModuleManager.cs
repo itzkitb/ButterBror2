@@ -1,8 +1,8 @@
-﻿using ButterBror.Core.Interfaces;
+using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.Application.Services;
+namespace ButterBror.Infrastructure.Services;
 
 public interface IPlatformModuleManager
 {
@@ -15,15 +15,18 @@ public class PlatformModuleManager : IPlatformModuleManager
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IPlatformModuleRegistry _moduleRegistry;
+    private readonly IUnifiedCommandRegistry _commandRegistry;
     private readonly ILogger<PlatformModuleManager> _logger;
 
     public PlatformModuleManager(
         IServiceProvider serviceProvider,
         IPlatformModuleRegistry moduleRegistry,
+        IUnifiedCommandRegistry commandRegistry,
         ILogger<PlatformModuleManager> logger)
     {
         _serviceProvider = serviceProvider;
         _moduleRegistry = moduleRegistry;
+        _commandRegistry = commandRegistry;
         _logger = logger;
     }
 
@@ -36,9 +39,24 @@ public class PlatformModuleManager : IPlatformModuleManager
         {
             try
             {
+                // Register exported commands from module
+                foreach (var exportedCommand in module.ExportedCommands)
+                {
+                    _commandRegistry.RegisterModuleCommand(
+                        exportedCommand.CommandName,
+                        module.PlatformName,
+                        exportedCommand.Factory,
+                        exportedCommand.Metadata
+                    );
+                }
+
                 await module.InitializeAsync(core);
                 _moduleRegistry.RegisterModule(module);
-                _logger.LogInformation("Initialized platform module: {PlatformName}", module.PlatformName);
+                _logger.LogInformation(
+                    "Initialized platform module: {PlatformName} with {CommandCount} commands",
+                    module.PlatformName,
+                    module.ExportedCommands.Count
+                );
             }
             catch (Exception ex)
             {

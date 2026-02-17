@@ -3,11 +3,12 @@ using ButterBror.Core.Contracts;
 using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
+using ButterBror.Infrastructure.Wrappers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Reflection;
 
-namespace ButterBror.Core.Registration;
+namespace ButterBror.Infrastructure.Registration;
 
 public interface ICommandAutoRegistrar
 {
@@ -37,7 +38,7 @@ public class CommandAutoRegistrar : ICommandAutoRegistrar
             var attribute = commandType.GetCustomAttribute<CommandAttribute>();
             if (attribute != null)
             {
-                var metadata = new Wrappers.CommandMetadataWrapper(attribute);
+                var metadata = new CommandMetadataWrapper(attribute);
                 _commandRegistry.RegisterCommandMetadata(metadata);
 
                 _logger.LogInformation("Auto-registered command '{CommandName}' from type {TypeName}",

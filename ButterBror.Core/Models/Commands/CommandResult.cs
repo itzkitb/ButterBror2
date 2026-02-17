@@ -8,8 +8,8 @@ public class CommandResult
     public bool SendResult { get; set; }
     public TimeSpan ExecutionTime { get; set; }
 
-    public static CommandResult Successfully(string message = "Command executed successfully", object? data = null) =>
-        new() { Success = true, Message = message, Data = data };
+    public static CommandResult Successfully(string message = "Command executed successfully", object? data = null, bool sendResult = true) =>
+        new() { Success = true, Message = message, Data = data, SendResult = sendResult };
 
     public static CommandResult Failure(string message, Exception? exception = null, bool sendResult = true) =>
         new() { Success = false, Message = message, SendResult = sendResult };

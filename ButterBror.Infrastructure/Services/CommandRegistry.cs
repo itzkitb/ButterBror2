@@ -4,11 +4,11 @@ using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.Core.Services;
+namespace ButterBror.Infrastructure.Services;
 
 public class CommandRegistry : ICommandRegistry
 {
-    private readonly Dictionary<string, IUnifiedCommand> _commands = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Core.Interfaces.ICommand> _commands = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ICommandMetadata> _metadata = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<CommandRegistry> _logger;
 
@@ -18,7 +18,7 @@ public class CommandRegistry : ICommandRegistry
     }
 
     // Unified command methods
-    public void RegisterCommand(string name, IUnifiedCommand command)
+    public void RegisterCommand(string name, Core.Interfaces.ICommand command)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -34,7 +34,7 @@ public class CommandRegistry : ICommandRegistry
         _logger.LogInformation("Registered unified command: {CommandName}", name);
     }
 
-    public bool TryGetUnifiedCommand(string name, out IUnifiedCommand command)
+    public bool TryGetUnifiedCommand(string name, out Core.Interfaces.ICommand command)
     {
         return _commands.TryGetValue(name, out command!);
     }
@@ -81,27 +81,27 @@ public class CommandRegistry : ICommandRegistry
             return false;
         }
 
-        // If command requires no permissions, allow
+        // Command requires no permissions
         if (metadata.RequiredPermissions.Count == 0)
         {
             return true;
         }
 
         // Check if user has any of the required permissions
-        return metadata.RequiredPermissions.Any(requiredPerm => 
+        return metadata.RequiredPermissions.Any(requiredPerm =>
             userPermissions.Contains(requiredPerm, StringComparer.OrdinalIgnoreCase));
     }
 
     public void RegisterCommandMetadata(ICommandMetadata metadata)
     {
         _metadata[metadata.Name] = metadata;
-        
+
         // Also register aliases
         foreach (var alias in metadata.Aliases)
         {
             _metadata[alias] = metadata;
         }
-        
+
         _logger.LogInformation("Registered command metadata: {CommandName}", metadata.Name);
     }
 }

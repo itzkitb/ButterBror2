@@ -8,7 +8,7 @@ public class TwitchChannel : IPlatformChannel
     {
         Id = channelName.ToLowerInvariant();
         Name = channelName;
-        Platform = "Twitch";
+        Platform = "sillyapps:twitch";
     }
 
     public string Id { get; }

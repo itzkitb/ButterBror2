@@ -1,9 +1,9 @@
-﻿using ButterBror.Core.Interfaces;
+using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 using ButterBror.Core.Models.Commands;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.Application.Services;
+namespace ButterBror.Infrastructure.Services;
 
 public class BotCoreService : IBotCore
 {

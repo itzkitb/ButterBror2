@@ -8,8 +8,8 @@ namespace ButterBror.Core.Interfaces;
 public interface ICommandRegistry
 {
     // Unified command methods
-    void RegisterCommand(string name, IUnifiedCommand command);
-    bool TryGetUnifiedCommand(string name, out IUnifiedCommand command);
+    void RegisterCommand(string name, ICommand command);
+    bool TryGetUnifiedCommand(string name, out ICommand command);
     IEnumerable<string> GetRegisteredCommandNames();
 
     // Metadata methods for validation

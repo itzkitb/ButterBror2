@@ -1,6 +1,10 @@
-﻿using ButterBror.Core.Interfaces;
+﻿using ButterBror.Core.Contracts;
+using ButterBror.Core.Enums;
+using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
+using ButterBror.Core.Models.Commands;
 using ButterBror.Infrastructure.Services;
+using ButterBror.Platforms.Twitch.Commands;
 using ButterBror.Platforms.Twitch.Events;
 using ButterBror.Platforms.Twitch.Models;
 using Microsoft.Extensions.Logging;
@@ -12,6 +16,13 @@ namespace ButterBror.Platforms.Twitch.Services;
 public class TwitchModule : IPlatformModule
 {
     public string PlatformName => "sillyapps:twitch";
+    
+    public IReadOnlyList<ModuleCommandExport> ExportedCommands => new List<ModuleCommandExport>
+    {
+        new ModuleCommandExport("join", () => new JoinChannelCommand(), new JoinChannelCommandMetadata()),
+        new ModuleCommandExport("part", () => new PartChannelCommand(), new PartChannelCommandMetadata())
+    };
+    
     private readonly ITwitchClient _twitchClient;
     private IBotCore _botCore;
     private readonly ILogger<TwitchModule> _logger;

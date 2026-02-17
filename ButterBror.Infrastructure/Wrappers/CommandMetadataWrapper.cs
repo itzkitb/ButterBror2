@@ -4,11 +4,8 @@ using ButterBror.Core.Enums;
 using ButterBror.Core.Models.Commands;
 using MediatR;
 
-namespace ButterBror.Core.Wrappers;
+namespace ButterBror.Infrastructure.Wrappers;
 
-/// <summary>
-/// Wrapper that implements ICommandMetadata from CommandAttribute
-/// </summary>
 public class CommandMetadataWrapper : ICommandMetadata
 {
     private readonly CommandAttribute _attribute;

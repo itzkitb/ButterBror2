@@ -188,6 +188,46 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
     }
 
+    public async Task JoinChannelAsync(string channel)
+    {
+        if (_isDisposed)
+            throw new ObjectDisposedException(nameof(TwitchLibClient));
+
+        if (!_client.IsConnected)
+            throw new InvalidOperationException("Not connected to Twitch");
+
+        try
+        {
+            await _client.JoinChannelAsync(channel);
+            _logger.LogInformation("Joining channel: {Channel}", channel);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to join channel {Channel}", channel);
+            throw;
+        }
+    }
+
+    public async Task LeaveChannelAsync(string channel)
+    {
+        if (_isDisposed)
+            throw new ObjectDisposedException(nameof(TwitchLibClient));
+
+        if (!_client.IsConnected)
+            throw new InvalidOperationException("Not connected to Twitch");
+
+        try
+        {
+            await _client.LeaveChannelAsync(channel);
+            _logger.LogInformation("Leaving channel: {Channel}", channel);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to leave channel {Channel}", channel);
+            throw;
+        }
+    }
+
     public async Task SendMessageAsync(string channel, string message)
     {
         if (_isDisposed)

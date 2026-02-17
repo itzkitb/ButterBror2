@@ -1,9 +1,10 @@
-﻿using ButterBror.Domain.Entities;
+using ButterBror.Core.Interfaces;
+using ButterBror.Domain.Entities;
 using ButterBror.Data;
 using Microsoft.Extensions.Logging;
 using ButterBror.Domain;
 
-namespace ButterBror.Application.Services;
+namespace ButterBror.Infrastructure.Services;
 
 public class UserService : IUserService
 {

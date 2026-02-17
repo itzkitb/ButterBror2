@@ -1,6 +1,5 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.Core.Interfaces;
 

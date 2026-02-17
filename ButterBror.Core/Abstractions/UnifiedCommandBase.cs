@@ -1,6 +1,5 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Core.Abstractions;
@@ -8,27 +7,25 @@ namespace ButterBror.Core.Abstractions;
 /// <summary>
 /// Base class for unified commands with common functionality
 /// </summary>
-public abstract class UnifiedCommandBase : IUnifiedCommand
+public abstract class UnifiedCommandBase : Interfaces.ICommand
 {
     public abstract Task<CommandResult> ExecuteAsync(
-        IPlatformChannel channel, 
-        List<string> arguments, 
-        IPlatformUser user, 
-        IServiceProvider services);
+        ICommandExecutionContext context,
+        ICommandServiceProvider serviceProvider);
 
     /// <summary>
     /// Helper method to get service from provider
     /// </summary>
-    protected T GetService<T>(IServiceProvider services) where T : notnull
+    protected T GetService<T>(ICommandServiceProvider serviceProvider) where T : notnull
     {
-        return services.GetRequiredService<T>();
+        return serviceProvider.GetService<T>();
     }
 
     /// <summary>
     /// Helper method to get logger for command
     /// </summary>
-    protected ILogger<T> GetLogger<T>(IServiceProvider services) where T : notnull
+    protected ILogger<T> GetLogger<T>(ICommandServiceProvider serviceProvider) where T : notnull
     {
-        return GetService<ILogger<T>>(services);
+        return GetService<ILogger<T>>(serviceProvider);
     }
 }

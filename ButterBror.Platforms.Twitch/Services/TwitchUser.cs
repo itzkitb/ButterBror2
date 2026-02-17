@@ -8,7 +8,7 @@ public class TwitchUser : IPlatformUser
     {
         Id = userId;
         DisplayName = username;
-        Platform = "Twitch";
+        Platform = "sillyapps:twitch";
         IsModerator = isModerator;
         IsBroadcaster = isBroadcaster;
     }

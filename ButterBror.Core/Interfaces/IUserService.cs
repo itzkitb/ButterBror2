@@ -1,6 +1,6 @@
 ﻿using ButterBror.Domain.Entities;
 
-namespace ButterBror.Application.Services;
+namespace ButterBror.Core.Interfaces;
 
 public interface IUserService
 {

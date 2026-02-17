@@ -2,7 +2,6 @@ using ButterBror.Core.Contracts;
 using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
-using ButterBror.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.Core.Registration;
@@ -16,29 +15,19 @@ public static class CommandRegistration
         return services;
     }
 
-    public static void RegisterAllCommands(ICommandRegistry registry)
+    /// <summary>
+    /// Registers all global commands in the registry
+    /// </summary>
+    /// <remarks>
+    /// This method must be called from the host project, which has references to all modules.
+    /// Command factories are created directly at the call site.
+    /// </remarks>
+    public static void RegisterGlobalCommand<TCommand>(
+        IUnifiedCommandRegistry registry,
+        string commandName,
+        Func<TCommand> factory,
+        ICommandMetadata metadata) where TCommand : Interfaces.ICommand
     {
-        // Register command metadata - creating temporary metadata object
-        var metadata = CreateUserInfoMetadata();
-        registry.RegisterCommandMetadata(metadata);
-        
-        // Add more commands here as they are converted
-    }
-    
-    private static ICommandMetadata CreateUserInfoMetadata()
-    {
-        return new UserInfoCommandMetadata();
-    }
-    
-    private class UserInfoCommandMetadata : ICommandMetadata
-    {
-        public string Name => "userinfo";
-        public List<string> Aliases => new List<string> { "ui", "whois" };
-        public int CooldownSeconds => 10;
-        public List<string> RequiredPermissions => new List<string>();
-        public string ArgumentsHelpText => "<username>";
-        public string Id => "sillyapps:userinfo";
-        public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-        public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch", "sillyapps:discord", "sillyapps:telegram" };
+        registry.RegisterGlobalCommand(commandName, () => factory(), metadata);
     }
 }

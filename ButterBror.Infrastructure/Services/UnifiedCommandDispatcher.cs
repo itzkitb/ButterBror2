@@ -1,21 +1,20 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.Core.Services;
+namespace ButterBror.Infrastructure.Services;
 
 public class UnifiedCommandDispatcher : IUnifiedCommandDispatcher
 {
     private readonly ILogger<UnifiedCommandDispatcher> _logger;
-    private readonly ICommandTypeRegistry _commandTypeRegistry;
+    private readonly IUnifiedCommandRegistry _commandRegistry;
 
     public UnifiedCommandDispatcher(
         ILogger<UnifiedCommandDispatcher> logger,
-        ICommandTypeRegistry commandTypeRegistry)
+        IUnifiedCommandRegistry commandRegistry)
     {
         _logger = logger;
-        _commandTypeRegistry = commandTypeRegistry;
+        _commandRegistry = commandRegistry;
     }
 
     public async Task<CommandResult> DispatchAsync(
@@ -29,20 +28,21 @@ public class UnifiedCommandDispatcher : IUnifiedCommandDispatcher
 
         try
         {
-            var commandType = _commandTypeRegistry.GetCommandType(commandName);
-            if (commandType == null)
+            // S0: Obtaining the command factory from the registry
+            var factory = _commandRegistry.GetCommandFactory(commandName);
+            if (factory == null)
             {
                 return CommandResult.Failure($"Command '{commandName}' not found", sendResult: false);
             }
 
-            // Get the command instance from DI
-            var command = services.GetService(commandType) as IUnifiedCommand;
-            if (command == null)
-            {
-                return CommandResult.Failure($"Command '{commandName}' could not be instantiated", sendResult: false);
-            }
+            // S1: Create a command instance through a factory
+            var command = factory();
 
-            var result = await command.ExecuteAsync(channel, arguments, user, services);
+            // S2: Create an execution context and service provider
+            var context = new CommandExecutionContext(channel, arguments, user);
+            var serviceProvider = new CommandServiceProvider(services);
+
+            var result = await command.ExecuteAsync(context, serviceProvider);
             result.ExecutionTime = stopwatch.Elapsed;
 
             return result;

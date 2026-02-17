@@ -1,9 +1,9 @@
-﻿using ButterBror.Core.Abstractions;
+using ButterBror.Core.Abstractions;
 using ButterBror.Core.Contracts;
 using ButterBror.Core.Enums;
+using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
 using ButterBror.Data;
-using MediatR;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Commands;
@@ -25,44 +25,49 @@ public record UserInfoCommand(string TargetUsername) : IMetadataCommand
     }
 }
 
-public class UserInfoCommandHandler : IRequestHandler<UserInfoCommand, CommandResult>
+public class UnifiedUserInfoCommand : UnifiedCommandBase
 {
-    private readonly IUserRepository _userRepository;
-    private readonly ILogger<UserInfoCommandHandler> _logger;
-
-    public UserInfoCommandHandler(IUserRepository userRepository, ILogger<UserInfoCommandHandler> logger)
-    {
-        _userRepository = userRepository;
-        _logger = logger;
-    }
-
-    public async Task<CommandResult> Handle(UserInfoCommand command, CancellationToken cancellationToken)
+    public override async Task<CommandResult> ExecuteAsync(
+        ICommandExecutionContext context,
+        ICommandServiceProvider serviceProvider)
     {
         try
         {
-            var user = await _userRepository.FindUserAsync("twitch", command.TargetUsername);
+            var logger = GetLogger<UnifiedUserInfoCommand>(serviceProvider);
+            var userRepository = GetService<IUserRepository>(serviceProvider);
 
-            if (user == null)
+            // Determine target username - either from arguments or use caller's username
+            var targetUsername = context.Arguments.Count > 0
+                ? context.Arguments[0]
+                : context.User.DisplayName;
+
+            var platform = context.Channel.Platform.ToLowerInvariant();
+
+            var userEntity = await userRepository.FindUserAsync(platform, targetUsername);
+
+            if (userEntity == null)
             {
-                return CommandResult.Failure($"User '{command.TargetUsername}' not found. " +
-                    "Try using exact username or Twitch ID.");
+                return CommandResult.Failure($"User '{targetUsername}' not found. " +
+                    "Try using exact username or platform ID.");
             }
 
-            var stats = user.Statistics
+            var stats = userEntity.Statistics
                 .Select(kvp => $"{kvp.Key}: {kvp.Value}")
                 .ToList();
 
             return CommandResult.Successfully(
-                $"User: {user.DisplayName}\n" +
-                $"Unified ID: {user.UnifiedUserId}\n" +
-                $"Platforms: {string.Join(", ", user.PlatformIds.Keys)}\n" +
+                $"User: {userEntity.DisplayName}\n" +
+                $"Unified ID: {userEntity.UnifiedUserId}\n" +
+                $"Platforms: {string.Join(", ", userEntity.PlatformIds.Keys)}\n" +
                 $"Statistics:\n{string.Join("\n", stats)}",
-                user
+                userEntity
             );
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling UserInfoCommand for user '{TargetUsername}'", command.TargetUsername);
+            var logger = GetService<ILogger<UnifiedUserInfoCommand>>(serviceProvider);
+            logger.LogError(ex, "Error handling UnifiedUserInfoCommand for user '{TargetUsername}'",
+                context.Arguments.Count > 0 ? context.Arguments[0] : context.User.DisplayName);
             return CommandResult.Failure($"Error retrieving user info: {ex.Message}");
         }
     }
