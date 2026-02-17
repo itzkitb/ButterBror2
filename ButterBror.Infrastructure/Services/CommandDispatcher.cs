@@ -1,28 +1,24 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 using ButterBror.Core.Models.Commands;
-using MediatR;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
 public class CommandDispatcher : ICommandDispatcher
 {
-    private readonly IMediator _mediator;
     private readonly ILogger<CommandDispatcher> _logger;
-    private readonly IUnifiedCommandDispatcher _unifiedCommandDispatcher;
+    private readonly ICommandRegistry _commandRegistry;
     private readonly IServiceProvider _serviceProvider;
 
     public CommandDispatcher(
-        IMediator mediator,
-        IUnifiedCommandDispatcher unifiedCommandDispatcher,
-        IServiceProvider serviceProvider,
-        ILogger<CommandDispatcher> logger)
+        ILogger<CommandDispatcher> logger,
+        ICommandRegistry commandRegistry,
+        IServiceProvider serviceProvider)
     {
-        _mediator = mediator;
-        _unifiedCommandDispatcher = unifiedCommandDispatcher;
-        _serviceProvider = serviceProvider;
         _logger = logger;
+        _commandRegistry = commandRegistry;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<CommandResult> DispatchAsync(ICommandContext context)
@@ -31,15 +27,21 @@ public class CommandDispatcher : ICommandDispatcher
 
         try
         {
-            // Dispatch using the unified command dispatcher
-            var result = await _unifiedCommandDispatcher.DispatchAsync(
-                context.CommandName,
-                context.Channel,
-                context.Arguments.ToList(),
-                context.User,
-                _serviceProvider
-            );
-            
+            // S0: Obtaining the command factory from the registry
+            var factory = _commandRegistry.GetCommandFactory(context.CommandName);
+            if (factory == null)
+            {
+                return CommandResult.Failure($"Command '{context.CommandName}' not found", sendResult: false);
+            }
+
+            // S1: Create a command instance through a factory
+            var command = factory();
+
+            // S2: Create an execution context and service provider
+            var commandContext = new CommandExecutionContext(context.Channel, context.Arguments.ToList(), context.User);
+            var serviceProvider = new CommandServiceProvider(_serviceProvider);
+
+            var result = await command.ExecuteAsync(commandContext, serviceProvider);
             result.ExecutionTime = stopwatch.Elapsed;
 
             return result;

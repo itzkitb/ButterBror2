@@ -15,13 +15,13 @@ public class PlatformModuleManager : IPlatformModuleManager
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IPlatformModuleRegistry _moduleRegistry;
-    private readonly IUnifiedCommandRegistry _commandRegistry;
+    private readonly ICommandRegistry _commandRegistry;
     private readonly ILogger<PlatformModuleManager> _logger;
 
     public PlatformModuleManager(
         IServiceProvider serviceProvider,
         IPlatformModuleRegistry moduleRegistry,
-        IUnifiedCommandRegistry commandRegistry,
+        ICommandRegistry commandRegistry,
         ILogger<PlatformModuleManager> logger)
     {
         _serviceProvider = serviceProvider;

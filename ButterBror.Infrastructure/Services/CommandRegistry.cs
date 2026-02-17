@@ -1,68 +1,77 @@
 using ButterBror.Core.Contracts;
 using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
-using ButterBror.Core.Models.Commands;
-using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
 public class CommandRegistry : ICommandRegistry
 {
-    private readonly Dictionary<string, Core.Interfaces.ICommand> _commands = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, ICommandMetadata> _metadata = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ILogger<CommandRegistry> _logger;
+    private readonly Dictionary<string, CommandEntry> _commands = new(StringComparer.OrdinalIgnoreCase);
 
-    public CommandRegistry(ILogger<CommandRegistry> logger)
+    private record CommandEntry(
+        Func<ICommand> Factory,
+        ICommandMetadata Metadata,
+        string ModuleId
+    );
+
+    public void RegisterGlobalCommand(string commandName, Func<ICommand> factory, ICommandMetadata metadata)
     {
-        _logger = logger;
+        RegisterCommand(commandName, factory, metadata, "global");
     }
 
-    // Unified command methods
-    public void RegisterCommand(string name, Core.Interfaces.ICommand command)
+    public void RegisterModuleCommand(string commandName, string moduleId, Func<ICommand> factory, ICommandMetadata metadata)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        if (moduleId == "global") throw new ArgumentException("moduleId cannot be 'global'");
+
+        RegisterCommand(commandName, factory, metadata, moduleId);
+    }
+
+    private void RegisterCommand(string commandName, Func<ICommand> factory, ICommandMetadata metadata, string moduleId)
+    {
+        _commands[commandName] = new CommandEntry(factory, metadata, moduleId);
+
+        // Aliases register
+        foreach (var alias in metadata.Aliases)
         {
-            throw new ArgumentException("Command name cannot be null or empty", nameof(name));
+            _commands[alias] = new CommandEntry(factory, metadata, moduleId);
         }
-
-        if (command == null)
-        {
-            throw new ArgumentNullException(nameof(command));
-        }
-
-        _commands[name] = command;
-        _logger.LogInformation("Registered unified command: {CommandName}", name);
     }
 
-    public bool TryGetUnifiedCommand(string name, out Core.Interfaces.ICommand command)
+    public Func<ICommand>? GetCommandFactory(string commandName)
     {
-        return _commands.TryGetValue(name, out command!);
+        return _commands.TryGetValue(commandName, out var entry) ? entry.Factory : null;
     }
 
-    public IEnumerable<string> GetRegisteredCommandNames()
+    public ICommandMetadata? GetCommandMetadata(string commandName)
+    {
+        return _commands.TryGetValue(commandName, out var entry) ? entry.Metadata : null;
+    }
+
+    public bool ContainsCommand(string commandName)
+    {
+        return _commands.ContainsKey(commandName);
+    }
+
+    public string GetCommandModuleId(string commandName)
+    {
+        return _commands.TryGetValue(commandName, out var entry) ? entry.ModuleId : "unknown";
+    }
+
+    public IEnumerable<string> GetRegisteredCommands()
     {
         return _commands.Keys.ToList();
     }
 
-    // Metadata methods for validation
-    public ICommandMetadata? GetCommand(string name)
-    {
-        _metadata.TryGetValue(name, out var metadata);
-        return metadata;
-    }
-
     public bool IsCommandCompatibleWithPlatform(string commandName, string platformId)
     {
-        if (!_metadata.TryGetValue(commandName, out var metadata))
+        if (!_commands.TryGetValue(commandName, out var entry))
         {
             return false;
         }
 
-        _logger.LogDebug(platformId);
-        _logger.LogDebug(string.Join(", ", metadata.PlatformCompatibilityList));
-        _logger.LogDebug(metadata.PlatformCompatibilityType.ToString());
+        var metadata = entry.Metadata;
 
-        // Check platform compatibility based on metadata
+        // Check platform compatibility from metadata
         switch (metadata.PlatformCompatibilityType)
         {
             case PlatformCompatibilityType.Whitelist:
@@ -76,12 +85,14 @@ public class CommandRegistry : ICommandRegistry
 
     public bool UserHasPermissionForCommand(string commandName, List<string> userPermissions)
     {
-        if (!_metadata.TryGetValue(commandName, out var metadata))
+        if (!_commands.TryGetValue(commandName, out var entry))
         {
             return false;
         }
 
-        // Command requires no permissions
+        var metadata = entry.Metadata;
+
+        // If command requires no permissions, allow
         if (metadata.RequiredPermissions.Count == 0)
         {
             return true;
@@ -92,16 +103,31 @@ public class CommandRegistry : ICommandRegistry
             userPermissions.Contains(requiredPerm, StringComparer.OrdinalIgnoreCase));
     }
 
+    // Legacy methods for backward compatibility
+    public void RegisterCommand(string name, ICommand command)
+    {
+        // Legacy method - not used in new architecture
+    }
+
+    public bool TryGetUnifiedCommand(string name, out ICommand command)
+    {
+        command = null;
+        return false;
+    }
+
+    public IEnumerable<string> GetRegisteredCommandNames()
+    {
+        return _commands.Keys.ToList();
+    }
+
+    public ICommandMetadata? GetCommand(string name)
+    {
+        return GetCommandMetadata(name);
+    }
+
     public void RegisterCommandMetadata(ICommandMetadata metadata)
     {
-        _metadata[metadata.Name] = metadata;
-
-        // Also register aliases
-        foreach (var alias in metadata.Aliases)
-        {
-            _metadata[alias] = metadata;
-        }
-
-        _logger.LogInformation("Registered command metadata: {CommandName}", metadata.Name);
+        // For backward compatibility with CommandAutoRegistrar
+        // In new architecture, metadata is registered together with command factory
     }
 }

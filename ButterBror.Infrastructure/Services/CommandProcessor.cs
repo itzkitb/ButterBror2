@@ -18,14 +18,14 @@ public class CommandProcessor : ICommandProcessor
 {
     private readonly ICommandDispatcher _commandDispatcher;
     private readonly IUserService _userService;
-    private readonly IUnifiedCommandRegistry _commandRegistry;
+    private readonly ICommandRegistry _commandRegistry;
     private readonly ILogger<CommandProcessor> _logger;
     private readonly IUserRepository _userRepository;
 
     public CommandProcessor(
         ICommandDispatcher commandDispatcher,
         IUserService userService,
-        IUnifiedCommandRegistry commandRegistry,
+        ICommandRegistry commandRegistry,
         ILogger<CommandProcessor> logger,
         IUserRepository userRepository)
     {

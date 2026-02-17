@@ -23,7 +23,7 @@ public static class CommandRegistration
     /// Command factories are created directly at the call site.
     /// </remarks>
     public static void RegisterGlobalCommand<TCommand>(
-        IUnifiedCommandRegistry registry,
+        ICommandRegistry registry,
         string commandName,
         Func<TCommand> factory,
         ICommandMetadata metadata) where TCommand : Interfaces.ICommand

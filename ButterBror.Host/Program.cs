@@ -47,13 +47,11 @@ builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
 builder.Services.AddSingleton<ConfigService>();
 builder.Services.AddSingleton<AppDataStorageProvider>();
 builder.Services.AddSingleton<IPlatformModule, TwitchModule>();
-// Use the new unified command dispatcher adapter
-builder.Services.AddSingleton<IUnifiedCommandDispatcher, UnifiedCommandDispatcher>();
-builder.Services.AddSingleton<ICommandDispatcher, UnifiedCommandDispatcherAdapter>();
+// Use the new unified command dispatcher
+builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
 builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
 builder.Services.AddSingleton<IPlatformModuleRegistry, PlatformModuleRegistry>();
 builder.Services.AddSingleton<ICommandRegistry, CommandRegistry>();
-builder.Services.AddSingleton<IUnifiedCommandRegistry, UnifiedCommandRegistry>();
 
 // Redis
 var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
@@ -93,7 +91,7 @@ var host = builder.Build();
 // Register all commands after services are built
 using (var scope = host.Services.CreateScope())
 {
-    var commandRegistry = scope.ServiceProvider.GetRequiredService<IUnifiedCommandRegistry>();
+    var commandRegistry = scope.ServiceProvider.GetRequiredService<ICommandRegistry>();
 
     // Register global command: !userinfo
     commandRegistry.RegisterGlobalCommand(
