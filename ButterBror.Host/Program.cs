@@ -1,15 +1,10 @@
 using ButterBror.Application.Commands;
 using ButterBror.Application.Commands.Meta;
-using ButterBror.Core.Contracts;
-using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
-using ButterBror.Core.Registration;
 using ButterBror.Data;
 using ButterBror.Domain;
 using ButterBror.Host;
 using ButterBror.Host.Logging;
-using ButterBror.Infrastructure;
-using ButterBror.Infrastructure.Configuration;
 using ButterBror.Infrastructure.Resilience;
 using ButterBror.Infrastructure.Services;
 using ButterBror.Infrastructure.Storage;
@@ -44,7 +39,6 @@ builder.Logging.AddConsoleFormatter<CustomConsoleFormatter, CustomConsoleFormatt
 // Services
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
-builder.Services.AddSingleton<ConfigService>();
 builder.Services.AddSingleton<AppDataStorageProvider>();
 builder.Services.AddSingleton<IPlatformModule, TwitchModule>();
 // Use the new unified command dispatcher
@@ -70,13 +64,10 @@ builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
 builder.Services.AddScoped<ICommandUsageRepository, RedisCommandUsageRepository>();
 
 // Permission Manager
-builder.Services.AddPermissionManager();
+builder.Services.AddScoped<IPermissionManager, PermissionManager>();
 
 // Core
 builder.Services.AddSingleton<IBotCore, BotCoreService>();
-
-// Register commands
-builder.Services.AddCommands();
 
 // Twitch
 // TODO: Need to delete this

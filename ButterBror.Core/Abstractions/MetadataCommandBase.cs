@@ -15,11 +15,3 @@ public interface IMetadataCommand : ICommand
     /// <returns>Command metadata</returns>
     ICommandMetadata GetMetadata();
 }
-
-/// <summary>
-/// Abstract base class for commands that have metadata and work with MediatR
-/// </summary>
-public abstract class MetadataCommandBase : IMetadataCommand
-{
-    public abstract ICommandMetadata GetMetadata();
-}

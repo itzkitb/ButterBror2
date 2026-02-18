@@ -31,11 +31,4 @@ public class AppDataStorageProvider
             throw new PlatformNotSupportedException("Unsupported operating system");
         }
     }
-
-    public string GetConfigFilePath(string filename)
-    {
-        var appDataPath = GetAppDataPath();
-        Directory.CreateDirectory(appDataPath);
-        return Path.Combine(appDataPath, filename);
-    }
 }
