@@ -1,5 +1,7 @@
 using ButterBror.Application.Commands;
 using ButterBror.Application.Commands.Meta;
+using ButterBror.ChatModules.Abstractions;
+using ButterBror.ChatModules.Loader;
 using ButterBror.Core.Interfaces;
 using ButterBror.Data;
 using ButterBror.Domain;
@@ -8,8 +10,6 @@ using ButterBror.Host.Logging;
 using ButterBror.Infrastructure.Resilience;
 using ButterBror.Infrastructure.Services;
 using ButterBror.Infrastructure.Storage;
-using ButterBror.Platforms.Twitch.Models;
-using ButterBror.Platforms.Twitch.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -40,12 +40,15 @@ builder.Logging.AddConsoleFormatter<CustomConsoleFormatter, CustomConsoleFormatt
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
 builder.Services.AddSingleton<AppDataStorageProvider>();
-builder.Services.AddSingleton<IPlatformModule, TwitchModule>();
+builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
 // Use the new unified command dispatcher
 builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
 builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
 builder.Services.AddSingleton<IPlatformModuleRegistry, PlatformModuleRegistry>();
 builder.Services.AddSingleton<ICommandRegistry, CommandRegistry>();
+
+// Chat Module Loader
+builder.Services.AddSingleton<IChatModuleLoader, ChatModuleLoader>();
 
 // Redis
 var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
@@ -68,11 +71,6 @@ builder.Services.AddScoped<IPermissionManager, PermissionManager>();
 
 // Core
 builder.Services.AddSingleton<IBotCore, BotCoreService>();
-
-// Twitch
-// TODO: Need to delete this
-builder.Services.AddSingleton<ITwitchClient, TwitchLibClient>();
-builder.Services.Configure<TwitchConfiguration>(builder.Configuration.GetSection("Twitch"));
 
 // Background service
 builder.Services.AddHostedService<BotHostedService>();

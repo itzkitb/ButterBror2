@@ -1,7 +1,7 @@
 using System;
 using TwitchLib.Client.Events;
 
-namespace ButterBror.Platforms.Twitch.Models;
+namespace ButterBror.ChatModules.Twitch.Models;
 
 public interface ITwitchClient
 {
@@ -18,12 +18,12 @@ public interface ITwitchClient
     /// Disconnect the client
     /// </summary>
     Task DisconnectAsync();
-    
+
     /// <summary>
     /// Join the specified channel
     /// </summary>
     Task JoinChannelAsync(string channel);
-    
+
     /// <summary>
     /// Leave the specified channel
     /// </summary>

@@ -1,10 +1,10 @@
-﻿using ButterBror.Platforms.Twitch.Events;
-using ButterBror.Platforms.Twitch.Models;
+using System.Text.RegularExpressions;
+using ButterBror.ChatModules.Twitch.Events;
+using ButterBror.ChatModules.Twitch.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Registry;
-using System.Text.RegularExpressions;
 using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
@@ -13,22 +13,22 @@ using TwitchLib.Communication.Clients;
 using TwitchLib.Communication.Models;
 using TwitchLib.EventSub.Websockets;
 
-namespace ButterBror.Platforms.Twitch.Services;
+namespace ButterBror.ChatModules.Twitch.Services;
 
 public class TwitchLibClient : ITwitchClient, IDisposable
 {
-    private TwitchClient _client;
-    private  TwitchAPI _clientAPI;
-    private EventSubWebsocketClient _eventSubClient;
+    private TwitchClient _client = null!;
+    private TwitchAPI _clientAPI = null!;
+    private EventSubWebsocketClient _eventSubClient = null!;
     private readonly TwitchConfiguration _config;
-    
+
     private readonly ResiliencePipeline _twitchPipeline;
     private readonly ResiliencePipeline _apiPipeline;
     private readonly ILogger<TwitchLibClient> _logger;
     private bool _isDisposed;
 
-    private string _username;
-    private string _id;
+    private string _username = string.Empty;
+    private string _id = string.Empty;
 
     public event EventHandler<Events.OnMessageReceivedArgs>? OnMessageReceived;
     public event EventHandler<OnConnectedEventArgs>? OnConnected;
@@ -52,7 +52,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
         SetupClient();
         SetupSubscribes();
-        
+
         _logger.LogInformation("Hello, Twitch! <3");
     }
 

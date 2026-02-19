@@ -1,7 +1,7 @@
-﻿using ButterBror.Core.Interfaces;
+using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 
-namespace ButterBror.Platforms.Twitch.Services;
+namespace ButterBror.ChatModules.Twitch.Services;
 
 public class TwitchCommandContext : ICommandContext
 {

@@ -1,6 +1,6 @@
-﻿using ButterBror.Core.Interfaces;
+using ButterBror.Core.Interfaces;
 
-namespace ButterBror.Platforms.Twitch.Services;
+namespace ButterBror.ChatModules.Twitch.Services;
 
 public class TwitchUser : IPlatformUser
 {

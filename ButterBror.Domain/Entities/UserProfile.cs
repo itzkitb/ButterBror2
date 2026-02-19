@@ -7,12 +7,12 @@ namespace ButterBror.Domain.Entities;
 public class UserProfile
 {
     public Guid UnifiedUserId { get; set; }
-    public Dictionary<string, string> PlatformIds { get; } = new(); // platform -> platformSpecificId
+    public Dictionary<string, string> PlatformIds { get; set; } = new(); // platform -> platformSpecificId
     public string DisplayName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public DateTime LastActive { get; set; }
-    public Dictionary<string, object> Statistics { get; } = new();
-    public List<string> Permissions { get; } = new();
+    public Dictionary<string, Int64> Statistics { get; set; } = new();
+    public List<string> Permissions { get; set; } = new();
 
     public void AddPlatformId(string platform, string platformId)
     {

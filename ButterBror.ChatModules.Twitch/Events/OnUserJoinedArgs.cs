@@ -1,6 +1,4 @@
-using System;
-
-namespace ButterBror.Platforms.Twitch.Events;
+namespace ButterBror.ChatModules.Twitch.Events;
 
 public class OnUserJoinedArgs : EventArgs
 {

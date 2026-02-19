@@ -1,8 +1,12 @@
 <Solution>
+  <Folder Name="/ChatModules/">
+    <Project Path="ButterBror.ChatModules.Abstractions/ButterBror.ChatModules.Abstractions.csproj" />
+    <Project Path="ButterBror.ChatModules.Loader/ButterBror.ChatModules.Loader.csproj" />
+    <Project Path="ButterBror.ChatModules.Twitch/ButterBror.ChatModules.Twitch.csproj" />
+  </Folder>
   <Folder Name="/Platforms/">
     <Project Path="ButterBror.Platforms.Discord/ButterBror.Platforms.Discord.csproj" />
     <Project Path="ButterBror.Platforms.Telegram/ButterBror.Platforms.Telegram.csproj" />
-    <Project Path="ButterBror.Platforms.Twitch/ButterBror.Platforms.Twitch.csproj" />
     <Project Path="ButterBror.Platforms/ButterBror.Platforms.csproj" />
   </Folder>
   <Folder Name="/Testing/">
@@ -19,7 +23,7 @@
   </Folder>
   <Project Path="ButterBror.AI/ButterBror.AI.csproj" />
   <Project Path="ButterBror.Application/ButterBror.Application.csproj" />
-  <Project Path="ButterBror.Core/ButterBror.Core.csproj" Id="b8549f7f-710c-4feb-bb59-2f13ba82d2db" />
+  <Project Path="ButterBror.Core/ButterBror.Core.csproj" />
   <Project Path="ButterBror.Dashboard/ButterBror.Dashboard.csproj" />
   <Project Path="ButterBror.Data/ButterBror.Data.csproj" />
   <Project Path="ButterBror.Domain/ButterBror.Domain.csproj" />

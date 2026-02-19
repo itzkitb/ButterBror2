@@ -30,6 +30,9 @@ public class RedisUserRepository : IUserRepository
             IDatabase db = _redis.GetDatabase();
             string key = $"{UserPrefix}{unifiedId}";
             RedisValue json = await db.StringGetAsync(key).WaitAsync(ct);
+            // Logging shit bc shit dont shitting my shit
+            //_logger.LogDebug(json.HasValue.ToString());
+            //_logger.LogDebug(json.ToString());
             return json.HasValue ? JsonSerializer.Deserialize<UserProfile>(json.ToString()) : null;
         });
     }

@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using ButterBror.ChatModules.Abstractions;
 
 namespace ButterBror.Infrastructure.Storage;
 
-public class AppDataStorageProvider
+public class AppDataStorageProvider : IAppDataPathProvider
 {
     public string GetAppDataPath()
     {

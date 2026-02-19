@@ -64,17 +64,17 @@ public class PermissionManager : IPermissionManager
 
     private static bool MatchWildcard(string pattern, string value)
     {
-        // Normalizing the pattern
+        // S0: Normalizing the pattern
         pattern = pattern.ToLowerInvariant();
         value = value.ToLowerInvariant();
 
-        // If the pattern is "*", then everything is suitable
+        // S1: If the pattern is "*", then everything is suitable
         if (pattern == "*")
         {
             return true;
         }
 
-        // If the pattern ends with "*", check the prefix
+        // S2: If the pattern ends with "*", check the prefix
         if (pattern.EndsWith('*'))
         {
             var prefix = pattern[..^1];
@@ -84,7 +84,7 @@ public class PermissionManager : IPermissionManager
                 return true;
             }
 
-            // Additional check: if the prefix ends with ":", then the value must be longer than the prefix
+            // Prefix ends with ":" => value must be longer than the prefix
             if (prefix.EndsWith(':') && value.Length > prefix.Length)
             {
                 return true;
@@ -112,7 +112,7 @@ public class PermissionManager : IPermissionManager
         // Normalize
         permission = permission.Trim();
 
-        // Checking if there is already such a permission
+        // Looking if the permission already exists
         if (user.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase))
         {
             _logger.LogDebug("The user {UserId} already has the {Permission} permission",

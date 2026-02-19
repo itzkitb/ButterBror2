@@ -14,6 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ButterBror.ChatModules.Abstractions\ButterBror.ChatModules.Abstractions.csproj" />
+    <ProjectReference Include="..\ButterBror.ChatModules.Loader\ButterBror.ChatModules.Loader.csproj" />
     <ProjectReference Include="..\ButterBror.Core\ButterBror.Core.csproj" />
     <ProjectReference Include="..\ButterBror.Data\ButterBror.Data.csproj" />
     <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />

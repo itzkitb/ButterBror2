@@ -22,16 +22,19 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Resilience" Version="10.2.0" />
+    <PackageReference Include="Polly.Core" Version="8.6.5" />
     <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ButterBror.Application\ButterBror.Application.csproj" />
+    <ProjectReference Include="..\ButterBror.ChatModules.Abstractions\ButterBror.ChatModules.Abstractions.csproj" />
+    <ProjectReference Include="..\ButterBror.ChatModules.Loader\ButterBror.ChatModules.Loader.csproj" />
     <ProjectReference Include="..\ButterBror.Core\ButterBror.Core.csproj" />
     <ProjectReference Include="..\ButterBror.Data\ButterBror.Data.csproj" />
     <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />
     <ProjectReference Include="..\ButterBror.Infrastructure\ButterBror.Infrastructure.csproj" />
-    <ProjectReference Include="..\ButterBror.Platforms.Twitch\ButterBror.Platforms.Twitch.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,41 +1,64 @@
-﻿using ButterBror.Core.Contracts;
+using ButterBror.ChatModules.Abstractions;
+using ButterBror.ChatModules.Twitch.Commands;
+using ButterBror.ChatModules.Twitch.Events;
+using ButterBror.ChatModules.Twitch.Models;
+using ButterBror.Core.Contracts;
 using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 using ButterBror.Core.Models.Commands;
-using ButterBror.Infrastructure.Services;
-using ButterBror.Platforms.Twitch.Commands;
-using ButterBror.Platforms.Twitch.Events;
-using ButterBror.Platforms.Twitch.Models;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Polly.Registry;
 using TwitchLib.Client.Events;
 
-namespace ButterBror.Platforms.Twitch.Services;
+namespace ButterBror.ChatModules.Twitch.Services;
 
-public class TwitchModule : IPlatformModule
+public class TwitchModule : IChatModuleWithServices
 {
     public string PlatformName => "sillyapps:twitch";
-    
+
+    // Factories
+    private Func<Core.Interfaces.ICommand> _joinCommandFactory = null!;
+    private Func<Core.Interfaces.ICommand> _partCommandFactory = null!;
+
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => new List<ModuleCommandExport>
     {
-        new ModuleCommandExport("join", () => new JoinChannelCommand(), new JoinChannelCommandMetadata()),
-        new ModuleCommandExport("part", () => new PartChannelCommand(), new PartChannelCommandMetadata())
+        new ModuleCommandExport("join", _joinCommandFactory, new JoinChannelCommandMetadata()),
+        new ModuleCommandExport("part", _partCommandFactory, new PartChannelCommandMetadata())
     };
-    
-    private readonly ITwitchClient _twitchClient;
-    private IBotCore _botCore;
-    private readonly ILogger<TwitchModule> _logger;
-    private readonly TwitchConfiguration _config;
 
-    public TwitchModule(
-        ITwitchClient twitchClient,
-        IOptions<TwitchConfiguration> config,
-        ILogger<TwitchModule> logger)
+    private ITwitchClient _twitchClient = null!;
+    private IBotCore _botCore = null!;
+    private ILogger<TwitchModule> _logger = null!;
+    private TwitchConfiguration _config = null!;
+
+    public TwitchModule()
     {
-        _twitchClient = twitchClient;
-        _config = config.Value;
-        _logger = logger;
+        // Пустой конструктор для загрузки из DLL
+    }
+
+    public void InitializeWithServices(IServiceProvider serviceProvider)
+    {
+        var appDataPathProvider = serviceProvider.GetRequiredService<IAppDataPathProvider>();
+        var configService = new TwitchConfigurationService(appDataPathProvider);
+        var config = configService.LoadConfiguration();
+        var options = Options.Create(config);
+        _config = options.Value;
+        
+        _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
+        
+        _twitchClient = new TwitchLibClient(
+            options,
+            serviceProvider.GetRequiredService<ResiliencePipelineProvider<string>>(),
+            serviceProvider.GetRequiredService<ILogger<TwitchLibClient>>()
+        );
+        
+        // Updating factories with client capture
+        _joinCommandFactory = () => new JoinChannelCommand(_twitchClient);
+        _partCommandFactory = () => new PartChannelCommand(_twitchClient);
     }
 
     public async Task InitializeAsync(IBotCore core)
@@ -81,7 +104,6 @@ public class TwitchModule : IPlatformModule
 
     private async void OnConnected(object? sender, OnConnectedEventArgs e)
     {
-        // Send a welcome message
         _ = SafeHandleConnectAsync(e).ContinueWith(
             t => _logger.LogError(t.Exception, "Unhandled exception in connect handler"),
             TaskContinuationOptions.OnlyOnFaulted
@@ -237,7 +259,6 @@ public class TwitchModule : IPlatformModule
 
     public async Task HandleIncomingMessageAsync(IMessage message)
     {
-        // Handle direct messages or other Twitch-specific messages
         _logger.LogInformation("Received direct message from {Sender} on Twitch", message.Sender.DisplayName);
         if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
         {

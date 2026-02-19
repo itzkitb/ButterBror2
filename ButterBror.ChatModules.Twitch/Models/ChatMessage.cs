@@ -1,6 +1,4 @@
-using System;
-
-namespace ButterBror.Platforms.Twitch.Models;
+namespace ButterBror.ChatModules.Twitch.Models;
 
 public class ChatMessage
 {
@@ -12,6 +10,6 @@ public class ChatMessage
     public bool IsBroadcaster { get; internal set; }
     public bool IsSubscriber { get; internal set; }
     public bool IsVIP { get; internal set; }
-    public List<KeyValuePair<string, string>> Badges { get; internal set; }
-    public string Color { get; internal set; }
+    public List<KeyValuePair<string, string>> Badges { get; internal set; } = new();
+    public string Color { get; internal set; } = string.Empty;
 }

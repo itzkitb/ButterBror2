@@ -1,7 +1,7 @@
 using ButterBror.Core.Contracts;
 using ButterBror.Core.Enums;
 
-namespace ButterBror.Platforms.Twitch.Commands;
+namespace ButterBror.ChatModules.Twitch.Commands;
 
 // Metadata for join command
 internal class JoinChannelCommandMetadata : ICommandMetadata
