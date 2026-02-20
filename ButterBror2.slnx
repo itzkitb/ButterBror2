@@ -1,5 +1,5 @@
 <Solution>
-  <Folder Name="/ChatModules/">
+  <Folder Name="/Modules/">
     <Project Path="ButterBror.ChatModules.Abstractions/ButterBror.ChatModules.Abstractions.csproj" />
     <Project Path="ButterBror.ChatModules.Loader/ButterBror.ChatModules.Loader.csproj" />
     <Project Path="ButterBror.ChatModules.Twitch/ButterBror.ChatModules.Twitch.csproj" />

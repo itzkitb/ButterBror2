@@ -120,15 +120,15 @@ public class CommandProcessor : ICommandProcessor
             return CommandResult.Failure($"You don't have permission to execute command '{commandName}'.");
         }
 
-        // S3: Cooldown check
-        var lastUse = await _userService.GetCommandLastUsedAsync(commandMetadata.Id);
+        // S3: Cooldown check (per user)
+        var lastUse = await _userService.GetCommandLastUsedAsync(commandMetadata.Id, user.UnifiedUserId);
         var betweenUses = DateTime.UtcNow - lastUse;
         if (betweenUses != null && ((TimeSpan)betweenUses).TotalSeconds < commandMetadata.CooldownSeconds)
         {
             _logger.LogDebug("Command cooldown U=\"{DisplayName}\" C=\"{CommandId}\" LU=\"{LastUse}\" UN=\"{UtcNow}\" SB={Seconds} CS={CooldownSeconds}", user.DisplayName, commandMetadata.Id, lastUse, DateTime.UtcNow, ((TimeSpan)betweenUses).TotalSeconds, commandMetadata.CooldownSeconds);
             return CommandResult.Failure($"Command '{commandName}' is on cooldown for '{user.DisplayName}'.", sendResult:false);
         }
-        _ = _userService.SetCommandLastUseAsync(commandMetadata.Id, DateTime.UtcNow);
+        _ = _userService.SetCommandLastUseAsync(commandMetadata.Id, user.UnifiedUserId, DateTime.UtcNow);
 
         // Yay
         _logger.LogInformation("Command '{CommandName}' passed all validations", commandName);

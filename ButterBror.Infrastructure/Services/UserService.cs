@@ -88,19 +88,16 @@ public class UserService : IUserService
             user.Statistics[successfulCommandsKey] = (int)user.Statistics[successfulCommandsKey] + 1;
         }
 
-        // Track the last time this command was used
-        await _commandUsageRepository.SetLastUsedAsync(commandName, DateTime.UtcNow);
-
         await _userRepository.CreateOrUpdateAsync(user);
     }
 
-    public async Task<DateTime?> GetCommandLastUsedAsync(string commandName)
+    public async Task<DateTime?> GetCommandLastUsedAsync(string commandName, Guid userId)
     {
-        return await _commandUsageRepository.GetLastUsedAsync(commandName);
+        return await _commandUsageRepository.GetLastUsedAsync(commandName, userId);
     }
 
-    public async Task SetCommandLastUseAsync(string commandName, DateTime date)
+    public async Task SetCommandLastUseAsync(string commandName, Guid userId, DateTime date)
     {
-        await _commandUsageRepository.SetLastUsedAsync(commandName, date);
+        await _commandUsageRepository.SetLastUsedAsync(commandName, userId, date);
     }
 }
