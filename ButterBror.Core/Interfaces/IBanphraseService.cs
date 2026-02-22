@@ -7,7 +7,8 @@ public record BanphraseCheckResult(
     bool Passed,
     string? FailedCategory = null,
     string? FailedSection = null,
-    string? MatchedPattern = null
+    string? MatchedPattern = null,
+    string? MatchedPhrase = null
 );
 
 /// <summary>

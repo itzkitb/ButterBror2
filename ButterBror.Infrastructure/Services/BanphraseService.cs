@@ -45,16 +45,21 @@ public class BanphraseService : IBanphraseService
         {
             if (category.IsMatch(message))
             {
+                var matchedPhrase = category.GetMatchedPhrase(message);
+                var matchedPattern = category.GetMatchedPatternPart(message);
+
                 _logger.LogDebug(
-                    "Message blocked by global banphrase. Category: {Category}, Pattern: {Pattern}",
+                    "Message blocked by global banphrase. Category: {Category}, Pattern: {Pattern}, Phrase: {Phrase}",
                     category.CategoryName,
-                    category.RegexPattern);
+                    matchedPattern,
+                    matchedPhrase);
                 
                 return new BanphraseCheckResult(
                     false,
                     category.CategoryName,
                     "global",
-                    category.RegexPattern);
+                    matchedPattern,
+                    matchedPhrase);
             }
         }
         
@@ -64,17 +69,22 @@ public class BanphraseService : IBanphraseService
         {
             if (category.IsMatch(message))
             {
+                var matchedPhrase = category.GetMatchedPhrase(message);
+                var matchedPattern = category.GetMatchedPatternPart(message);
+
                 _logger.LogDebug(
-                    "Message blocked by channel banphrase. Channel: {Channel}, Category: {Category}, Pattern: {Pattern}",
+                    "Message blocked by channel banphrase. Channel: {Channel}, Category: {Category}, Pattern: {Pattern}, Phrase: {Phrase}",
                     channelId,
                     category.CategoryName,
-                    category.RegexPattern);
-                
+                    matchedPattern,
+                    matchedPhrase);
+
                 return new BanphraseCheckResult(
                     false,
                     category.CategoryName,
                     $"{platform}:{channelId}",
-                    category.RegexPattern);
+                    matchedPattern,
+                    matchedPhrase);
             }
         }
         

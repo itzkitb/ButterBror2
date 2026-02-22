@@ -103,11 +103,74 @@ public class BanphrasesCommand : UnifiedCommandBase
             return CommandResult.Failure("Failed to set banphrase category. Check regex pattern syntax.");
         }
         
-        var categoryCount = regexPattern.Split('|').Length;
+        var patternCount = CountRegexAlternatives(regexPattern);
         return CommandResult.Successfully(
-            $"Setted {categoryCount} {section} banphrases from your regex in category '{categoryName}'");
+            $"Setted {patternCount} {section} banphrases from your regex in category '{categoryName}'");
     }
     
+    private static int CountRegexAlternatives(string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+            return 0;
+    
+        int count = 1;
+        int groupDepth = 0;
+        bool inCharacterClass = false;
+        bool escaped = false;
+    
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            char c = pattern[i];
+        
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+        
+            if (c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+        
+            if (c == '[' && !inCharacterClass)
+            {
+                inCharacterClass = true;
+                continue;
+            }
+        
+            if (c == ']' && inCharacterClass)
+            {
+                inCharacterClass = false;
+                continue;
+            }
+        
+            if (inCharacterClass)
+                continue;
+        
+            if (c == '(')
+            {
+                groupDepth++;
+                continue;
+            }
+        
+            if (c == ')')
+            {
+                groupDepth--;
+                continue;
+            }
+        
+            // Count | only at top level (not inside groups or character classes)
+            if (c == '|' && groupDepth == 0)
+            {
+                count++;
+            }
+        }
+    
+        return count;
+    }
+
     private async Task<CommandResult> HandleGetAsync(
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
@@ -227,8 +290,25 @@ public class BanphrasesCommand : UnifiedCommandBase
         }
         else
         {
-            return CommandResult.Failure(
-                $"The message didn't pass the filter! Section: '{result.FailedSection}', category: '{result.FailedCategory}'");
+            var response = $"The message didn't pass the filter! Section: '{result.FailedSection}', category: '{result.FailedCategory}'";
+
+            if (!string.IsNullOrEmpty(result.MatchedPhrase))
+            {
+                var displayPhrase = result.MatchedPhrase.Length > 50
+                    ? result.MatchedPhrase[..50] + "..."
+                    : result.MatchedPhrase;
+                response += $", matched: '{displayPhrase}'";
+            }
+
+            if (!string.IsNullOrEmpty(result.MatchedPattern))
+            {
+                var displayPattern = result.MatchedPattern.Length > 50
+                    ? result.MatchedPattern[..50] + "..."
+                    : result.MatchedPattern;
+                response += $", regex: '{displayPattern}'";
+            }
+
+            return CommandResult.Failure(response);
         }
     }
     
