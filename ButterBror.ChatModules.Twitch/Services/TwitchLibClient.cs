@@ -294,6 +294,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
                 UserId = e.ChatMessage.UserId,
                 Message = e.ChatMessage.Message,
                 Channel = e.ChatMessage.Channel,
+                ChannelId = e.ChatMessage.RoomId,
                 IsModerator = e.ChatMessage.UserDetail.IsModerator,
                 IsBroadcaster = e.ChatMessage.IsBroadcaster,
                 IsSubscriber = e.ChatMessage.UserDetail.IsSubscriber,

@@ -252,7 +252,7 @@ public class TwitchModule : IChatModuleWithServices
                 chatMessage.IsModerator,
                 chatMessage.IsBroadcaster
             ),
-            new TwitchChannel(chatMessage.Channel),
+            new TwitchChannel(chatMessage.Channel, chatMessage.ChannelId),
             DateTime.UtcNow
         );
     }

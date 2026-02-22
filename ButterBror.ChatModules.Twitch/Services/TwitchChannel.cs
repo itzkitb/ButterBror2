@@ -4,9 +4,9 @@ namespace ButterBror.ChatModules.Twitch.Services;
 
 public class TwitchChannel : IPlatformChannel
 {
-    public TwitchChannel(string channelName)
+    public TwitchChannel(string channelName, string channelId)
     {
-        Id = channelName.ToLowerInvariant();
+        Id = channelId;
         Name = channelName;
         Platform = "sillyapps:twitch";
     }

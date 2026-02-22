@@ -6,6 +6,7 @@ public class ChatMessage
     public string UserId { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string Channel { get; set; } = string.Empty;
+    public string ChannelId { get; set; } = string.Empty;
     public bool IsModerator { get; internal set; }
     public bool IsBroadcaster { get; internal set; }
     public bool IsSubscriber { get; internal set; }
