@@ -36,6 +36,11 @@ builder.Services.Configure<CustomConsoleFormatterOptions>(options =>
 });
 builder.Logging.AddConsoleFormatter<CustomConsoleFormatter, CustomConsoleFormatterOptions>();
 
+// Filter informational logs
+builder.Logging.AddFilter("Polly", LogLevel.Warning);
+builder.Logging.AddFilter("Polly.Core", LogLevel.Warning);
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+
 // Services
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
