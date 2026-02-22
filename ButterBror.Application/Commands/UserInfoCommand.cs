@@ -8,24 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Commands;
 
-public record UserInfoCommand(string TargetUsername) : IMetadataCommand
-{
-    public ICommandMetadata GetMetadata() => new UserInfoCommandMetadata();
-
-    private class UserInfoCommandMetadata : ICommandMetadata
-    {
-        public string Name => "userinfo";
-        public List<string> Aliases => new List<string> { "ui", "whois" };
-        public int CooldownSeconds => 10;
-        public List<string> RequiredPermissions => new List<string>();
-        public string ArgumentsHelpText => "<username>";
-        public string Id => "sillyapps:userinfo";
-        public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-        public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch", "sillyapps:discord", "sillyapps:telegram" };
-    }
-}
-
-public class UnifiedUserInfoCommand : UnifiedCommandBase
+public class UserInfoCommand : UnifiedCommandBase
 {
     public override async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,
@@ -33,7 +16,7 @@ public class UnifiedUserInfoCommand : UnifiedCommandBase
     {
         try
         {
-            var logger = GetLogger<UnifiedUserInfoCommand>(serviceProvider);
+            var logger = GetLogger<UserInfoCommand>(serviceProvider);
             var userRepository = GetService<IUserRepository>(serviceProvider);
 
             // Determine target username - either from arguments or use caller's username
@@ -63,7 +46,7 @@ public class UnifiedUserInfoCommand : UnifiedCommandBase
         }
         catch (Exception ex)
         {
-            var logger = GetService<ILogger<UnifiedUserInfoCommand>>(serviceProvider);
+            var logger = GetService<ILogger<UserInfoCommand>>(serviceProvider);
             logger.LogError(ex, "Error handling UnifiedUserInfoCommand for user '{TargetUsername}'",
                 context.Arguments.Count > 0 ? context.Arguments[0] : context.User.DisplayName);
             return CommandResult.Failure($"Error retrieving user info: {ex.Message}");

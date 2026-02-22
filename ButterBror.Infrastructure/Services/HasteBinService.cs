@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using Polly;
+using Polly.Registry;
 
 namespace ButterBror.Infrastructure.Services;
 
@@ -21,11 +22,11 @@ public class HasteBinService : IHasteBinService
     public HasteBinService(
         HttpClient httpClient,
         ILogger<HasteBinService> logger,
-        ResiliencePipeline apiPipeline)
+        ResiliencePipelineProvider<string> pipelineProvider)
     {
         _httpClient = httpClient;
         _logger = logger;
-        _apiPipeline = apiPipeline;
+        _apiPipeline = pipelineProvider.GetPipeline("api");
     }
 
     public async Task<string> UploadTextAsync(string content, CancellationToken cancellationToken = default)

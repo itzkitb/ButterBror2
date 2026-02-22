@@ -55,12 +55,6 @@ var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localho
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(redisConfig));
 
-// MediatR
-builder.Services.AddMediatR(cfg =>
-{
-    cfg.RegisterServicesFromAssembly(typeof(UserInfoCommand).Assembly);
-});
-
 // Repositories
 builder.Services.RegisterResilienceStrategies();
 builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
@@ -82,6 +76,10 @@ builder.Services.AddHttpClient<IHasteBinService, HasteBinService>()
         AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
     });
 
+// Banphrase Service
+builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
+builder.Services.AddSingleton<IBanphraseService, BanphraseService>();
+
 var host = builder.Build();
 
 // Register all commands after services are built
@@ -89,12 +87,20 @@ using (var scope = host.Services.CreateScope())
 {
     var commandRegistry = scope.ServiceProvider.GetRequiredService<ICommandRegistry>();
 
-    // Register global command: !userinfo
     commandRegistry.RegisterGlobalCommand(
         "userinfo",
-        () => new UnifiedUserInfoCommand(),
+        () => new UserInfoCommand(),
         new UserInfoMeta()
     );
+    commandRegistry.RegisterGlobalCommand(
+        "banphrases",
+        () => new BanphrasesCommand(),
+        new BanphrasesCommandMeta()
+    );
+    
+    // Load global banphrase categories on startup
+    var banphraseService = scope.ServiceProvider.GetRequiredService<IBanphraseService>();
+    await banphraseService.ReloadGlobalCategoriesAsync();
 }
 
 await host.RunAsync();
