@@ -14,6 +14,8 @@ public class ExtendedCommandContext : ICommandContext
         Platform = originalContext.Platform;
         CorrelationId = originalContext.CorrelationId;
         UnifiedUserId = unifiedUserId;
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+        CancellationToken = cts.Token;
     }
 
     public string CommandName { get; }
@@ -24,4 +26,5 @@ public class ExtendedCommandContext : ICommandContext
     public string Platform { get; }
     public Guid CorrelationId { get; }
     public Guid UnifiedUserId { get; }
+    public CancellationToken CancellationToken { get; set; }
 }

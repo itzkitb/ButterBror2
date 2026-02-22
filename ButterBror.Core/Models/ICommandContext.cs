@@ -11,4 +11,5 @@ public interface ICommandContext
     DateTime ExecutedAt { get; }
     string Platform { get; }
     Guid CorrelationId { get; }
+    CancellationToken CancellationToken { get; set; }
 }

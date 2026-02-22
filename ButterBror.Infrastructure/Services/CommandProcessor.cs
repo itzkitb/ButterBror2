@@ -13,19 +13,22 @@ public class CommandProcessor : ICommandProcessor
     private readonly IUserService _userService;
     private readonly ICommandRegistry _commandRegistry;
     private readonly ILogger<CommandProcessor> _logger;
-    private readonly IUserRepository _userRepository;
+    private readonly IBanphraseService _banphraseService; // New dependency
+    private readonly IPermissionManager _permissionManager; // New dependency
 
     public CommandProcessor(
         ICommandDispatcher commandDispatcher,
         IUserService userService,
         ICommandRegistry commandRegistry,
         ILogger<CommandProcessor> logger,
-        IUserRepository userRepository)
+        IBanphraseService banphraseService,
+        IPermissionManager permissionManager)
     {
         _commandDispatcher = commandDispatcher;
         _userService = userService;
         _commandRegistry = commandRegistry;
-        _userRepository = userRepository;
+        _banphraseService = banphraseService;
+        _permissionManager = permissionManager;
         _logger = logger;
     }
 
@@ -52,7 +55,6 @@ public class CommandProcessor : ICommandProcessor
             }
 
             // S2: Proceed with user management and command execution
-
             var extendedContext = new ExtendedCommandContext(context, user.UnifiedUserId);
 
             // S3: Command Dispatch
@@ -62,15 +64,57 @@ public class CommandProcessor : ICommandProcessor
             result.ExecutionTime = stopwatch.Elapsed;
 
             _logger.LogInformation(
-                "Command '{CommandName}' executed by user {UserId} in {ExecutionTime}ms. Result: {Success}",
+                "Command '{CommandName}' executed by user {UserId} in {ExecutionTime}ms. Success: {Success}",
                 context.CommandName, user.UnifiedUserId, stopwatch.ElapsedMilliseconds, result.Success);
 
-            // S4: Updating user statistics
-            await _userService.UpdateUserStatisticsAsync(
-                user.UnifiedUserId,
-                context.CommandName,
-                result.Success
-            );
+            // S4: Check banphrases
+            var commandMeta = _commandRegistry.GetCommandMetadata(context.CommandName);
+            // If any permission start with "su:" skipping check
+            var skipCheck = commandMeta != null ? commandMeta.RequiredPermissions.Any((c) => c.StartsWith("su:")) : false;
+
+            if (!skipCheck)
+            {
+                var banphraseResult = await _banphraseService.CheckMessageAsync(
+                    context.Channel.Id,
+                    context.Platform,
+                    result.Message ?? string.Empty,
+                    context.CancellationToken
+                );
+
+                if (!banphraseResult.Passed)
+                {
+                    _logger.LogInformation(
+                        "Command result blocked by banphrase. Command: {Command}, User: {UserId}, Section: {Section}, Category: {Category}, Pattern: '{Pattern}', Phrase: '{Phrase}'",
+                        context.CommandName,
+                        user.UnifiedUserId,
+                        banphraseResult.FailedSection,
+                        banphraseResult.FailedCategory,
+                        banphraseResult.MatchedPattern,
+                        banphraseResult.MatchedPhrase
+                    );
+
+                    result.Message = "The resulting message violates moderation settings";
+                    result.Success = false;
+                }
+            }
+            else
+            {
+                _logger.LogInformation("Skipping the ban phrases check");
+            }
+
+            if (commandMeta != null)
+            {
+                // S5: Updating user statistics
+                await _userService.UpdateUserStatisticsAsync(
+                    user.UnifiedUserId,
+                    commandMeta.Name,
+                    result.Success
+                );
+            }
+            else
+            {
+                _logger.LogWarning("Unable to find command meta!");
+            }
 
             return result;
         }
@@ -118,8 +162,13 @@ public class CommandProcessor : ICommandProcessor
         var betweenUses = DateTime.UtcNow - lastUse;
         if (betweenUses != null && ((TimeSpan)betweenUses).TotalSeconds < commandMetadata.CooldownSeconds)
         {
-            _logger.LogDebug("Command cooldown U=\"{DisplayName}\" C=\"{CommandId}\" LU=\"{LastUse}\" UN=\"{UtcNow}\" SB={Seconds} CS={CooldownSeconds}", user.DisplayName, commandMetadata.Id, lastUse, DateTime.UtcNow, ((TimeSpan)betweenUses).TotalSeconds, commandMetadata.CooldownSeconds);
-            return CommandResult.Failure($"Command '{commandName}' is on cooldown for '{user.DisplayName}'.", sendResult:false);
+            _logger.LogDebug("Command cooldown. User: {UserId}, Command: {CommandId}, Seconds remain: {Seconds}, Command cooldown: {CooldownSeconds}",
+                user.UnifiedUserId,
+                commandMetadata.Id,
+                ((TimeSpan)betweenUses).TotalSeconds,
+                commandMetadata.CooldownSeconds
+            );
+            return CommandResult.Failure($"Command '{commandName}' is on cooldown. Please, wait {((TimeSpan)betweenUses).TotalSeconds} seconds", sendResult:false);
         }
         _ = _userService.SetCommandLastUseAsync(commandMetadata.Id, user.UnifiedUserId, DateTime.UtcNow);
 

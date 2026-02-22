@@ -24,4 +24,5 @@ public class TwitchCommandContext : ICommandContext
     public DateTime ExecutedAt { get; }
     public string Platform { get; }
     public Guid CorrelationId { get; }
+    public CancellationToken CancellationToken { get; set; }
 }

@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
 
-public class JoinChannelCommand : UnifiedCommandBase
+public class JoinChannelCommand : CommandBase
 {
     private readonly ITwitchClient _twitchClient;
 
