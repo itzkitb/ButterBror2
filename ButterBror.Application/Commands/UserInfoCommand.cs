@@ -57,9 +57,7 @@ public class UnifiedUserInfoCommand : UnifiedCommandBase
 
             return CommandResult.Successfully(
                 $"User: {userEntity.DisplayName}\n" +
-                $"Unified ID: {userEntity.UnifiedUserId}\n" +
-                $"Platforms: {string.Join(", ", userEntity.PlatformIds.Keys)}\n" +
-                $"Statistics:\n{string.Join("\n", stats)}",
+                $"Internal id: {userEntity.UnifiedUserId}\n",
                 userEntity
             );
         }

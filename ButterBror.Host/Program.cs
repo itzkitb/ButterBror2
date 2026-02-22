@@ -75,6 +75,13 @@ builder.Services.AddSingleton<IBotCore, BotCoreService>();
 // Background service
 builder.Services.AddHostedService<BotHostedService>();
 
+// HasteBin Service
+builder.Services.AddHttpClient<IHasteBinService, HasteBinService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+    });
+
 var host = builder.Build();
 
 // Register all commands after services are built
