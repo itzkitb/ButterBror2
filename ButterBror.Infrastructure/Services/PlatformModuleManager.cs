@@ -10,13 +10,13 @@ public interface IPlatformModuleManager
 {
     Task InitializeAsync(IBotCore core, CancellationToken cancellationToken = default);
     Task ShutdownAsync(CancellationToken cancellationToken = default);
-    IPlatformModule? GetModule(string platformName);
+    IChatModule? GetModule(string platformName);
 }
 
 public class PlatformModuleManager : IPlatformModuleManager
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly IPlatformModuleRegistry _moduleRegistry;
+    private readonly IChatModuleRegistry _moduleRegistry;
     private readonly ICommandRegistry _commandRegistry;
     private readonly IChatModuleLoader _chatModuleLoader;
     private readonly ILogger<PlatformModuleManager> _logger;
@@ -25,7 +25,7 @@ public class PlatformModuleManager : IPlatformModuleManager
 
     public PlatformModuleManager(
         IServiceProvider serviceProvider,
-        IPlatformModuleRegistry moduleRegistry,
+        IChatModuleRegistry moduleRegistry,
         ICommandRegistry commandRegistry,
         IChatModuleLoader chatModuleLoader,
         ILogger<PlatformModuleManager> logger)
@@ -42,7 +42,7 @@ public class PlatformModuleManager : IPlatformModuleManager
         _logger.LogInformation("Initializing platform modules...");
 
         // Initialize built-in modules from DI container
-        var builtInModules = _serviceProvider.GetServices<IPlatformModule>();
+        var builtInModules = _serviceProvider.GetServices<IChatModule>();
         foreach (var module in builtInModules)
         {
             try
@@ -79,7 +79,7 @@ public class PlatformModuleManager : IPlatformModuleManager
         }
     }
 
-    private async Task InitializeModuleAsync(IPlatformModule module, IBotCore core)
+    private async Task InitializeModuleAsync(IChatModule module, IBotCore core)
     {
         // Register exported commands from module
         foreach (var exportedCommand in module.ExportedCommands)
@@ -137,10 +137,10 @@ public class PlatformModuleManager : IPlatformModuleManager
         await _chatModuleLoader.UnloadModulesAsync(cancellationToken);
     }
 
-    public IPlatformModule? GetModule(string platformName)
+    public IChatModule? GetModule(string platformName)
     {
         return _moduleRegistry.GetModules()
-            .Concat(_loadedChatModules.OfType<IPlatformModule>())
+            .Concat(_loadedChatModules.OfType<IChatModule>())
             .FirstOrDefault(m => m.PlatformName.Equals(platformName, StringComparison.OrdinalIgnoreCase));
     }
 }

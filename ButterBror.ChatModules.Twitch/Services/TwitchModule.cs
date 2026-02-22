@@ -2,27 +2,23 @@ using ButterBror.ChatModules.Abstractions;
 using ButterBror.ChatModules.Twitch.Commands;
 using ButterBror.ChatModules.Twitch.Events;
 using ButterBror.ChatModules.Twitch.Models;
-using ButterBror.Core.Contracts;
-using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
-using ButterBror.Core.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Polly.Registry;
 using TwitchLib.Client.Events;
 
 namespace ButterBror.ChatModules.Twitch.Services;
 
-public class TwitchModule : IChatModuleWithServices
+public class TwitchModule : IChatModule
 {
     public string PlatformName => "sillyapps:twitch";
 
     // Factories
-    private Func<Core.Interfaces.ICommand> _joinCommandFactory = null!;
-    private Func<Core.Interfaces.ICommand> _partCommandFactory = null!;
+    private Func<ICommand> _joinCommandFactory = null!;
+    private Func<ICommand> _partCommandFactory = null!;
 
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => new List<ModuleCommandExport>
     {
@@ -34,11 +30,6 @@ public class TwitchModule : IChatModuleWithServices
     private IBotCore _botCore = null!;
     private ILogger<TwitchModule> _logger = null!;
     private TwitchConfiguration _config = null!;
-
-    public TwitchModule()
-    {
-        // Пустой конструктор для загрузки из DLL
-    }
 
     public void InitializeWithServices(IServiceProvider serviceProvider)
     {
@@ -255,22 +246,6 @@ public class TwitchModule : IChatModuleWithServices
             new TwitchChannel(chatMessage.Channel, chatMessage.ChannelId),
             DateTime.UtcNow
         );
-    }
-
-    public async Task HandleIncomingMessageAsync(IMessage message)
-    {
-        _logger.LogInformation("Received direct message from {Sender} on Twitch", message.Sender.DisplayName);
-        if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
-        {
-            try
-            {
-                // TODO: Add something here idk
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send whisper response");
-            }
-        }
     }
 
     public async Task ShutdownAsync()

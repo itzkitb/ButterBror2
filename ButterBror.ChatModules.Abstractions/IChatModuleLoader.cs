@@ -1,3 +1,5 @@
+using ButterBror.Core.Interfaces;
+
 namespace ButterBror.ChatModules.Abstractions;
 
 /// <summary>

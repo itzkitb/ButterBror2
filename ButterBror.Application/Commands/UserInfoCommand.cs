@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Commands;
 
-public class UserInfoCommand : UnifiedCommandBase
+public class UserInfoCommand : CommandBase
 {
     public override async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,

@@ -1,18 +1,11 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 using ButterBror.Core.Models.Commands;
-using ButterBror.Core.Abstractions;
-using MediatR;
 using Microsoft.Extensions.Logging;
 using ButterBror.Data;
 using ButterBror.Domain.Entities;
 
 namespace ButterBror.Infrastructure.Services;
-
-public interface ICommandProcessor
-{
-    Task<CommandResult> ProcessCommandAsync(ICommandContext context, IMediator mediator = null);
-}
 
 public class CommandProcessor : ICommandProcessor
 {
@@ -36,7 +29,7 @@ public class CommandProcessor : ICommandProcessor
         _logger = logger;
     }
 
-    public async Task<CommandResult> ProcessCommandAsync(ICommandContext context, IMediator mediator = null)
+    public async Task<CommandResult> ProcessCommandAsync(ICommandContext context)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 

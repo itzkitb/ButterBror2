@@ -44,7 +44,7 @@ builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<
 // Use the new unified command dispatcher
 builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
 builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
-builder.Services.AddSingleton<IPlatformModuleRegistry, PlatformModuleRegistry>();
+builder.Services.AddSingleton<IChatModuleRegistry, PlatformModuleRegistry>();
 builder.Services.AddSingleton<ICommandRegistry, CommandRegistry>();
 
 // Chat Module Loader

@@ -7,7 +7,7 @@ namespace ButterBror.Core.Abstractions;
 /// <summary>
 /// Base class for unified commands with common functionality
 /// </summary>
-public abstract class UnifiedCommandBase : Interfaces.ICommand
+public abstract class CommandBase : ICommand
 {
     public abstract Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,

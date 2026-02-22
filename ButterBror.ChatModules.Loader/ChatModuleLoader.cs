@@ -144,12 +144,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     var module = Activator.CreateInstance(moduleType);
                     if (module is IChatModule chatModule)
                     {
-                        // Initializing module dependencies
-                        if (chatModule is IChatModuleWithServices moduleWithServices)
-                        {
-                            moduleWithServices.InitializeWithServices(_serviceProvider);
-                        }
-
+                        chatModule.InitializeWithServices(_serviceProvider);
                         modules.Add(chatModule);
                         _logger.LogInformation(
                             "Loaded chat module: {ModuleName} (Platform: {PlatformName})",

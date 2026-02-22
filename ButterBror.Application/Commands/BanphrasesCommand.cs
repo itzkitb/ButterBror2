@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Commands;
 
-public class BanphrasesCommand : UnifiedCommandBase
+public class BanphrasesCommand : CommandBase
 {
     public override async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,

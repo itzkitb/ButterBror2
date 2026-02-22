@@ -7,11 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MediatR" Version="14.0.0" />
+    <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
   </ItemGroup>
 
 </Project>

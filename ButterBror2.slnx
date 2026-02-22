@@ -2,12 +2,11 @@
   <Folder Name="/Modules/">
     <Project Path="ButterBror.ChatModules.Abstractions/ButterBror.ChatModules.Abstractions.csproj" />
     <Project Path="ButterBror.ChatModules.Loader/ButterBror.ChatModules.Loader.csproj" />
-    <Project Path="ButterBror.ChatModules.Twitch/ButterBror.ChatModules.Twitch.csproj" />
   </Folder>
-  <Folder Name="/Platforms/">
-    <Project Path="ButterBror.Platforms.Discord/ButterBror.Platforms.Discord.csproj" />
-    <Project Path="ButterBror.Platforms.Telegram/ButterBror.Platforms.Telegram.csproj" />
-    <Project Path="ButterBror.Platforms/ButterBror.Platforms.csproj" />
+  <Folder Name="/Modules/Chats/">
+    <Project Path="ButterBror.ChatModules.Discord/ButterBror.ChatModules.Discord.csproj" />
+    <Project Path="ButterBror.ChatModules.Telegram/ButterBror.ChatModules.Telegram.csproj" />
+    <Project Path="ButterBror.ChatModules.Twitch/ButterBror.ChatModules.Twitch.csproj" />
   </Folder>
   <Folder Name="/Testing/">
     <Project Path="ButterBror.E2ETests/ButterBror.E2ETests.csproj" />

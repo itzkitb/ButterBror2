@@ -1,23 +1,27 @@
-using ButterBror.Core.Contracts;
+﻿using ButterBror.Core.Contracts;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
 
 namespace ButterBror.ChatModules.Abstractions;
 
 /// <summary>
-/// Basic interface for chat modules
+/// Information about the module's exported command
 /// </summary>
-public interface IChatModule : IPlatformModule
-{
-}
+public record ModuleCommandExport(
+    string CommandName,
+    Func<ICommand> Factory,
+    ICommandMetadata Metadata
+);
 
-/// <summary>
-/// Interface for modules that require service initialization
-/// </summary>
-public interface IChatModuleWithServices : IChatModule
+public interface IChatModule
 {
+    string PlatformName { get; }
+    IReadOnlyList<ModuleCommandExport> ExportedCommands { get; }
+    
     /// <summary>
     /// Module initialization
     /// </summary>
     void InitializeWithServices(IServiceProvider serviceProvider);
+    Task InitializeAsync(IBotCore core);
+    Task ShutdownAsync();
 }

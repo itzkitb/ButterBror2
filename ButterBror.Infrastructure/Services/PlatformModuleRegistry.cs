@@ -1,11 +1,11 @@
-﻿using ButterBror.Core.Interfaces;
+﻿using ButterBror.ChatModules.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class PlatformModuleRegistry : IPlatformModuleRegistry
+public class PlatformModuleRegistry : IChatModuleRegistry
 {
-    private readonly List<IPlatformModule> _modules = new();
+    private readonly List<IChatModule> _modules = new();
     private readonly ILogger<PlatformModuleRegistry> _logger;
 
     public PlatformModuleRegistry(ILogger<PlatformModuleRegistry> logger)
@@ -13,7 +13,7 @@ public class PlatformModuleRegistry : IPlatformModuleRegistry
         _logger = logger;
     }
 
-    public void RegisterModule(IPlatformModule module)
+    public void RegisterModule(IChatModule module)
     {
         if (_modules.Any(m => m.PlatformName.Equals(module.PlatformName, StringComparison.OrdinalIgnoreCase)))
         {
@@ -25,5 +25,5 @@ public class PlatformModuleRegistry : IPlatformModuleRegistry
         _logger.LogInformation("Registered platform module: {PlatformName}", module.PlatformName);
     }
 
-    public IEnumerable<IPlatformModule> GetModules() => _modules.AsReadOnly();
+    public IEnumerable<IChatModule> GetModules() => _modules.AsReadOnly();
 }
