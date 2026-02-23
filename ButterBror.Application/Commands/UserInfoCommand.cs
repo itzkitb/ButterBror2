@@ -1,10 +1,7 @@
 using ButterBror.Core.Abstractions;
-using ButterBror.Core.Contracts;
-using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
 using ButterBror.Data;
-using ButterBror.Localization.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Commands;
@@ -21,37 +18,35 @@ public class UserInfoCommand : CommandBase
             var logger = GetLogger<UserInfoCommand>(serviceProvider);
             var userRepository = GetService<IUserRepository>(serviceProvider);
 
+            var platform = context.Channel.Platform.ToLowerInvariant();
+            var executor = await userRepository.GetByPlatformIdAsync(platform, context.User.Id);
+            var executorLocale = executor != null ? executor.PreferredLocale : "EN_US";
+
             // Determine target username - either from arguments or use caller's username
             var targetUsername = context.Arguments.Count > 0
                 ? context.Arguments[0]
                 : context.User.DisplayName;
 
-            var platform = context.Channel.Platform.ToLowerInvariant();
-
             var userEntity = await userRepository.FindUserAsync(platform, targetUsername);
 
             if (userEntity == null)
             {
-                return CommandResult.Failure($"User '{targetUsername}' not found. " +
-                    "Try using exact username or platform ID.");
+                var notFound = await localizationService.GetStringAsync("command.userinfo.error.user_not_found", executorLocale);
+                return CommandResult.Failure(notFound);
             }
 
-            var stats = userEntity.Statistics
-                .Select(kvp => $"{kvp.Key}: {kvp.Value}")
-                .ToList();
-
-            return CommandResult.Successfully(
-                $"User: {userEntity.DisplayName}\n" +
-                $"Internal id: {userEntity.UnifiedUserId}\n",
-                userEntity
-            );
+            var result = await localizationService.GetStringAsync("command.userinfo.result", executorLocale, userEntity.DisplayName, userEntity.UnifiedUserId);
+            return CommandResult.Successfully(result);
         }
         catch (Exception ex)
         {
-            var logger = GetService<ILogger<UserInfoCommand>>(serviceProvider);
-            logger.LogError(ex, "Error handling UnifiedUserInfoCommand for user '{TargetUsername}'",
-                context.Arguments.Count > 0 ? context.Arguments[0] : context.User.DisplayName);
-            return CommandResult.Failure($"Error retrieving user info: {ex.Message}");
+            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            return await errorTracking.LogErrorAsync(
+                ex,
+                "Failed to execute UserInfo",
+                context.User.Id,
+                context.Channel.Platform,
+                context);
         }
     }
 }

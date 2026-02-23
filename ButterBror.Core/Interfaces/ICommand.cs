@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
 
@@ -11,6 +12,8 @@ public interface ICommandExecutionContext
     IPlatformChannel Channel { get; }
     List<string> Arguments { get; }
     IPlatformUser User { get; }
+    
+    [JsonIgnore]
     CancellationToken CancellationToken { get; }
 }
 

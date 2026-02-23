@@ -10,7 +10,6 @@ using ButterBror.Host.Logging;
 using ButterBror.Infrastructure.Resilience;
 using ButterBror.Infrastructure.Services;
 using ButterBror.Infrastructure.Storage;
-using ButterBror.Localization.Interfaces;
 using ButterBror.Localization.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -86,6 +85,10 @@ builder.Services.AddHttpClient<IHasteBinService, HasteBinService>()
 // Banphrase Service
 builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
 builder.Services.AddSingleton<IBanphraseService, BanphraseService>();
+
+// Error Tracking Service
+builder.Services.AddScoped<IErrorReportRepository, ErrorReportRepository>();
+builder.Services.AddScoped<IErrorTrackingService, ErrorTrackingService>();
 
 // Localization Service
 builder.Services.AddSingleton<TranslationFileLoader>();

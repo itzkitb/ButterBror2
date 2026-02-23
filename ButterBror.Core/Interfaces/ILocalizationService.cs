@@ -1,4 +1,4 @@
-namespace ButterBror.Localization.Interfaces;
+namespace ButterBror.Core.Interfaces;
 
 /// <summary>
 /// Provides localized strings with fallback support

@@ -1,12 +1,8 @@
-// Path: /ButterBror.Application/Commands/LocaleCommand.cs
 using System.Text;
 using ButterBror.Core.Abstractions;
-using ButterBror.Core.Contracts;
-using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
 using ButterBror.Data;
-using ButterBror.Localization.Interfaces;
 using ButterBror.Localization.Models;
 using ButterBror.Localization.Services;
 using Microsoft.Extensions.Logging;

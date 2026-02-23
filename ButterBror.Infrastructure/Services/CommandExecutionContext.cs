@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,6 +10,8 @@ public class CommandExecutionContext : ICommandExecutionContext
     public IPlatformChannel Channel { get; }
     public List<string> Arguments { get; }
     public IPlatformUser User { get; }
+
+    [JsonIgnore]
     public CancellationToken CancellationToken { get; }
 
     public CommandExecutionContext(
