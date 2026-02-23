@@ -4,6 +4,7 @@ using ButterBror.Core.Enums;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models.Commands;
 using ButterBror.Data;
+using ButterBror.Localization.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Commands;
@@ -16,6 +17,7 @@ public class UserInfoCommand : CommandBase
     {
         try
         {
+            var localizationService = GetService<ILocalizationService>(serviceProvider);
             var logger = GetLogger<UserInfoCommand>(serviceProvider);
             var userRepository = GetService<IUserRepository>(serviceProvider);
 

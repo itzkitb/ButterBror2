@@ -10,6 +10,8 @@ using ButterBror.Host.Logging;
 using ButterBror.Infrastructure.Resilience;
 using ButterBror.Infrastructure.Services;
 using ButterBror.Infrastructure.Storage;
+using ButterBror.Localization.Interfaces;
+using ButterBror.Localization.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -85,6 +87,11 @@ builder.Services.AddHttpClient<IHasteBinService, HasteBinService>()
 builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
 builder.Services.AddSingleton<IBanphraseService, BanphraseService>();
 
+// Localization Service
+builder.Services.AddSingleton<TranslationFileLoader>();
+builder.Services.AddSingleton<LocaleRegistryService>();
+builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
+
 var host = builder.Build();
 
 // Register all commands after services are built
@@ -102,10 +109,22 @@ using (var scope = host.Services.CreateScope())
         () => new BanphrasesCommand(),
         new BanphrasesCommandMeta()
     );
+    commandRegistry.RegisterGlobalCommand(
+        "locale",
+        () => new LocaleCommand(),
+        new LocaleCommandMeta()
+    );
     
     // Load global banphrase categories on startup
     var banphraseService = scope.ServiceProvider.GetRequiredService<IBanphraseService>();
     await banphraseService.ReloadGlobalCategoriesAsync();
+
+    // Initializing lang
+    var localizationService = scope.ServiceProvider.GetRequiredService<ILocalizationService>();
+    if (localizationService is LocalizationService impl)
+    {
+        await impl.InitializeAsync(CancellationToken.None);
+    }
 }
 
 await host.RunAsync();

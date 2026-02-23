@@ -13,6 +13,7 @@ public class UserProfile
     public DateTime LastActive { get; set; }
     public Dictionary<string, Int64> Statistics { get; set; } = new();
     public List<string> Permissions { get; set; } = new();
+    public string PreferredLocale { get; set; } = "EN_US";
 
     public void AddPlatformId(string platform, string platformId)
     {
