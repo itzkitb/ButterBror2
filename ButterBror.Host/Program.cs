@@ -47,14 +47,16 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
 builder.Services.AddSingleton<AppDataStorageProvider>();
 builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
+
 // Use the new unified command dispatcher
 builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
 builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
 builder.Services.AddSingleton<IChatModuleRegistry, PlatformModuleRegistry>();
 builder.Services.AddSingleton<ICommandRegistry, CommandRegistry>();
 
-// Chat Module Loader
+// Module Loaders
 builder.Services.AddSingleton<IChatModuleLoader, ChatModuleLoader>();
+builder.Services.AddSingleton<ICommandModuleLoader, CommandModuleLoader>();
 
 // Redis
 var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";

@@ -1,5 +1,4 @@
 using ButterBror.ChatModules.Abstractions;
-using ButterBror.ChatModules.Loader;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -20,20 +19,23 @@ public class PlatformModuleManager : IPlatformModuleManager
     private readonly ICommandRegistry _commandRegistry;
     private readonly IChatModuleLoader _chatModuleLoader;
     private readonly ILogger<PlatformModuleManager> _logger;
-
+    private readonly ICommandModuleLoader _commandModuleLoader;
     private readonly List<IChatModule> _loadedChatModules = new();
+    private readonly List<ICommandModule> _loadedCommandModules = new();
 
     public PlatformModuleManager(
         IServiceProvider serviceProvider,
         IChatModuleRegistry moduleRegistry,
         ICommandRegistry commandRegistry,
         IChatModuleLoader chatModuleLoader,
+        ICommandModuleLoader commandModuleLoader,
         ILogger<PlatformModuleManager> logger)
     {
         _serviceProvider = serviceProvider;
         _moduleRegistry = moduleRegistry;
         _commandRegistry = commandRegistry;
         _chatModuleLoader = chatModuleLoader;
+        _commandModuleLoader = commandModuleLoader;
         _logger = logger;
     }
 
@@ -55,8 +57,44 @@ public class PlatformModuleManager : IPlatformModuleManager
             }
         }
 
-        // Load and initialize chat modules from DLL files
+        // Load and initialize modules from DLL files
         await LoadAndInitializeChatModulesAsync(core, cancellationToken);
+        await LoadAndInitializeCommandModulesAsync(cancellationToken);
+    }
+
+    private async Task LoadAndInitializeCommandModulesAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Loading command modules from AppData/Commands...");
+        var commandModules = await _commandModuleLoader.LoadModulesAsync(cancellationToken);
+        
+        foreach (var module in commandModules)
+        {
+            try
+            {
+                // Register exported commands from module
+                foreach (var exportedCommand in module.ExportedCommands)
+                {
+                    _commandRegistry.RegisterModuleCommand(
+                        exportedCommand.CommandName,
+                        module.ModuleId,
+                        exportedCommand.Factory,
+                        exportedCommand.Metadata
+                    );
+                }
+                
+                _loadedCommandModules.Add(module);
+                _logger.LogInformation(
+                    "Initialized command module: {ModuleId} v{Version} with {CommandCount} commands",
+                    module.ModuleId,
+                    module.Version,
+                    module.ExportedCommands.Count
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to initialize command module: {ModuleId}", module.ModuleId);
+            }
+        }
     }
 
     private async Task LoadAndInitializeChatModulesAsync(IBotCore core, CancellationToken cancellationToken)
@@ -133,8 +171,22 @@ public class PlatformModuleManager : IPlatformModuleManager
             }
         }
 
-        // Unload chat module assemblies
+        // Shutdown loaded command modules
+        foreach (var module in _loadedCommandModules)
+        {
+            try
+            {
+                await module.ShutdownAsync();
+                _logger.LogInformation("Shutdown command module: {ModuleId}", module.ModuleId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error shutting down command module: {ModuleId}", module.ModuleId);
+            }
+        }
+
         await _chatModuleLoader.UnloadModulesAsync(cancellationToken);
+        await _commandModuleLoader.UnloadModulesAsync(cancellationToken);
     }
 
     public IChatModule? GetModule(string platformName)
