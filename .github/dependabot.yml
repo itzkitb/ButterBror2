@@ -1,7 +1,4 @@
 version: 2
-registries:
-  # Define custom registries if needed (e.g., private NuGet feeds)
-  # For public NuGet, default is used automatically
 updates:
   # Configuration for NuGet packages
   - package-ecosystem: "nuget"
