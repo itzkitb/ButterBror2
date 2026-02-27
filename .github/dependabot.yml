@@ -1,11 +1,39 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
+registries:
+  # Define custom registries if needed (e.g., private NuGet feeds)
+  # For public NuGet, default is used automatically
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  # Configuration for NuGet packages
+  - package-ecosystem: "nuget"
+    directory: "/"
+    # Check for updates weekly to reduce noise
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "monday"
+    # Limit the number of open PRs to avoid spam
+    open-pull-requests-limit: 10
+    # Group minor and patch updates together
+    groups:
+      nuget-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Keep major updates separate for manual review
+      nuget-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+    # Assign reviewers automatically
+    reviewers:
+      - "SillyDev"
+    # Add labels for easier filtering
+    labels:
+      - "dependencies"
+      - "nuget"
+    # Commit message prefix
+    commit-message:
+      prefix: "deps"
+      include: "scope"
