@@ -1,4 +1,4 @@
-﻿using ButterBror.ChatModules.Abstractions;
+﻿using ButterBror.ChatModule;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;

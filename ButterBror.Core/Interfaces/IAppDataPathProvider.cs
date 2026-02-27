@@ -1,4 +1,4 @@
-namespace ButterBror.ChatModules.Abstractions;
+namespace ButterBror.Core.Interfaces;
 
 /// <summary>
 /// Application Data Path Provider

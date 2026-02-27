@@ -1,6 +1,6 @@
 using ButterBror.Core.Interfaces;
 
-namespace ButterBror.ChatModules.Abstractions;
+namespace ButterBror.ChatModule;
 
 /// <summary>
 /// Loader of chat modules

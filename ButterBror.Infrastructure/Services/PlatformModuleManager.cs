@@ -1,4 +1,4 @@
-using ButterBror.ChatModules.Abstractions;
+using ButterBror.ChatModule;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

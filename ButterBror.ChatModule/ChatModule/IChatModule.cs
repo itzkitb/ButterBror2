@@ -1,8 +1,7 @@
 ﻿using ButterBror.Core.Contracts;
 using ButterBror.Core.Interfaces;
-using ButterBror.Core.Models.Commands;
 
-namespace ButterBror.ChatModules.Abstractions;
+namespace ButterBror.ChatModule;
 
 /// <summary>
 /// Information about the module's exported command

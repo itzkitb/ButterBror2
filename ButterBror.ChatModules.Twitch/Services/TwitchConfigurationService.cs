@@ -1,5 +1,5 @@
 using System.Text.Json;
-using ButterBror.ChatModules.Abstractions;
+using ButterBror.Core.Interfaces;
 
 namespace ButterBror.ChatModules.Twitch.Services;
 

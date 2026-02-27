@@ -1,4 +1,4 @@
-﻿using ButterBror.ChatModules.Abstractions;
+﻿using ButterBror.Core.Interfaces;
 
 namespace ButterBror.Infrastructure.Storage;
 

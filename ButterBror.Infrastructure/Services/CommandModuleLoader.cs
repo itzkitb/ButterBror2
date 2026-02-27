@@ -2,7 +2,6 @@ using System.IO.Compression;
 using System.Runtime.Loader;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ButterBror.ChatModules.Abstractions;
 using ButterBror.ChatModules.Loader;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;

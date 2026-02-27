@@ -1,6 +1,6 @@
 using ButterBror.Application.Commands;
 using ButterBror.Application.Commands.Meta;
-using ButterBror.ChatModules.Abstractions;
+using ButterBror.ChatModule;
 using ButterBror.ChatModules.Loader;
 using ButterBror.Core.Interfaces;
 using ButterBror.Data;

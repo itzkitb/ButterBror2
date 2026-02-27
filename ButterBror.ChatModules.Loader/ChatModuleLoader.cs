@@ -1,7 +1,8 @@
 using System.IO.Compression;
 using System.Runtime.Loader;
 using System.Text.Json;
-using ButterBror.ChatModules.Abstractions;
+using ButterBror.ChatModule;
+using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.ChatModules.Loader;

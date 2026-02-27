@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace ButterBror.ChatModules.Abstractions;
+namespace ButterBror.ChatModule;
 
 /// <summary>
 /// Chat module manifest

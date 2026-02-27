@@ -20,7 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ButterBror.ChatModules.Abstractions\ButterBror.ChatModules.Abstractions.csproj" />
     <ProjectReference Include="..\ButterBror.Application\ButterBror.Application.csproj" />
     <ProjectReference Include="..\ButterBror.Data\ButterBror.Data.csproj" />
   </ItemGroup>

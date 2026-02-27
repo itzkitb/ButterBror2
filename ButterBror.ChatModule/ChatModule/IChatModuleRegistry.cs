@@ -1,4 +1,4 @@
-﻿namespace ButterBror.ChatModules.Abstractions;
+﻿namespace ButterBror.ChatModule;
 
 public interface IChatModuleRegistry
 {

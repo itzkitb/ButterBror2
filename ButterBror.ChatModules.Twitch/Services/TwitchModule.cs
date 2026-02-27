@@ -1,4 +1,4 @@
-using ButterBror.ChatModules.Abstractions;
+using ButterBror.ChatModule;
 using ButterBror.ChatModules.Twitch.Commands;
 using ButterBror.ChatModules.Twitch.Events;
 using ButterBror.ChatModules.Twitch.Models;

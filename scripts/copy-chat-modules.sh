@@ -77,6 +77,7 @@ for file in "$MODULE_OUTPUT"/*; do
     # Using case statement for cleaner pattern matching
     case "$filename" in
         ButterBror.Application.dll|ButterBror.Application.pdb| \
+        ButterBror.ChatModule.dll|ButterBror.ChatModule.pdb| \
         ButterBror.ChatModules.Abstractions.dll|ButterBror.ChatModules.Abstractions.pdb| \
         ButterBror.Core.dll|ButterBror.Core.pdb| \
         ButterBror.Data.dll|ButterBror.Data.pdb| \
