@@ -28,7 +28,7 @@ updates:
           - "major"
     # Assign reviewers automatically
     reviewers:
-      - "SillyDev"
+      - "itzkitb" # Whats my name on github XD
     # Add labels for easier filtering
     labels:
       - "dependencies"
