@@ -24,8 +24,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Resilience" Version="10.3.0" />
-    <PackageReference Include="Polly.Core" Version="8.6.5" />
-    <PackageReference Include="StackExchange.Redis" Version="2.11.3" />
+    <PackageReference Include="Polly.Core" Version="8.6.6" />
+    <PackageReference Include="StackExchange.Redis" Version="2.12.1" />
   </ItemGroup>
 
   <ItemGroup>
