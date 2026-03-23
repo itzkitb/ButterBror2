@@ -69,7 +69,7 @@ echo "Target directory: $CHAT_MODULES_DIR"
 
 # Copy all files except ButterBror.* assemblies (core libraries) and their PDBs
 echo "Copying module files (excluding ButterBror core assemblies and PDBs)..."
-MAIN_DLL=""
+MAIN_DLL="ButterBror.ChatModules.Twitch.dll"
 shopt -s nullglob
 for file in "$MODULE_OUTPUT"/*; do
     filename=$(basename "$file")
@@ -90,20 +90,9 @@ for file in "$MODULE_OUTPUT"/*; do
         *)
             cp "$file" "$TEMP_DIR/"
             echo "  Added: $filename"
-
-            # Identify the main module DLL (first non-core DLL found)
-            if [[ "$filename" == *.dll ]] && [[ -z "$MAIN_DLL" ]]; then
-                MAIN_DLL="$filename"
-            fi
-            ;;
     esac
 done
 shopt -u nullglob
-
-if [[ -z "$MAIN_DLL" ]]; then
-    echo "Error: No main module DLL found in output directory."
-    exit 1
-fi
 
 MANIFEST_FILE="$TEMP_DIR/module.manifest.json"
 MODULE_NAME="ButterBror.ChatModules.Twitch"
