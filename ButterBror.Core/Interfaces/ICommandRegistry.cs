@@ -1,4 +1,4 @@
-using ButterBror.Core.Contracts;
+using ButterBror.CommandModule.Commands;
 
 namespace ButterBror.Core.Interfaces;
 

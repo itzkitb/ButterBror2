@@ -1,4 +1,4 @@
-using ButterBror.Core.Interfaces;
+using ButterBror.Domain;
 
 namespace ButterBror.ChatModules.Twitch.Services;
 

@@ -1,4 +1,5 @@
 using ButterBror.ChatModule;
+using ButterBror.CommandModule.CommandModule;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

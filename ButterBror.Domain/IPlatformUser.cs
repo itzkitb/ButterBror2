@@ -1,4 +1,4 @@
-﻿namespace ButterBror.Core.Interfaces;
+namespace ButterBror.Domain;
 
 public interface IPlatformUser
 {

@@ -1,5 +1,5 @@
 ﻿
-using ButterBror.Core.Interfaces;
+using ButterBror.Domain;
 
 namespace ButterBror.CommandModule.Context;
 

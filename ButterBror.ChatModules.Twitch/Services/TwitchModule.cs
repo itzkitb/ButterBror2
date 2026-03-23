@@ -2,6 +2,8 @@ using ButterBror.ChatModule;
 using ButterBror.ChatModules.Twitch.Commands;
 using ButterBror.ChatModules.Twitch.Events;
 using ButterBror.ChatModules.Twitch.Models;
+using ButterBror.CommandModule.Commands;
+using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
 using Microsoft.Extensions.DependencyInjection;

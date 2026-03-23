@@ -1,9 +1,9 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
-using ButterBror.Core.Models.Commands;
 using Microsoft.Extensions.Logging;
-using ButterBror.Data;
 using ButterBror.Domain.Entities;
+using ButterBror.CommandModule.Commands;
+using ButterBror.CommandModule.Context;
 
 namespace ButterBror.Infrastructure.Services;
 

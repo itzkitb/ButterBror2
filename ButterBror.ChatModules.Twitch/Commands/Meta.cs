@@ -1,5 +1,5 @@
-using ButterBror.Core.Contracts;
-using ButterBror.Core.Enums;
+using ButterBror.CommandModule.Commands;
+using ButterBror.CommandModule.Enums;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
 

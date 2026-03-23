@@ -1,4 +1,4 @@
-﻿using ButterBror.Core.Contracts;
+﻿using ButterBror.CommandModule.Commands;
 using ButterBror.Core.Interfaces;
 
 namespace ButterBror.ChatModule;

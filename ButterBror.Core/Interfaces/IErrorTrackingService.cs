@@ -1,4 +1,4 @@
-using ButterBror.Core.Models.Commands;
+using ButterBror.CommandModule.Commands;
 
 namespace ButterBror.Core.Interfaces;
 

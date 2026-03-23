@@ -1,5 +1,5 @@
-using ButterBror.Core.Models;
-using ButterBror.Core.Models.Commands;
+using ButterBror.CommandModule.Commands;
+using ButterBror.CommandModule.Context;
 
 namespace ButterBror.Infrastructure.Services;
 

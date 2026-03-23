@@ -1,7 +1,7 @@
 using System.Text;
-using ButterBror.Core.Abstractions;
+using ButterBror.CommandModule.Commands;
+using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
-using ButterBror.Core.Models.Commands;
 using ButterBror.Data;
 using ButterBror.Localization.Models;
 using ButterBror.Localization.Services;

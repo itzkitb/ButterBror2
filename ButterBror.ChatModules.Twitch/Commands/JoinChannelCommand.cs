@@ -1,8 +1,8 @@
 using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.ChatModules.Twitch.Services;
-using ButterBror.Core.Abstractions;
+using ButterBror.CommandModule.Commands;
+using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
-using ButterBror.Core.Models.Commands;
 using ButterBror.Data;
 using Microsoft.Extensions.Logging;
 
