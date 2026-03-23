@@ -1,4 +1,4 @@
-namespace ButterBror.Core.Enums;
+namespace ButterBror.CommandModule.Enums;
 
 /// <summary>
 /// Defines the type of platform compatibility check for commands

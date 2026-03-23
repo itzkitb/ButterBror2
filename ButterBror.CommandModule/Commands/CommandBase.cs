@@ -1,8 +1,7 @@
-using ButterBror.Core.Interfaces;
-using ButterBror.Core.Models.Commands;
+using ButterBror.CommandModule.Context;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.Core.Abstractions;
+namespace ButterBror.CommandModule.Commands;
 
 /// <summary>
 /// Base class for unified commands with common functionality

@@ -1,6 +1,7 @@
-﻿using ButterBror.Core.Interfaces;
+﻿
+using ButterBror.Core.Interfaces;
 
-namespace ButterBror.Core.Models;
+namespace ButterBror.CommandModule.Context;
 
 public interface ICommandContext
 {

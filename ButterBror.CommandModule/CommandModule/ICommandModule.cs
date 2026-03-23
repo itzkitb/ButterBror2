@@ -1,6 +1,6 @@
-using ButterBror.Core.Contracts;
+using ButterBror.CommandModule.Commands;
 
-namespace ButterBror.Core.Interfaces;
+namespace ButterBror.CommandModule.CommandModule;
 
 /// <summary>
 /// Information about exported command from module

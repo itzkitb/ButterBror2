@@ -1,4 +1,4 @@
-﻿namespace ButterBror.Core.Models.Commands;
+﻿namespace ButterBror.CommandModule.Commands;
 
 public class CommandResult
 {

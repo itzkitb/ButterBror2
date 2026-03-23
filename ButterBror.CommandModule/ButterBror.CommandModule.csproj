@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../ButterBror.Core/ButterBror.Core.csproj" />
+    <ProjectReference Include="../ButterBror.Domain/ButterBror.Domain.csproj" />
+  </ItemGroup>
+
 </Project>

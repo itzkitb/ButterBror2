@@ -1,6 +1,6 @@
-using ButterBror.Core.Enums;
+using ButterBror.CommandModule.Enums;
 
-namespace ButterBror.Core.Contracts;
+namespace ButterBror.CommandModule.Commands;
 
 /// <summary>
 /// Interface defining metadata for commands in the unified command system
