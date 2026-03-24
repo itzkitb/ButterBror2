@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Dashboard ⚬ Commands</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-primary: #92F2FF;
+            --color-primary-hover: #7AE5F5;
+            --color-primary-dim: rgba(146, 242, 255, 0.1);
+            --color-error: #F6BBB4;
+            --color-error-bg: rgba(246, 187, 180, 0.1);
+            --color-success: #5EEAD4;
+            --color-success-bg: rgba(94, 234, 212, 0.1);
+            --color-warning: #FCD34D;
+            --color-bg: #000000;
+            --color-bg-secondary: #111111;
+            --color-bg-tertiary: #222222;
+            --color-bg-elevated: #1A1A1A;
+            --color-text: #FFFFFF;
+            --color-text-secondary: #888888;
+            --color-text-tertiary: #666666;
+            --color-border: #333333;
+            --color-border-light: #444444;
+            --border-radius: 0px;
+            --transition-fast: 0.15s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        .sidebar {
+            width: 240px;
+            background-color: var(--color-bg-secondary);
+            border-right: 1px solid var(--color-border);
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: 32px;
+            padding: 0 12px;
+        }
+
+        .logo span {
+            color: var(--color-primary);
+        }
+
+        .nav-links {
+            list-style: none;
+        }
+
+        .nav-links li {
+            margin-bottom: 4px;
+        }
+
+        .nav-links a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            transition: all var(--transition-fast);
+            border: 1px solid transparent;
+        }
+
+        .nav-links a:hover {
+            background-color: var(--color-bg-tertiary);
+            color: var(--color-text);
+        }
+
+        .nav-links a.active {
+            background-color: var(--color-primary-dim);
+            color: var(--color-primary);
+            border-color: var(--color-primary);
+        }
+
+        .main-content {
+            margin-left: 240px;
+            flex: 1;
+            padding: 32px;
+        }
+
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .page-subtitle {
+            margin-top: 8px;
+            color: var(--color-text-secondary);
+            font-size: 0.875rem;
+        }
+
+        /* Command input */
+        .command-section {
+            margin-bottom: 32px;
+        }
+
+        .command-input-wrapper {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-input {
+            flex: 1;
+            padding: 14px 18px;
+            background-color: var(--color-bg-tertiary);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            color: var(--color-text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 28px;
+            font-family: inherit;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: var(--border-radius);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background-color: var(--color-primary-hover);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Result panel */
+        .result-panel {
+            background-color: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-bottom: 24px;
+            display: none;
+        }
+
+        .result-panel.visible {
+            display: block;
+        }
+
+        .result-panel.success {
+            border-color: var(--color-success);
+            background-color: var(--color-success-bg);
+        }
+
+        .result-panel.error {
+            border-color: var(--color-error);
+            background-color: var(--color-error-bg);
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .result-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .result-status.success { color: var(--color-success); }
+        .result-status.error { color: var(--color-error); }
+
+        .result-time {
+            color: var(--color-text-tertiary);
+            font-size: 0.75rem;
+            margin-left: auto;
+        }
+
+        .result-message {
+            color: var(--color-text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            word-break: break-word;
+        }
+
+        /* History */
+        .history-section {
+            background-color: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: 20px;
+        }
+
+        .section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .history-list {
+            list-style: none;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--color-bg-tertiary);
+            cursor: pointer;
+            transition: background-color var(--transition-fast);
+        }
+
+        .history-item:hover {
+            background-color: var(--color-bg-tertiary);
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-command {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            color: var(--color-text-secondary);
+        }
+
+        .history-status {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: var(--border-radius);
+        }
+
+        .history-status.success {
+            background-color: var(--color-success-bg);
+            color: var(--color-success);
+        }
+
+        .history-status.error {
+            background-color: var(--color-error-bg);
+            color: var(--color-error);
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">ButterBror <span>Core</span></div>
+        <ul class="nav-links">
+            <li><a href="/">Dashboard</a></li>
+            <li><a href="/logs">Logs</a></li>
+            <li>
+                <a href="/commands" class="active">
+                    Commands
+                </a>
+            </li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">Admin Commands</h1>
+            <p class="page-subtitle">Execute commands directly from the dashboard</p>
+        </header>
+
+        <section class="command-section">
+            <div class="command-input-wrapper">
+                <input type="text" class="form-input" id="commandInput" 
+                       placeholder="sillyapps:twitch join forsen" 
+                       autocomplete="off"
+                       onkeydown="if (event.key === 'Enter') executeCommand()">
+                <button class="btn btn-primary" id="executeBtn" onclick="executeCommand()">
+                    <span id="btnText">▶ Run</span>
+                    <span class="spinner" id="btnSpinner" style="display: none;"></span>
+                </button>
+            </div>
+        </section>
+
+        <div class="result-panel" id="resultPanel">
+            <div class="result-header">
+                <span class="result-status" id="resultStatus"></span>
+                <span class="result-time" id="resultTime"></span>
+            </div>
+            <div class="result-message" id="resultMessage"></div>
+        </div>
+
+        <section class="history-section">
+            <h2 class="section-title">Recent Commands</h2>
+            <ul class="history-list" id="historyList"></ul>
+        </section>
+    </main>
+
+    <script>
+        const commandInput = document.getElementById('commandInput');
+        const executeBtn = document.getElementById('executeBtn');
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
+        const resultPanel = document.getElementById('resultPanel');
+        const resultStatus = document.getElementById('resultStatus');
+        const resultTime = document.getElementById('resultTime');
+        const resultMessage = document.getElementById('resultMessage');
+        const historyList = document.getElementById('historyList');
+
+        let commandHistory = [];
+
+        function setExecuting(executing) {
+            executeBtn.disabled = executing;
+            btnText.style.display = executing ? 'none' : 'inline';
+            btnSpinner.style.display = executing ? 'inline-block' : 'none';
+        }
+
+        function showResult(success, message, executionTime) {
+            resultPanel.className = 'result-panel visible ' + (success ? 'success' : 'error');
+            resultStatus.className = 'result-status ' + (success ? 'success' : 'error');
+            resultStatus.innerHTML = (success ? '✓' : '✕') + ' ' + (success ? 'SUCCESS' : 'FAILED');
+            resultTime.textContent = new Date().toLocaleTimeString() + 
+                (executionTime ? ` (${executionTime}ms)` : '');
+            resultMessage.textContent = message || (success ? 'Command executed' : 'Command failed');
+        }
+
+        function addToHistory(command, success) {
+            commandHistory.unshift({ command, success, time: new Date() });
+            if (commandHistory.length > 20) commandHistory.pop();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = commandHistory.map((item, index) => `
+                <li class="history-item" onclick="selectCommand(${index})">
+                    <span class="history-command">${escapeHtml(item.command)}</span>
+                    <span class="history-status ${item.success ? 'success' : 'error'}">
+                        ${item.success ? '✓' : '✕'}
+                    </span>
+                </li>
+            `).join('');
+        }
+
+        function selectCommand(index) {
+            commandInput.value = commandHistory[index].command;
+            commandInput.focus();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function executeCommand() {
+            const commandLine = commandInput.value.trim();
+            if (!commandLine) return;
+
+            setExecuting(true);
+            resultPanel.classList.remove('visible');
+
+            try {
+                const token = new URLSearchParams(window.location.search).get('token') || '';
+                const url = '/api/commands/execute' + (token ? '?token=' + token : '');
+
+                const startTime = Date.now();
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ CommandLine: commandLine })
+                });
+
+                const result = await res.json();
+                const executionTime = Date.now() - startTime;
+
+                const success = res.ok && result.success;
+                showResult(success, result.message, executionTime);
+                addToHistory(commandLine, success);
+
+                if (success) {
+                    commandInput.value = '';
+                }
+            } catch (e) {
+                showResult(false, e.message || 'Network error');
+                addToHistory(commandLine, false);
+            } finally {
+                setExecuting(false);
+            }
+        }
+
+        // Focus input on load
+        commandInput.focus();
+    </script>
+</body>
+</html>

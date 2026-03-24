@@ -32,6 +32,7 @@
     <ProjectReference Include="..\ButterBror.Application\ButterBror.Application.csproj" />
     <ProjectReference Include="..\ButterBror.ChatModules.Loader\ButterBror.ChatModules.Loader.csproj" />
     <ProjectReference Include="..\ButterBror.Core\ButterBror.Core.csproj" />
+    <ProjectReference Include="..\ButterBror.Dashboard\ButterBror.Dashboard.csproj" />
     <ProjectReference Include="..\ButterBror.Data\ButterBror.Data.csproj" />
     <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />
     <ProjectReference Include="..\ButterBror.Infrastructure\ButterBror.Infrastructure.csproj" />

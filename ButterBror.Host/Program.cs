@@ -3,6 +3,8 @@ using ButterBror.Application.Commands.Meta;
 using ButterBror.ChatModule;
 using ButterBror.ChatModules.Loader;
 using ButterBror.Core.Interfaces;
+using ButterBror.Dashboard;
+using ButterBror.Dashboard.Services;
 using ButterBror.Data;
 using ButterBror.Domain;
 using ButterBror.Host;
@@ -41,6 +43,13 @@ builder.Logging.AddConsoleFormatter<CustomConsoleFormatter, CustomConsoleFormatt
 builder.Logging.AddFilter("Polly", LogLevel.Warning);
 builder.Logging.AddFilter("Polly.Core", LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+
+// Dashboard
+builder.Services.Configure<DashboardOptions>(builder.Configuration.GetSection("Dashboard"));
+builder.Services.AddSingleton<IDashboardBridge, DashboardBridge>();
+builder.Services.AddSingleton<MetricsCollector>();
+builder.Services.AddSingleton<AdminCommandExecutor>();
+builder.Services.AddHostedService<DashboardServer>();
 
 // Services
 builder.Services.AddScoped<IUserService, UserService>();
@@ -99,6 +108,42 @@ builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
 
 var host = builder.Build();
 
+// Register Dashboard logger provider after build
+var bridge = host.Services.GetRequiredService<IDashboardBridge>();
+var loggerFactory = host.Services.GetRequiredService<ILoggerFactory>();
+loggerFactory.AddProvider(new DashboardLoggerProvider(bridge));
+
+// Initialize dashboard admin user in Redis
+using (var scope = host.Services.CreateScope())
+{
+    try
+    {
+        var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
+        var permManager = scope.ServiceProvider.GetRequiredService<IPermissionManager>();
+
+        // Create or retrieve the dashboard-admin user
+        var adminUser = await userService.GetOrCreateUserAsync(
+            platformId: "dashboard-admin",
+            platform: "dashboard",
+            displayName: "Dashboard Admin"
+        );
+
+        // Grant super-admin permissions if not already granted
+        await permManager.AddPermissionAsync(adminUser.UnifiedUserId, "su:*");
+
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation(
+            "Dashboard admin initialized: UnifiedUserId={UserId}",
+            adminUser.UnifiedUserId);
+    }
+    catch (Exception ex)
+    {
+        var logger = host.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Failed to initialize dashboard admin user (Redis may not be ready yet)");
+        // Non-fatal — the dashboard will still work for most scenarios
+    }
+}
+
 // Register all commands after services are built
 using (var scope = host.Services.CreateScope())
 {
@@ -119,7 +164,7 @@ using (var scope = host.Services.CreateScope())
         () => new LocaleCommand(),
         new LocaleCommandMeta()
     );
-    
+
     // Load global banphrase categories on startup
     var banphraseService = scope.ServiceProvider.GetRequiredService<IBanphraseService>();
     await banphraseService.ReloadGlobalCategoriesAsync();

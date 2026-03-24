@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --color-primary: #92F2FF;
+            --color-primary-hover: #7AE5F5;
+            --color-primary-dim: rgba(146, 242, 255, 0.1);
+            --color-error: #F6BBB4;
+            --color-error-bg: rgba(246, 187, 180, 0.1);
+            --color-success: #5EEAD4;
+            --color-warning: #FCD34D;
+            --color-bg: #000000;
+            --color-bg-secondary: #111111;
+            --color-bg-tertiary: #222222;
+            --color-bg-elevated: #1A1A1A;
+            --color-text: #FFFFFF;
+            --color-text-secondary: #888888;
+            --color-text-tertiary: #666666;
+            --color-border: #333333;
+            --color-border-light: #444444;
+            --border-radius: 0px;
+            --transition-fast: 0.15s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background-color: var(--color-bg-secondary);
+            border-right: 1px solid var(--color-border);
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: 32px;
+            padding: 0 12px;
+        }
+
+        .logo span {
+            color: var(--color-primary);
+        }
+
+        .nav-links {
+            list-style: none;
+        }
+
+        .nav-links li {
+            margin-bottom: 4px;
+        }
+
+        .nav-links a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            transition: all var(--transition-fast);
+            border: 1px solid transparent;
+        }
+
+        .nav-links a:hover {
+            background-color: var(--color-bg-tertiary);
+            color: var(--color-text);
+        }
+
+        .nav-links a.active {
+            background-color: var(--color-primary-dim);
+            color: var(--color-primary);
+            border-color: var(--color-primary);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--color-text-tertiary);
+            margin-left: auto;
+        }
+
+        .status-indicator.connected {
+            background-color: var(--color-success);
+        }
+
+        .status-indicator.disconnected {
+            background-color: var(--color-error);
+        }
+
+        /* Main content */
+        .main-content {
+            margin-left: 240px;
+            flex: 1;
+            padding: 32px;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background-color: var(--color-primary-dim);
+            border: 1px solid var(--color-primary);
+            border-radius: var(--border-radius);
+            color: var(--color-primary);
+            font-size: 0.875rem;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--color-primary);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Stat cards */
+        .stat-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background-color: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: 20px;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .stat-value.primary { color: var(--color-primary); }
+        .stat-value.success { color: var(--color-success); }
+        .stat-value.warning { color: var(--color-warning); }
+        .stat-value.error { color: var(--color-error); }
+
+        /* Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .chart-card {
+            background-color: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: 20px;
+        }
+
+        .chart-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--color-text-secondary);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 200px;
+        }
+
+        /* Redis info */
+        .redis-info {
+            background-color: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-top: 16px;
+        }
+
+        .redis-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+        }
+
+        /* Forms */
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background-color: var(--color-bg-tertiary);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            color: var(--color-text);
+            font-family: inherit;
+            font-size: 0.875rem;
+            transition: border-color var(--transition-fast);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            font-family: inherit;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: var(--border-radius);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--color-primary-hover);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">ButterBror <span>Core</span></div>
+        <ul class="nav-links">
+            <li>
+                <a href="/" class="active">
+                    Dashboard
+                    <span class="status-indicator connected" id="statusIndicator"></span>
+                </a>
+            </li>
+            <li><a href="/logs">Logs</a></li>
+            <li><a href="/commands">Commands</a></li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">Dashboard</h1>
+            <div class="live-indicator">
+                <span class="live-dot"></span>
+                Live
+            </div>
+        </header>
+
+        <div class="stat-cards">
+            <div class="stat-card">
+                <div class="stat-label">CPU Usage</div>
+                <div class="stat-value primary" id="cpuValue">0%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">RAM Usage</div>
+                <div class="stat-value success" id="ramValue">0%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Commands/min</div>
+                <div class="stat-value warning" id="cmdsValue">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Messages/min</div>
+                <div class="stat-value error" id="msgsValue">0</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">CPU Usage (%)</div>
+                <div class="chart-container">
+                    <canvas id="cpuChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">RAM Usage (%)</div>
+                <div class="chart-container">
+                    <canvas id="ramChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">
+                    Network I/O (MB/s)
+                    <span id="netStats" style="float: right; font-weight: 400; font-size: 0.75rem; color: var(--color-text-tertiary);">
+                        ↓ 0.00 ↑ 0.00
+                    </span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="netChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">
+                    Disk I/O (MB/s)
+                    <span id="diskStats" style="float: right; font-weight: 400; font-size: 0.75rem; color: var(--color-text-tertiary);">
+                        R 0.00 W 0.00
+                    </span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="diskChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">Commands per Minute</div>
+                <div class="chart-container">
+                    <canvas id="cmdsChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">Messages per Minute</div>
+                <div class="chart-container">
+                    <canvas id="msgsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="redis-info">
+            <div class="chart-title" style="margin-bottom: 12px;">Redis</div>
+            <div class="redis-grid">
+                <div>
+                    <div class="stat-label">Memory</div>
+                    <div class="stat-value" id="redisMemory">0 MB</div>
+                </div>
+                <div>
+                    <div class="stat-label">Clients</div>
+                    <div class="stat-value" id="redisClients">0</div>
+                </div>
+                <div>
+                    <div class="stat-label">Ops/sec</div>
+                    <div class="stat-value" id="redisOps">0</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Chart defaults
+        Chart.defaults.color = '#888888';
+        Chart.defaults.borderColor = '#333333';
+        Chart.defaults.font.family = 'Inter';
+
+        function createChart(ctx, type, label, color, isPercent = false) {
+            return new Chart(ctx, {
+                type: type,
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: label,
+                        data: [],
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { display: false }
+                        },
+                        y: {
+                            min: 0,
+                            ...(isPercent ? { max: 100 } : {}),
+                            grid: { color: '#333333' },
+                            ticks: { 
+                                maxTicksLimit: 5,
+                                ...(isPercent ? { callback: value => value + '%' } : {})
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        const cpuChart = createChart(document.getElementById('cpuChart'), 'line', 'CPU', '#92F2FF', true);
+        const ramChart = createChart(document.getElementById('ramChart'), 'line', 'RAM', '#5EEAD4', true);
+        const netChart = createChart(document.getElementById('netChart'), 'line', 'Network', '#FCD34D');
+        const diskChart = createChart(document.getElementById('diskChart'), 'line', 'Disk', '#F6BBB4');
+        const cmdsChart = createChart(document.getElementById('cmdsChart'), 'bar', 'Commands', '#92F2FF');
+        const msgsChart = createChart(document.getElementById('msgsChart'), 'bar', 'Messages', '#5EEAD4');
+
+        const maxDataPoints = 30;
+
+        function updateChart(chart, value) {
+            const now = new Date().toLocaleTimeString();
+            chart.data.labels.push(now);
+            chart.data.datasets[0].data.push(value);
+            if (chart.data.labels.length > maxDataPoints) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            chart.update('none');
+        }
+
+        function updateStatCards(data) {
+            const cpuEl = document.getElementById('cpuValue');
+            const ramEl = document.getElementById('ramValue');
+            const cmdsEl = document.getElementById('cmdsValue');
+            const msgsEl = document.getElementById('msgsValue');
+
+            cpuEl.textContent = (data.CpuPercent ?? 0).toFixed(1) + '%';
+            ramEl.textContent = (data.RamPercent ?? 0).toFixed(1) + '%';
+            cmdsEl.textContent = Math.round(data.CommandsPerMinute ?? 0);
+            msgsEl.textContent = Math.round(data.MessagesPerMinute ?? 0);
+        }
+
+        function updateCharts(data) {
+            updateStatCards(data);
+            updateChart(cpuChart, data.CpuPercent ?? 0);
+            updateChart(ramChart, data.RamPercent ?? 0);
+            updateChart(netChart, (data.NetSentMbps ?? 0) + (data.NetRecvMbps ?? 0));
+            updateChart(diskChart, (data.DiskReadMbps ?? 0) + (data.DiskWriteMbps ?? 0));
+            updateChart(cmdsChart, data.CommandsPerMinute ?? 0);
+            updateChart(msgsChart, data.MessagesPerMinute ?? 0);
+
+            // Update network stats
+            document.getElementById('netStats').textContent = 
+                `↓ ${(data.NetRecvMbps ?? 0).toFixed(3)} ↑ ${(data.NetSentMbps ?? 0).toFixed(3)}`;
+            
+            // Update disk stats
+            document.getElementById('diskStats').textContent = 
+                `R ${(data.DiskReadMbps ?? 0).toFixed(3)} W ${(data.DiskWriteMbps ?? 0).toFixed(3)}`;
+
+            // Redis
+            document.getElementById('redisMemory').textContent = ((data.RedisMemoryUsedBytes ?? 0) / 1024 / 1024).toFixed(1) + ' MB';
+            document.getElementById('redisClients').textContent = data.RedisConnectedClients ?? 0;
+            document.getElementById('redisOps').textContent = data.RedisOpsPerSecond ?? 0;
+        }
+
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('statusIndicator');
+            indicator.className = 'status-indicator ' + (connected ? 'connected' : 'disconnected');
+        }
+
+        // SSE connection
+        const token = new URLSearchParams(window.location.search).get('token') || '';
+        const url = '/api/sse/metrics' + (token ? '?token=' + token : '');
+        const evtSource = new EventSource(url);
+
+        evtSource.addEventListener('metrics', e => {
+            const data = JSON.parse(e.data);
+            updateCharts(data);
+            updateConnectionStatus(true);
+        });
+
+        evtSource.onerror = (e) => {
+            updateConnectionStatus(false);
+            evtSource.close();
+            setTimeout(() => location.reload(), 3000);
+        };
+
+        evtSource.onopen = () => {
+            updateConnectionStatus(true);
+        };
+    </script>
+</body>
+</html>

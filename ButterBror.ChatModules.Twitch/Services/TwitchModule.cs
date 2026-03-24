@@ -32,6 +32,7 @@ public class TwitchModule : IChatModule
     private IBotCore _botCore = null!;
     private ILogger<TwitchModule> _logger = null!;
     private TwitchConfiguration _config = null!;
+    private IDashboardBridge? _dashboardBridge;
 
     public void InitializeWithServices(IServiceProvider serviceProvider)
     {
@@ -40,15 +41,16 @@ public class TwitchModule : IChatModule
         var config = configService.LoadConfiguration();
         var options = Options.Create(config);
         _config = options.Value;
-        
+
         _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
-        
+        _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
+
         _twitchClient = new TwitchLibClient(
             options,
             serviceProvider.GetRequiredService<ResiliencePipelineProvider<string>>(),
             serviceProvider.GetRequiredService<ILogger<TwitchLibClient>>()
         );
-        
+
         // Updating factories with client capture
         _joinCommandFactory = () => new JoinChannelCommand(_twitchClient);
         _partCommandFactory = () => new PartChannelCommand(_twitchClient);
@@ -127,6 +129,9 @@ public class TwitchModule : IChatModule
 
     private async Task SafeHandleMessageAsync(Events.OnMessageReceivedArgs e)
     {
+        // Notify dashboard about received message
+        _dashboardBridge?.IncrementMessageCount();
+
         if (TryParseCommand(e.ChatMessage.Message, out var commandName, out var arguments))
         {
             var context = CreateCommandContext(e.ChatMessage, commandName, arguments);

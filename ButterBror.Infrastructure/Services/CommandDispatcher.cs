@@ -1,6 +1,7 @@
 using ButterBror.CommandModule.Commands;
 using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
@@ -10,6 +11,7 @@ public class CommandDispatcher : ICommandDispatcher
     private readonly ILogger<CommandDispatcher> _logger;
     private readonly ICommandRegistry _commandRegistry;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IDashboardBridge? _dashboardBridge;
 
     public CommandDispatcher(
         ILogger<CommandDispatcher> logger,
@@ -19,6 +21,7 @@ public class CommandDispatcher : ICommandDispatcher
         _logger = logger;
         _commandRegistry = commandRegistry;
         _serviceProvider = serviceProvider;
+        _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
     }
 
     public async Task<CommandResult> DispatchAsync(ICommandContext context)
@@ -43,6 +46,9 @@ public class CommandDispatcher : ICommandDispatcher
 
             var result = await command.ExecuteAsync(commandContext, serviceProvider);
             result.ExecutionTime = stopwatch.Elapsed;
+
+            // Notify dashboard about executed command
+            _dashboardBridge?.IncrementCommandCount();
 
             return result;
         }

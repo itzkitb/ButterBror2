@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Dashboard ⚬ Logs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-primary: #92F2FF;
+            --color-primary-hover: #7AE5F5;
+            --color-primary-dim: rgba(146, 242, 255, 0.1);
+            --color-error: #F6BBB4;
+            --color-error-bg: rgba(246, 187, 180, 0.1);
+            --color-success: #5EEAD4;
+            --color-warning: #FCD34D;
+            --color-bg: #000000;
+            --color-bg-secondary: #111111;
+            --color-bg-tertiary: #222222;
+            --color-bg-elevated: #1A1A1A;
+            --color-text: #FFFFFF;
+            --color-text-secondary: #888888;
+            --color-text-tertiary: #666666;
+            --color-border: #333333;
+            --color-border-light: #444444;
+            --border-radius: 0px;
+            --transition-fast: 0.15s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        .sidebar {
+            width: 240px;
+            background-color: var(--color-bg-secondary);
+            border-right: 1px solid var(--color-border);
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: 32px;
+            padding: 0 12px;
+        }
+
+        .logo span {
+            color: var(--color-primary);
+        }
+
+        .nav-links {
+            list-style: none;
+        }
+
+        .nav-links li {
+            margin-bottom: 4px;
+        }
+
+        .nav-links a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            transition: all var(--transition-fast);
+            border: 1px solid transparent;
+        }
+
+        .nav-links a:hover {
+            background-color: var(--color-bg-tertiary);
+            color: var(--color-text);
+        }
+
+        .nav-links a.active {
+            background-color: var(--color-primary-dim);
+            color: var(--color-primary);
+            border-color: var(--color-primary);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--color-text-tertiary);
+            margin-left: auto;
+        }
+
+        .status-indicator.connected {
+            background-color: var(--color-success);
+        }
+
+        .status-indicator.disconnected {
+            background-color: var(--color-error);
+        }
+
+        .main-content {
+            margin-left: 240px;
+            flex: 1;
+            padding: 32px;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .page-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 20px;
+            font-family: inherit;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: var(--border-radius);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            background-color: var(--color-bg-tertiary);
+            color: var(--color-text);
+            border-color: var(--color-border);
+        }
+
+        .btn:hover {
+            background-color: var(--color-bg-elevated);
+            border-color: var(--color-border-light);
+        }
+
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--color-primary-hover);
+        }
+
+        /* Filter bar */
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .form-select, .form-input {
+            padding: 10px 14px;
+            background-color: var(--color-bg-tertiary);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            color: var(--color-text);
+            font-family: inherit;
+            font-size: 0.875rem;
+        }
+
+        .form-select:focus, .form-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        .form-input {
+            min-width: 250px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.875rem;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+        }
+
+        .checkbox-label input {
+            accent-color: var(--color-primary);
+        }
+
+        /* Log container */
+        .log-container {
+            background-color: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            height: calc(100vh - 280px);
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            padding: 16px;
+        }
+
+        .log-entry {
+            padding: 6px 0;
+            border-bottom: 1px solid var(--color-bg-tertiary);
+            display: flex;
+            gap: 12px;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: var(--color-text-tertiary);
+            white-space: nowrap;
+        }
+
+        .log-level {
+            font-weight: 600;
+            white-space: nowrap;
+            min-width: 70px;
+        }
+
+        .log-level.trace, .log-level.debug { color: var(--color-text-tertiary); }
+        .log-level.information { color: var(--color-text-secondary); }
+        .log-level.warning { color: var(--color-warning); }
+        .log-level.error, .log-level.critical { color: var(--color-error); }
+
+        .log-category {
+            color: var(--color-primary);
+            white-space: nowrap;
+            min-width: 120px;
+        }
+
+        .log-message {
+            color: var(--color-text-secondary);
+            flex: 1;
+            word-break: break-word;
+        }
+
+        .log-entry:hover {
+            background-color: var(--color-bg-tertiary);
+            margin: 0 -16px;
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">ButterBror <span>Core</span></div>
+        <ul class="nav-links">
+            <li><a href="/">Dashboard</a></li>
+            <li>
+                <a href="/logs" class="active">
+                    Logs
+                    <span class="status-indicator connected" id="statusIndicator"></span>
+                </a>
+            </li>
+            <li><a href="/commands">Commands</a></li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">Logs</h1>
+            <div class="header-actions">
+                <button class="btn" onclick="clearLogs()">Clear</button>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="autoScroll" checked>
+                    Auto-scroll
+                </label>
+            </div>
+        </header>
+
+        <div class="filter-bar">
+            <select class="form-select" id="levelFilter" onchange="applyFilters()">
+                <option value="">All Levels</option>
+                <option value="DEBUG">DEBUG</option>
+                <option value="INFORMATION">INFO</option>
+                <option value="WARNING">WARN</option>
+                <option value="ERROR">ERROR</option>
+                <option value="CRITICAL">CRITICAL</option>
+            </select>
+            <input type="text" class="form-input" id="searchFilter" placeholder="Search logs..." oninput="applyFilters()">
+            <input type="text" class="form-input" id="categoryFilter" placeholder="Filter by category..." oninput="applyFilters()">
+        </div>
+
+        <div class="log-container" id="logContainer"></div>
+    </main>
+
+    <script>
+        const logContainer = document.getElementById('logContainer');
+        const maxLogs = 1000;
+        let allLogs = [];
+        let userScrolledUp = false;
+
+        // Check if user scrolled up
+        logContainer.addEventListener('scroll', () => {
+            const threshold = 100;
+            const position = logContainer.scrollTop + logContainer.clientHeight;
+            userScrolledUp = position < logContainer.scrollHeight - threshold;
+        });
+
+        function appendLogEntry(entry) {
+            allLogs.push(entry);
+            if (allLogs.length > maxLogs) {
+                allLogs.shift();
+            }
+            renderLogs();
+        }
+
+        function renderLogs() {
+            const levelFilter = document.getElementById('levelFilter').value;
+            const searchFilter = document.getElementById('searchFilter').value.toLowerCase();
+            const categoryFilter = document.getElementById('categoryFilter').value.toLowerCase();
+
+            const filtered = allLogs.filter(log => {
+                if (levelFilter && log.level.toUpperCase() !== levelFilter) return false;
+                if (searchFilter && !log.message.toLowerCase().includes(searchFilter) && 
+                    !log.category.toLowerCase().includes(searchFilter)) return false;
+                if (categoryFilter && !log.category.toLowerCase().includes(categoryFilter)) return false;
+                return true;
+            });
+
+            logContainer.innerHTML = filtered.map(log => `
+                <div class="log-entry">
+                    <span class="log-time">${new Date(log.timestamp).toLocaleTimeString()}</span>
+                    <span class="log-level ${log.level.toLowerCase()}">[${log.level.substring(0, 4).toUpperCase()}]</span>
+                    <span class="log-category">[${log.category}]</span>
+                    <span class="log-message">${escapeHtml(log.message)}</span>
+                </div>
+            `).join('');
+
+            // Auto-scroll
+            if (!userScrolledUp && document.getElementById('autoScroll').checked) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+
+        function applyFilters() {
+            userScrolledUp = false;
+            renderLogs();
+        }
+
+        function clearLogs() {
+            allLogs = [];
+            renderLogs();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('statusIndicator');
+            indicator.className = 'status-indicator ' + (connected ? 'connected' : 'disconnected');
+        }
+
+        // Load recent logs on page load
+        async function loadRecentLogs() {
+            try {
+                const token = new URLSearchParams(window.location.search).get('token') || '';
+                const url = '/api/logs/recent' + (token ? '?token=' + token : '');
+                const res = await fetch(url);
+                if (res.ok) {
+                    const logs = await res.json();
+                    allLogs = logs;
+                    renderLogs();
+                }
+            } catch (e) {
+                console.error('Failed to load recent logs:', e);
+            }
+        }
+
+        // SSE connection
+        const token = new URLSearchParams(window.location.search).get('token') || '';
+        const url = '/api/sse/logs' + (token ? '?token=' + token : '');
+        const evtSource = new EventSource(url);
+
+        evtSource.addEventListener('log', e => {
+            const entry = JSON.parse(e.data);
+            appendLogEntry(entry);
+            updateConnectionStatus(true);
+        });
+
+        evtSource.onerror = () => {
+            updateConnectionStatus(false);
+            evtSource.close();
+            setTimeout(() => location.reload(), 3000);
+        };
+
+        evtSource.onopen = () => updateConnectionStatus(true);
+
+        // Initial load
+        loadRecentLogs();
+    </script>
+</body>
+</html>
