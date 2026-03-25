@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace ButterBror.Infrastructure.Services;
 
 /// <summary>
-/// Loader for dynamic command modules from AppData/Commands
+/// Loader for dynamic command modules
 /// </summary>
 public class CommandModuleLoader : IDisposable, ICommandModuleLoader
 {
@@ -19,6 +19,8 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
     private readonly List<AssemblyLoadContext> _loadContexts = new();
     private readonly List<ICommandModule> _loadedModules = new();
     private readonly List<string> _tempDirectories = new();
+    private readonly Dictionary<string, string> _moduleIdToZipPath = new();
+    private readonly SemaphoreSlim _reloadLock = new(1, 1);
     private bool _disposed;
 
     public CommandModuleLoader(
@@ -153,6 +155,8 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
                     {
                         commandModule.InitializeWithServices(_serviceProvider);
                         modules.Add(commandModule);
+                        // Store mapping from module ID to zip path
+                        _moduleIdToZipPath[commandModule.ModuleId] = zipPath;
                         _logger.LogInformation(
                             "Loaded command module: {ModuleName} v{Version} with {CommandCount} commands",
                             moduleType.Name,
@@ -237,6 +241,137 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
         }, cancellationToken);
 
         _logger.LogInformation("Command modules unloaded");
+    }
+
+    public async Task<IReadOnlyList<ICommandModule>> ReloadModuleAsync(string moduleId, CancellationToken cancellationToken = default)
+    {
+        await _reloadLock.WaitAsync(cancellationToken);
+        try
+        {
+            _logger.LogInformation("Reloading command module: {ModuleId}", moduleId);
+
+            // Find module in loaded modules
+            var existingModule = _loadedModules.FirstOrDefault(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
+            string? zipPath = null;
+
+            if (existingModule != null)
+            {
+                // Get zip path from mapping
+                if (!_moduleIdToZipPath.TryGetValue(moduleId, out zipPath) || !File.Exists(zipPath))
+                {
+                    _logger.LogError("Module file not found for '{ModuleId}'", moduleId);
+                    throw new FileNotFoundException($"Module file not found for '{moduleId}'");
+                }
+
+                _logger.LogDebug("Found existing module {ModuleId}: {ZipPath}", moduleId, zipPath);
+
+                // Shutdown module
+                await existingModule.ShutdownAsync();
+
+                // Find and unload the corresponding load context
+                var contextToUnload = _loadContexts.FirstOrDefault(c => c.Name.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
+                if (contextToUnload != null)
+                {
+                    contextToUnload.Unload();
+                    _loadContexts.Remove(contextToUnload);
+                    _logger.LogDebug("Unloaded context: {ContextName}", contextToUnload.Name);
+                }
+
+                // Remove from loaded modules
+                _loadedModules.RemoveAll(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
+
+                // Remove temp directory
+                var tempDirToDelete = _tempDirectories.FirstOrDefault(t => t.Contains(moduleId));
+                if (!string.IsNullOrEmpty(tempDirToDelete) && Directory.Exists(tempDirToDelete))
+                {
+                    try
+                    {
+                        Directory.Delete(tempDirToDelete, recursive: true);
+                        _tempDirectories.Remove(tempDirToDelete);
+                        _logger.LogDebug("Deleted temp directory: {TempDir}", tempDirToDelete);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to delete temp directory: {TempDir}", tempDirToDelete);
+                    }
+                }
+
+                // Remove from mapping
+                _moduleIdToZipPath.Remove(moduleId);
+            }
+            else
+            {
+                // Module not found in memory - try to find ZIP by name
+                var commandModulesPath = Path.Combine(_pathProvider.GetAppDataPath(), "Command");
+                
+                // First try exact file name match
+                var exactZipPath = Path.Combine(commandModulesPath, $"{moduleId}.zip");
+                if (File.Exists(exactZipPath))
+                {
+                    zipPath = exactZipPath;
+                }
+                else
+                {
+                    // Try to find by manifest name
+                    var moduleFiles = Directory.GetFiles(commandModulesPath, "*.zip", SearchOption.TopDirectoryOnly);
+                    foreach (var file in moduleFiles)
+                    {
+                        var tempExtractDir = Path.Combine(Path.GetTempPath(), $"ButterBror_Command_{Guid.NewGuid()}");
+                        try
+                        {
+                            ZipFile.ExtractToDirectory(file, tempExtractDir, overwriteFiles: true);
+                            var manifestPath = Path.Combine(tempExtractDir, "command.manifest.json");
+                            if (File.Exists(manifestPath))
+                            {
+                                var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
+                                var manifest = JsonSerializer.Deserialize<CommandModuleManifest>(manifestJson);
+                                if (manifest?.Name?.Equals(moduleId, StringComparison.OrdinalIgnoreCase) == true)
+                                {
+                                    zipPath = file;
+                                    break;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            //
+                        }
+                        finally
+                        {
+                            if (Directory.Exists(tempExtractDir))
+                            {
+                                try { Directory.Delete(tempExtractDir, recursive: true); } catch { }
+                            }
+                        }
+                    }
+                }
+
+                if (zipPath == null)
+                {
+                    _logger.LogError("Module '{ModuleId}' not found in loaded modules", moduleId);
+                    throw new FileNotFoundException($"Module '{moduleId}' not found");
+                }
+            }
+
+            // Force GC
+            await Task.Run(() =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }, cancellationToken);
+
+            // Load module
+            _logger.LogDebug("Loading module: {ZipPath}", zipPath);
+            var newModules = await LoadModuleFromZipAsync(zipPath, cancellationToken);
+
+            _logger.LogInformation("Reloaded command module '{ModuleId}': {Count} module(s) loaded", moduleId, newModules.Count);
+
+            return newModules;
+        }
+        finally
+        {
+            _reloadLock.Release();
+        }
     }
 
     public void Dispose()

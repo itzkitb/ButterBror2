@@ -43,9 +43,13 @@ public class LocaleCommand : CommandBase
         }
         catch (Exception ex)
         {
-            var logger = GetService<ILogger<LocaleCommand>>(serviceProvider);
-            logger.LogError(ex, "Error handling LocaleCommand");
-            return CommandResult.Failure($"Error: {ex.Message}");
+            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            return await errorTracking.LogErrorAsync(
+                ex,
+                "Failed to execute LocaleCommand",
+                context.User.Id,
+                context.Channel.Platform,
+                context);
         }
     }
 

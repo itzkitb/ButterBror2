@@ -18,6 +18,8 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
     private readonly List<AssemblyLoadContext> _loadContexts = new();
     private readonly List<IChatModule> _loadedModules = new();
     private readonly List<string> _tempDirectories = new();
+    private readonly Dictionary<string, string> _moduleToZipPath = new();
+    private readonly SemaphoreSlim _reloadLock = new(1, 1);
     private bool _disposed;
 
     private const string ManifestFileName = "module.manifest.json";
@@ -147,6 +149,8 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     {
                         chatModule.InitializeWithServices(_serviceProvider);
                         modules.Add(chatModule);
+                        // Store mapping from module platform name to zip path
+                        _moduleToZipPath[chatModule.PlatformName] = zipPath;
                         _logger.LogInformation(
                             "Loaded chat module: {ModuleName} (Platform: {PlatformName})",
                             moduleType.Name,
@@ -220,6 +224,138 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         }, cancellationToken);
 
         _logger.LogInformation("Chat modules unloaded");
+    }
+
+    public async Task<IReadOnlyList<IChatModule>> ReloadModuleAsync(string moduleName, CancellationToken cancellationToken = default)
+    {
+        await _reloadLock.WaitAsync(cancellationToken);
+        try
+        {
+            _logger.LogInformation("Reloading chat module: {ModuleName}", moduleName);
+
+            // Find module in loaded modules
+            var existingModule = _loadedModules.FirstOrDefault(m => m.PlatformName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+            string? zipPath = null;
+
+            if (existingModule != null)
+            {
+                // Get zip path from mapping
+                if (!_moduleToZipPath.TryGetValue(moduleName, out zipPath) || !File.Exists(zipPath))
+                {
+                    _logger.LogError("Module ZIP file not found for '{ModuleName}'", moduleName);
+                    throw new FileNotFoundException($"Module ZIP file not found for '{moduleName}'");
+                }
+
+                _logger.LogDebug("Found existing module {ModuleName} with ZIP: {ZipPath}", moduleName, zipPath);
+
+                // Shutdown module
+                await existingModule.ShutdownAsync();
+                _logger.LogDebug("Shutdown module: {ModuleName}", moduleName);
+
+                // Find and unload the corresponding load context
+                var contextToUnload = _loadContexts.FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+                if (contextToUnload != null)
+                {
+                    contextToUnload.Unload();
+                    _loadContexts.Remove(contextToUnload);
+                    _logger.LogDebug("Unloaded context: {ContextName}", contextToUnload.Name);
+                }
+
+                // Remove from loaded modules
+                _loadedModules.RemoveAll(m => m.PlatformName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+
+                // Remove temp directory
+                var tempDirToDelete = _tempDirectories.FirstOrDefault(t => t.Contains(moduleName));
+                if (!string.IsNullOrEmpty(tempDirToDelete) && Directory.Exists(tempDirToDelete))
+                {
+                    try
+                    {
+                        Directory.Delete(tempDirToDelete, recursive: true);
+                        _tempDirectories.Remove(tempDirToDelete);
+                        _logger.LogDebug("Deleted temp directory: {TempDir}", tempDirToDelete);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to delete temp directory: {TempDir}", tempDirToDelete);
+                    }
+                }
+
+                // Remove from mapping
+                _moduleToZipPath.Remove(moduleName);
+            }
+            else
+            {
+                // Module not found in memory - try to find ZIP by name
+                var chatModulesPath = Path.Combine(_pathProvider.GetAppDataPath(), "Chat");
+                
+                // First try exact file name match
+                var exactZipPath = Path.Combine(chatModulesPath, $"{moduleName}.zip");
+                if (File.Exists(exactZipPath))
+                {
+                    zipPath = exactZipPath;
+                }
+                else
+                {
+                    // Try to find by manifest name
+                    var moduleFiles = Directory.GetFiles(chatModulesPath, "*.zip", SearchOption.TopDirectoryOnly);
+                    foreach (var file in moduleFiles)
+                    {
+                        var tempExtractDir = Path.Combine(Path.GetTempPath(), $"ButterBror_Module_{Guid.NewGuid()}");
+                        try
+                        {
+                            ZipFile.ExtractToDirectory(file, tempExtractDir, overwriteFiles: true);
+                            var manifestPath = Path.Combine(tempExtractDir, ManifestFileName);
+                            if (File.Exists(manifestPath))
+                            {
+                                var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
+                                var manifest = JsonSerializer.Deserialize<ModuleManifest>(manifestJson);
+                                if (manifest?.Name?.Equals(moduleName, StringComparison.OrdinalIgnoreCase) == true)
+                                {
+                                    zipPath = file;
+                                    break;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore extraction errors during search
+                        }
+                        finally
+                        {
+                            if (Directory.Exists(tempExtractDir))
+                            {
+                                try { Directory.Delete(tempExtractDir, recursive: true); } catch { }
+                            }
+                        }
+                    }
+                }
+
+                if (zipPath == null)
+                {
+                    _logger.LogError("Module '{ModuleName}' not found in loaded modules or ZIP files", moduleName);
+                    throw new FileNotFoundException($"Module '{moduleName}' not found");
+                }
+            }
+
+            // Force GC to free memory
+            await Task.Run(() =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }, cancellationToken);
+
+            // Load module from ZIP
+            _logger.LogDebug("Loading module from ZIP: {ZipPath}", zipPath);
+            var newModules = await LoadModuleFromZipAsync(zipPath, cancellationToken);
+
+            _logger.LogInformation("Reloaded chat module '{ModuleName}': {Count} module(s) loaded", moduleName, newModules.Count);
+
+            return newModules;
+        }
+        finally
+        {
+            _reloadLock.Release();
+        }
     }
 
     public void Dispose()

@@ -26,4 +26,18 @@ public class PlatformModuleRegistry : IChatModuleRegistry
     }
 
     public IEnumerable<IChatModule> GetModules() => _modules.AsReadOnly();
+
+    public bool UnregisterModule(string platformName)
+    {
+        var module = _modules.FirstOrDefault(m => m.PlatformName.Equals(platformName, StringComparison.OrdinalIgnoreCase));
+        if (module == null)
+        {
+            _logger.LogWarning("Module with platform name '{PlatformName}' not found", platformName);
+            return false;
+        }
+
+        _modules.Remove(module);
+        _logger.LogInformation("Unregistered platform module: {PlatformName}", platformName);
+        return true;
+    }
 }

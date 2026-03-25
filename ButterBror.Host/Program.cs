@@ -164,6 +164,11 @@ using (var scope = host.Services.CreateScope())
         () => new LocaleCommand(),
         new LocaleCommandMeta()
     );
+    commandRegistry.RegisterGlobalCommand(
+        "reloadmodule",
+        () => new ReloadModuleCommand(),
+        new ReloadModuleMeta()
+    );
 
     // Load global banphrase categories on startup
     var banphraseService = scope.ServiceProvider.GetRequiredService<IBanphraseService>();

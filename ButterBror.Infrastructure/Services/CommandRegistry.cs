@@ -2,6 +2,7 @@ using ButterBror.CommandModule.Commands;
 using ButterBror.CommandModule.Enums;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
@@ -9,6 +10,7 @@ public class CommandRegistry : ICommandRegistry
 {
     private readonly Dictionary<string, CommandEntry> _commands = new(StringComparer.OrdinalIgnoreCase);
     private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<CommandRegistry> _logger;
 
     private record CommandEntry(
         Func<ICommand> Factory,
@@ -16,9 +18,10 @@ public class CommandRegistry : ICommandRegistry
         string ModuleId
     );
 
-    public CommandRegistry(IServiceProvider serviceProvider)
+    public CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRegistry> logger)
     {
         _serviceProvider = serviceProvider;
+        _logger = logger;
     }
 
     public void RegisterGlobalCommand(string commandName, Func<ICommand> factory, ICommandMetadata metadata)
@@ -121,13 +124,31 @@ public class CommandRegistry : ICommandRegistry
         return false;
     }
 
+    public void UnregisterModuleCommands(string moduleId)
+    {
+        var keysToRemove = _commands
+            .Where(entry => entry.Value.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase))
+            .Select(entry => entry.Key)
+            .ToList();
+
+        foreach (var key in keysToRemove)
+        {
+            _commands.Remove(key);
+        }
+
+        if (keysToRemove.Count > 0)
+        {
+            _logger.LogDebug("Unregistered {Count} command(s) for module '{ModuleId}'", keysToRemove.Count, moduleId);
+        }
+    }
+
     // Legacy methods for backward compatibility
     public void RegisterCommand(string name, ICommand command)
     {
         // Legacy method - not used in new architecture
     }
 
-    public bool TryGetUnifiedCommand(string name, out ICommand command)
+    public bool TryGetUnifiedCommand(string name, out ICommand? command)
     {
         command = null;
         return false;

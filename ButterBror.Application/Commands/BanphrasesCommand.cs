@@ -44,9 +44,13 @@ public class BanphrasesCommand : CommandBase
         }
         catch (Exception ex)
         {
-            var logger = GetService<ILogger<BanphrasesCommand>>(serviceProvider);
-            logger.LogError(ex, "Error handling BanphrasesCommand");
-            return CommandResult.Failure($"Error: {ex.Message}");
+            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            return await errorTracking.LogErrorAsync(
+                ex,
+                "Failed to execute BanphrasesCommand",
+                context.User.Id,
+                context.Channel.Platform,
+                context);
         }
     }
     

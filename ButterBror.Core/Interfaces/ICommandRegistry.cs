@@ -19,8 +19,13 @@ public interface ICommandRegistry
     bool IsCommandCompatibleWithPlatform(string commandName, string platformId);
     Task<bool> UserHasPermissionForCommandAsync(string commandName, Guid unifiedUserId);
 
+    /// <summary>
+    /// Removes all commands registered under the given moduleId
+    /// </summary>
+    void UnregisterModuleCommands(string moduleId);
+
     // Legacy methods for backward compatibility
-    bool TryGetUnifiedCommand(string name, out ICommand command);
+    bool TryGetUnifiedCommand(string name, out ICommand? command);
     IEnumerable<string> GetRegisteredCommandNames();
     ICommandMetadata? GetCommand(string name);
 }

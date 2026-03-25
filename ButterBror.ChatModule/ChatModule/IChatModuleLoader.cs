@@ -16,4 +16,9 @@ public interface IChatModuleLoader
     /// Unload all loaded modules
     /// </summary>
     Task UnloadModulesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reloads a single chat module by ZIP file name or module name from manifest
+    /// </summary>
+    Task<IReadOnlyList<IChatModule>> ReloadModuleAsync(string moduleName, CancellationToken cancellationToken = default);
 }
