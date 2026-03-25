@@ -20,6 +20,7 @@ public class DashboardServer : IHostedService, IDisposable
     private readonly IDashboardBridge _bridge;
     private readonly MetricsCollector _metrics;
     private readonly AdminCommandExecutor _executor;
+    private readonly RedisExplorerService _redisExplorer;
     private readonly SseHub _hub;
     private readonly ILogger<DashboardServer> _logger;
 
@@ -33,12 +34,14 @@ public class DashboardServer : IHostedService, IDisposable
         IDashboardBridge bridge,
         MetricsCollector metrics,
         AdminCommandExecutor executor,
+        RedisExplorerService redisExplorer,
         ILogger<DashboardServer> logger)
     {
         _opts = opts.Value;
         _bridge = bridge;
         _metrics = metrics;
         _executor = executor;
+        _redisExplorer = redisExplorer;
         _hub = new SseHub();
         _logger = logger;
 
@@ -126,6 +129,9 @@ public class DashboardServer : IHostedService, IDisposable
                 case "/commands":
                     await ServePageAsync(res, "commands.html", ct);
                     break;
+                case "/redis":
+                    await ServePageAsync(res, "redis.html", ct);
+                    break;
 
                 case "/api/sse/metrics":
                     await HandleSseAsync(res, "metrics", ct);
@@ -144,6 +150,81 @@ public class DashboardServer : IHostedService, IDisposable
 
                 case "/api/commands/execute" when req.HttpMethod == "POST":
                     await HandleCommandExecuteAsync(req, res, ct);
+                    break;
+
+                // Redis Explorer API
+                case "/api/redis/databases" when req.HttpMethod == "GET":
+                    await HandleRedisDatabasesAsync(res, ct);
+                    break;
+                case "/api/redis/keys" when req.HttpMethod == "GET":
+                    await HandleRedisScanKeysAsync(req, res, ct);
+                    break;
+                case "/api/redis/key" when req.HttpMethod == "GET":
+                    await HandleRedisGetKeyAsync(req, res, ct);
+                    break;
+                case "/api/redis/key" when req.HttpMethod == "DELETE":
+                    await HandleRedisDeleteKeyAsync(req, res, ct);
+                    break;
+                case "/api/redis/key/string" when req.HttpMethod == "POST":
+                    await HandleRedisSetStringAsync(req, res, ct);
+                    break;
+                case "/api/redis/key/ttl" when req.HttpMethod == "POST":
+                    await HandleRedisSetTtlAsync(req, res, ct);
+                    break;
+                case "/api/redis/key/persist" when req.HttpMethod == "POST":
+                    await HandleRedisPersistKeyAsync(req, res, ct);
+                    break;
+                case "/api/redis/key/rename" when req.HttpMethod == "POST":
+                    await HandleRedisRenameKeyAsync(req, res, ct);
+                    break;
+
+                // Hash operations
+                case "/api/redis/hash/all" when req.HttpMethod == "GET":
+                    await HandleRedisHashGetAllAsync(req, res, ct);
+                    break;
+                case "/api/redis/hash/set" when req.HttpMethod == "POST":
+                    await HandleRedisHashSetAsync(req, res, ct);
+                    break;
+                case "/api/redis/hash/field" when req.HttpMethod == "DELETE":
+                    await HandleRedisHashDeleteFieldAsync(req, res, ct);
+                    break;
+
+                // List operations
+                case "/api/redis/list/all" when req.HttpMethod == "GET":
+                    await HandleRedisListGetAllAsync(req, res, ct);
+                    break;
+                case "/api/redis/list/push" when req.HttpMethod == "POST":
+                    await HandleRedisListPushAsync(req, res, ct);
+                    break;
+                case "/api/redis/list/item" when req.HttpMethod == "DELETE":
+                    await HandleRedisListRemoveAsync(req, res, ct);
+                    break;
+
+                // Set operations
+                case "/api/redis/set/all" when req.HttpMethod == "GET":
+                    await HandleRedisSetGetAllAsync(req, res, ct);
+                    break;
+                case "/api/redis/set/add" when req.HttpMethod == "POST":
+                    await HandleRedisSetAddAsync(req, res, ct);
+                    break;
+                case "/api/redis/set/member" when req.HttpMethod == "DELETE":
+                    await HandleRedisSetRemoveMemberAsync(req, res, ct);
+                    break;
+
+                // ZSet operations
+                case "/api/redis/zset/all" when req.HttpMethod == "GET":
+                    await HandleRedisZSetGetAllAsync(req, res, ct);
+                    break;
+                case "/api/redis/zset/add" when req.HttpMethod == "POST":
+                    await HandleRedisZSetAddAsync(req, res, ct);
+                    break;
+                case "/api/redis/zset/member" when req.HttpMethod == "DELETE":
+                    await HandleRedisZSetRemoveMemberAsync(req, res, ct);
+                    break;
+
+                // Stream operations
+                case "/api/redis/stream/read" when req.HttpMethod == "GET":
+                    await HandleRedisStreamReadAsync(req, res, ct);
                     break;
 
                 default:
@@ -243,6 +324,598 @@ public class DashboardServer : IHostedService, IDisposable
 
         var result = await _executor.ExecuteAsync(command.CommandLine, ct);
         await ServeJsonAsync(res, result);
+    }
+
+    // Redis Explorer API Handlers
+    private async Task HandleRedisDatabasesAsync(HttpListenerResponse res, CancellationToken ct)
+    {
+        try
+        {
+            var databases = await _redisExplorer.GetDatabasesInfoAsync();
+            await ServeJsonAsync(res, databases);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get Redis databases");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisScanKeysAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var pattern = req.QueryString["pattern"] ?? "*";
+            var cursor = long.Parse(req.QueryString["cursor"] ?? "0");
+            var count = int.Parse(req.QueryString["count"] ?? "200");
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            var result = await _redisExplorer.ScanKeysAsync(pattern, cursor, count, db);
+            await ServeJsonAsync(res, result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to scan Redis keys");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisGetKeyAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key parameter is required" });
+                return;
+            }
+
+            var detail = await _redisExplorer.GetKeyDetailAsync(key, db);
+            if (detail == null)
+            {
+                res.StatusCode = 404;
+                await ServeJsonAsync(res, new { error = "Key not found" });
+                return;
+            }
+
+            await ServeJsonAsync(res, detail);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get Redis key details");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisDeleteKeyAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key parameter is required" });
+                return;
+            }
+
+            var result = await _redisExplorer.DeleteKeyAsync(key, db);
+            await ServeJsonAsync(res, new { ok = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete Redis key");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisSetStringAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RedisStringSetRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Invalid request" });
+                return;
+            }
+
+            TimeSpan? ttl = request.TtlSeconds > 0 ? TimeSpan.FromSeconds(request.TtlSeconds) : null;
+            await _redisExplorer.SetStringAsync(request.Key, request.Value, ttl, request.Db);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set Redis string");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisSetTtlAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RedisTtlSetRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Key) || request.TtlSeconds <= 0)
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Invalid request" });
+                return;
+            }
+
+            var result = await _redisExplorer.SetTtlAsync(request.Key, TimeSpan.FromSeconds(request.TtlSeconds), request.Db);
+            await ServeJsonAsync(res, new { ok = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set Redis key TTL");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisPersistKeyAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RedisPersistRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Invalid request" });
+                return;
+            }
+
+            var result = await _redisExplorer.PersistKeyAsync(request.Key, request.Db);
+            await ServeJsonAsync(res, new { ok = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist Redis key");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisRenameKeyAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RedisRenameRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.OldKey) || string.IsNullOrEmpty(request.NewKey))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Invalid request" });
+                return;
+            }
+
+            var result = await _redisExplorer.RenameKeyAsync(request.OldKey, request.NewKey, request.Db);
+            await ServeJsonAsync(res, new { ok = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to rename Redis key");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisHashGetAllAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key parameter is required" });
+                return;
+            }
+
+            var result = await _redisExplorer.HashGetAllAsync(key, db);
+            await ServeJsonAsync(res, result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get Redis hash fields");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisHashSetAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RedisHashFieldSetRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Key) || string.IsNullOrEmpty(request.Field))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Invalid request" });
+                return;
+            }
+
+            await _redisExplorer.HSetAsync(request.Key, request.Field, request.Value, request.Db);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set Redis hash field");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisHashDeleteFieldAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var field = req.QueryString["field"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(field))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key and field parameters are required" });
+                return;
+            }
+
+            var result = await _redisExplorer.HDelAsync(key, field, db);
+            await ServeJsonAsync(res, new { ok = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete Redis hash field");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisListGetAllAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key parameter is required" });
+                return;
+            }
+
+            var result = await _redisExplorer.ListGetAllAsync(key, db);
+            await ServeJsonAsync(res, result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get Redis list items");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisListPushAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RedisListPushRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Invalid request" });
+                return;
+            }
+
+            await _redisExplorer.ListPushAsync(request.Key, request.Value, request.Tail, request.Db);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to push to Redis list");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisListRemoveAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var value = req.QueryString["value"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(value))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key and value parameters are required" });
+                return;
+            }
+
+            var result = await _redisExplorer.ListRemoveAsync(key, value, db);
+            await ServeJsonAsync(res, new { removed = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove from Redis list");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisSetGetAllAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key parameter is required" });
+                return;
+            }
+
+            var result = await _redisExplorer.SetGetAllAsync(key, db);
+            await ServeJsonAsync(res, result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get Redis set members");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisSetAddAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RedisSetAddRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Invalid request" });
+                return;
+            }
+
+            await _redisExplorer.SetAddAsync(request.Key, request.Value, request.Db);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add to Redis set");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisSetRemoveMemberAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var value = req.QueryString["value"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(value))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key and value parameters are required" });
+                return;
+            }
+
+            var result = await _redisExplorer.SetRemoveAsync(key, value, db);
+            await ServeJsonAsync(res, new { ok = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove from Redis set");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisZSetGetAllAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key parameter is required" });
+                return;
+            }
+
+            var result = await _redisExplorer.ZSetGetAllAsync(key, db);
+            await ServeJsonAsync(res, result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get Redis sorted set members");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisZSetAddAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RedisZSetAddRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Key) || string.IsNullOrEmpty(request.Member))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Invalid request" });
+                return;
+            }
+
+            await _redisExplorer.ZSetAddAsync(request.Key, request.Member, request.Score, request.Db);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add to Redis sorted set");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisZSetRemoveMemberAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var member = req.QueryString["member"];
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(member))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key and member parameters are required" });
+                return;
+            }
+
+            var result = await _redisExplorer.ZSetRemoveAsync(key, member, db);
+            await ServeJsonAsync(res, new { ok = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove from Redis sorted set");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleRedisStreamReadAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var key = req.QueryString["key"];
+            var count = int.Parse(req.QueryString["count"] ?? "100");
+            var db = int.Parse(req.QueryString["db"] ?? "0");
+
+            if (string.IsNullOrEmpty(key))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Key parameter is required" });
+                return;
+            }
+
+            var result = await _redisExplorer.StreamReadAsync(key, count, db);
+            await ServeJsonAsync(res, result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read Redis stream");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
     }
 
     private static async Task ServePageAsync(

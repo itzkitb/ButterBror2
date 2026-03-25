@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis Explorer - ButterBror Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-primary: #92F2FF;
+            --color-primary-hover: #7AE5F5;
+            --color-primary-dim: rgba(146, 242, 255, 0.1);
+            --color-error: #F6BBB4;
+            --color-error-bg: rgba(246, 187, 180, 0.1);
+            --color-success: #5EEAD4;
+            --color-warning: #FCD34D;
+            --color-bg: #000000;
+            --color-bg-secondary: #111111;
+            --color-bg-tertiary: #222222;
+            --color-bg-elevated: #1A1A1A;
+            --color-text: #FFFFFF;
+            --color-text-secondary: #888888;
+            --color-text-tertiary: #666666;
+            --color-border: #333333;
+            --color-border-light: #444444;
+            --border-radius: 0px;
+            --transition-fast: 0.15s ease;
+            
+            /* Type badge colors */
+            --type-string: #92F2FF;
+            --type-hash: #FCD34D;
+            --type-list: #5EEAD4;
+            --type-set: #C4B5FD;
+            --type-zset: #FB923C;
+            --type-stream: #F472B6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background-color: var(--color-bg-secondary);
+            border-right: 1px solid var(--color-border);
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: 32px;
+            padding: 0 12px;
+        }
+
+        .logo span {
+            color: var(--color-primary);
+        }
+
+        .nav-links {
+            list-style: none;
+        }
+
+        .nav-links li {
+            margin-bottom: 4px;
+        }
+
+        .nav-links a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            transition: all var(--transition-fast);
+            border: 1px solid transparent;
+        }
+
+        .nav-links a:hover {
+            background-color: var(--color-bg-tertiary);
+            color: var(--color-text);
+        }
+
+        .nav-links a.active {
+            background-color: var(--color-primary-dim);
+            color: var(--color-primary);
+            border-color: var(--color-primary);
+        }
+
+        /* Main content */
+        .main-content {
+            margin-left: 240px;
+            flex: 1;
+            padding: 32px;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .db-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .db-selector select {
+            background: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 8px 12px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+        }
+
+        .db-selector select:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        /* Stats bar */
+        .redis-stats-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            padding: 16px;
+            border-radius: var(--border-radius);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Redis layout */
+        .redis-layout {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 16px;
+            height: calc(100vh - 237px);
+        }
+
+        /* Key Browser */
+        .key-browser {
+            background: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .key-browser-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .search-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .search-input {
+            flex: 1;
+            background: var(--color-bg-secondary);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 8px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            border-radius: var(--border-radius);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        .btn {
+            background: var(--color-bg-tertiary);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 8px 16px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 500;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .btn:hover {
+            background: var(--color-border);
+        }
+
+        .btn-primary {
+            background: var(--color-primary-dim);
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+        }
+
+        .btn-primary:hover {
+            background: var(--color-primary);
+            color: var(--color-bg);
+        }
+
+        .btn-danger {
+            background: rgba(246, 187, 180, 0.1);
+            border-color: var(--color-error);
+            color: var(--color-error);
+        }
+
+        .btn-danger:hover {
+            background: var(--color-error);
+            color: var(--color-bg);
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 0.75rem;
+        }
+
+        .key-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .key-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--color-border);
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            transition: background var(--transition-fast);
+        }
+
+        .key-item:hover {
+            background: var(--color-bg-tertiary);
+        }
+
+        .key-item.selected {
+            background: var(--color-primary-dim);
+            border-left: 2px solid var(--color-primary);
+        }
+
+        .key-item-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .key-item-delete {
+            opacity: 0;
+            transition: opacity var(--transition-fast);
+        }
+
+        .key-item:hover .key-item-delete {
+            opacity: 1;
+        }
+
+        .type-badge {
+            font-size: 0.65rem;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 2px 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-radius: 2px;
+        }
+
+        .type-string { background: rgba(146, 242, 255, 0.2); color: var(--type-string); }
+        .type-hash { background: rgba(252, 211, 77, 0.2); color: var(--type-hash); }
+        .type-list { background: rgba(94, 234, 212, 0.2); color: var(--type-list); }
+        .type-set { background: rgba(196, 181, 253, 0.2); color: var(--type-set); }
+        .type-zset { background: rgba(251, 146, 60, 0.2); color: var(--type-zset); }
+        .type-stream { background: rgba(244, 114, 182, 0.2); color: var(--type-stream); }
+
+        .pagination-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-top: 1px solid var(--color-border);
+        }
+
+        .cursor-info {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+        }
+
+        /* Key Viewer */
+        .key-viewer {
+            background: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .key-viewer-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .key-name-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .key-name-display {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .key-name-input {
+            flex: 1;
+            background: var(--color-bg-secondary);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 8px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            border-radius: var(--border-radius);
+        }
+
+        .key-meta {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.875rem;
+        }
+
+        .meta-label {
+            color: var(--color-text-secondary);
+        }
+
+        .meta-value {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .key-viewer-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .key-actions {
+            display: flex;
+            gap: 8px;
+            padding: 16px;
+            border-top: 1px solid var(--color-border);
+        }
+
+        /* String editor */
+        .string-editor textarea {
+            width: 100%;
+            min-height: 300px;
+            background: var(--color-bg-secondary);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            border-radius: var(--border-radius);
+            resize: vertical;
+        }
+
+        .string-editor textarea:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 8px 12px;
+            color: var(--color-text-secondary);
+            border-bottom: 1px solid var(--color-border);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+        }
+
+        .data-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--color-border);
+            word-break: break-all;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Add row form */
+        .add-row-form {
+            display: flex;
+            gap: 8px;
+            padding: 12px;
+            border-top: 1px solid var(--color-border);
+            background: var(--color-bg-secondary);
+        }
+
+        .add-row-form input {
+            flex: 1;
+            background: var(--color-bg-tertiary);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 8px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            border-radius: var(--border-radius);
+        }
+
+        /* Number input */
+        input[type="number"] {
+            width: 100px;
+        }
+
+        /* TTL Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
+
+        .modal {
+            background: var(--color-bg-secondary);
+            border: 1px solid var(--color-border);
+            padding: 24px;
+            min-width: 320px;
+            max-width: 480px;
+            border-radius: var(--border-radius);
+        }
+
+        .modal-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .ttl-presets {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .ttl-input-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ttl-input-row input {
+            flex: 1;
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1000;
+        }
+
+        .toast {
+            padding: 12px 16px;
+            border: 1px solid;
+            font-size: 0.875rem;
+            animation: slideIn 0.2s ease;
+            border-radius: var(--border-radius);
+        }
+
+        .toast.success {
+            color: var(--color-success);
+            border-color: var(--color-success);
+            background: rgba(94, 234, 212, 0.1);
+        }
+
+        .toast.error {
+            color: var(--color-error);
+            border-color: var(--color-error);
+            background: rgba(246, 187, 180, 0.1);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--color-text-secondary);
+            text-align: center;
+        }
+
+        /* List items */
+        .list-item-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .list-item-index {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+            width: 40px;
+        }
+
+        .list-item-value {
+            flex: 1;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Loading state */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--color-text-secondary);
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--color-border);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Warning for large values */
+        .large-value-warning {
+            background: rgba(252, 211, 77, 0.1);
+            border: 1px solid var(--color-warning);
+            padding: 16px;
+            border-radius: var(--border-radius);
+            margin-bottom: 16px;
+        }
+
+        .large-value-warning p {
+            margin-bottom: 12px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--color-text-tertiary);
+            margin-left: auto;
+        }
+
+        .status-indicator.connected {
+            background-color: var(--color-success);
+        }
+
+        .status-indicator.disconnected {
+            background-color: var(--color-error);
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">ButterBror <span>Core</span></div>
+        <ul class="nav-links">
+            <li><a href="/">Dashboard</a></li>
+            <li><a href="/logs">Logs</a></li>
+            <li><a href="/commands">Commands</a></li>
+            <li>
+                <a href="/redis" class="active">
+                    Redis
+                    <span class="status-indicator connected" id="statusIndicator"></span>
+                </a>
+            </li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">Redis Explorer</h1>
+            <div class="db-selector">
+                <label for="dbSelect">Database:</label>
+                <select id="dbSelect"></select>
+            </div>
+        </header>
+
+        <div class="redis-stats-bar">
+            <div class="stat-card">
+                <div class="stat-label">Total Keys</div>
+                <div class="stat-value" id="statTotalKeys">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Memory Used</div>
+                <div class="stat-value" id="statMemory">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Connected Clients</div>
+                <div class="stat-value" id="statClients">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Ops/sec</div>
+                <div class="stat-value" id="statOps">-</div>
+            </div>
+        </div>
+
+        <div class="redis-layout">
+            <div class="key-browser">
+                <div class="key-browser-header">
+                    <div class="search-row">
+                        <input type="text" class="search-input" id="patternInput" placeholder="Pattern (e.g. user:*)" value="*">
+                        <button class="btn btn-primary" id="scanBtn">Scan</button>
+                        <button class="btn" id="refreshBtn" title="Refresh">↻</button>
+                    </div>
+                </div>
+                <div class="key-list" id="keyList">
+                    <div class="empty-state">
+                        <p>Click Scan to browse keys</p>
+                    </div>
+                </div>
+                <div class="pagination-row">
+                    <button class="btn btn-sm" id="prevBtn" disabled>← Prev</button>
+                    <span class="cursor-info" id="cursorInfo">cursor: 0</span>
+                    <button class="btn btn-sm" id="nextBtn" disabled>Next →</button>
+                </div>
+            </div>
+
+            <!-- Key Viewer -->
+            <div class="key-viewer" id="keyViewer">
+                <div class="empty-state">
+                    <p>Select a key to view details</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // State
+        const state = {
+            currentDb: 0,
+            scanPattern: '*',
+            cursors: [0],
+            cursorIndex: 0,
+            selectedKey: null,
+            databases: [],
+            metrics: null
+        };
+
+        // Get token from URL or localStorage
+        function getToken() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('token') || localStorage.getItem('dashboardToken') || '';
+        }
+
+        function api_url(path) {
+            const token = getToken();
+            const separator = path.includes('?') ? '&' : '?';
+            return token ? `${path}${separator}token=${token}` : path;
+        }
+
+        // API Client
+        const api = {
+            async get(path) {
+                const response = await fetch(api_url(path), {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+                    throw new Error(error.error || `HTTP ${response.status}`);
+                }
+                return response.json();
+            },
+
+            async post(path, body) {
+                const response = await fetch(api_url(path), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+                    throw new Error(error.error || `HTTP ${response.status}`);
+                }
+                return response.json();
+            },
+
+            async delete(path) {
+                const response = await fetch(api_url(path), {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+                    throw new Error(error.error || `HTTP ${response.status}`);
+                }
+                return response.json();
+            }
+        };
+
+        // Toast notifications
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Modal
+        function showModal(title, content, onConfirm, confirmText = 'Confirm') {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'modal-overlay';
+                overlay.innerHTML = `
+                    <div class="modal">
+                        <div class="modal-title">${title}</div>
+                        <div class="modal-body">${content}</div>
+                        <div class="modal-actions">
+                            <button class="btn" id="modalCancel">Cancel</button>
+                            <button class="btn btn-primary" id="modalConfirm">${confirmText}</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                document.getElementById('modalCancel').onclick = () => {
+                    overlay.remove();
+                    resolve(false);
+                };
+                document.getElementById('modalConfirm').onclick = () => {
+                    overlay.remove();
+                    resolve(true);
+                };
+            });
+        }
+
+        // Format bytes
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Format TTL
+        function formatTtl(seconds) {
+            if (seconds === -1) return 'No TTL';
+            if (seconds === -2) return 'Key expired';
+            if (seconds < 60) return `${seconds}s`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+            return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
+        }
+
+        // Load databases
+        async function loadDatabases() {
+            try {
+                state.databases = await api.get('/api/redis/databases');
+                const select = document.getElementById('dbSelect');
+                select.innerHTML = state.databases.map(db => 
+                    `<option value="${db.dbIndex}">DB ${db.dbIndex} (${db.keyCount} keys)</option>`
+                ).join('');
+                updateStats();
+            } catch (error) {
+                showToast('Failed to load databases: ' + error.message, 'error');
+            }
+        }
+
+        // Update stats from metrics
+        async function loadMetrics() {
+            try {
+                state.metrics = await api.get('/api/metrics/snapshot');
+                updateStats();
+            } catch (error) {
+                // Ignore metrics errors
+            }
+        }
+
+        function updateStats() {
+            // Total keys from current DB
+            const currentDb = state.databases.find(db => db.dbIndex === state.currentDb);
+            if (currentDb) {
+                document.getElementById('statTotalKeys').textContent = currentDb.keyCount.toLocaleString();
+            }
+
+            // Memory and other stats from metrics
+            if (state.metrics) {
+                document.getElementById('statMemory').textContent = formatBytes(state.metrics.redisMemoryUsedBytes);
+                document.getElementById('statClients').textContent = state.metrics.redisConnectedClients.toLocaleString();
+                document.getElementById('statOps').textContent = state.metrics.redisOpsPerSecond.toLocaleString();
+            }
+        }
+
+        // Scan keys
+        async function scanKeys(reset = true) {
+            if (reset) {
+                state.cursors = [0];
+                state.cursorIndex = 0;
+            }
+
+            const cursor = state.cursors[state.cursorIndex];
+            const pattern = document.getElementById('patternInput').value || '*';
+            state.scanPattern = pattern;
+
+            try {
+                const result = await api.get(`/api/redis/keys?pattern=${encodeURIComponent(pattern)}&cursor=${cursor}&count=200&db=${state.currentDb}`);
+                
+                // Update cursors
+                if (result.nextCursor !== 0 && state.cursorIndex === state.cursors.length - 1) {
+                    state.cursors.push(result.nextCursor);
+                }
+                state.cursorIndex = reset ? 0 : state.cursorIndex;
+
+                renderKeyList(result.keys);
+                updatePagination();
+            } catch (error) {
+                showToast('Failed to scan keys: ' + error.message, 'error');
+            }
+        }
+
+        function renderKeyList(keys) {
+            const list = document.getElementById('keyList');
+            if (keys.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <p>No keys found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = keys.map(key => {
+                const type = getKeyTypeFromKey(key);
+                return `
+                    <div class="key-item" data-key="${escapeHtml(key)}">
+                        <span class="type-badge type-${type}">${type}</span>
+                        <span class="key-item-name">${escapeHtml(key)}</span>
+                        <button class="btn btn-sm btn-danger key-item-delete" data-key="${escapeHtml(key)}">🗑</button>
+                    </div>
+                `;
+            }).join('');
+
+            // Add click handlers
+            list.querySelectorAll('.key-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('key-item-delete')) {
+                        deleteKey(e.target.dataset.key);
+                    } else {
+                        selectKey(item.dataset.key);
+                    }
+                });
+            });
+        }
+
+        function getKeyTypeFromKey(key) {
+            // Heuristic based on key naming conventions
+            if (key.includes(':')) {
+                const prefix = key.split(':')[0];
+                if (prefix === 'hash' || key.includes('user:') || key.includes('config:')) return 'hash';
+                if (prefix === 'list' || key.includes('queue:')) return 'list';
+                if (prefix === 'set') return 'set';
+                if (prefix === 'zset') return 'zset';
+                if (prefix === 'stream') return 'stream';
+            }
+            return 'string';
+        }
+
+        function updatePagination() {
+            const cursorInfo = document.getElementById('cursorInfo');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+
+            cursorInfo.textContent = `cursor: ${state.cursors[state.cursorIndex]}`;
+            prevBtn.disabled = state.cursorIndex === 0;
+            nextBtn.disabled = state.cursorIndex >= state.cursors.length - 1;
+        }
+
+        // Select key
+        async function selectKey(key) {
+            state.selectedKey = key;
+            
+            // Update selection UI
+            document.querySelectorAll('.key-item').forEach(item => {
+                item.classList.toggle('selected', item.dataset.key === key);
+            });
+
+            await loadKey(key);
+        }
+
+        // Load key details
+        async function loadKey(key) {
+            try {
+                const detail = await api.get(`/api/redis/key?key=${encodeURIComponent(key)}&db=${state.currentDb}`);
+                renderKeyViewer(detail);
+            } catch (error) {
+                showToast('Failed to load key: ' + error.message, 'error');
+            }
+        }
+
+        // Render key viewer
+        function renderKeyViewer(detail) {
+            const viewer = document.getElementById('keyViewer');
+            
+            const typeClass = `type-${detail.type}`;
+            const ttlText = formatTtl(detail.ttl);
+            
+            viewer.innerHTML = `
+                <div class="key-viewer-header">
+                    <div class="key-name-row">
+                        <span class="key-name-display">${escapeHtml(detail.key)}</span>
+                        <button class="btn btn-sm" id="editKeyNameBtn" title="Rename">✎</button>
+                    </div>
+                    <div class="key-meta">
+                        <span class="meta-item">
+                            <span class="meta-label">Type:</span>
+                            <span class="type-badge ${typeClass}">${detail.type}</span>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-label">Length:</span>
+                            <span class="meta-value">${detail.length.toLocaleString()}</span>
+                        </span>
+                        <span class="meta-item">
+                            <span class="meta-label">TTL:</span>
+                            <span class="meta-value" id="ttlValue">${ttlText}</span>
+                            <button class="btn btn-sm" id="setTtlBtn">Set TTL</button>
+                            ${detail.ttl !== -1 ? '<button class="btn btn-sm" id="persistBtn">Persist</button>' : ''}
+                        </span>
+                    </div>
+                </div>
+                <div class="key-viewer-content" id="keyContent">
+                    ${renderTypeEditor(detail)}
+                </div>
+                <div class="key-actions">
+                    <button class="btn btn-primary" id="saveBtn">Save</button>
+                    <button class="btn btn-danger" id="deleteKeyBtn">🗑 Delete Key</button>
+                </div>
+            `;
+
+            // Add event handlers
+            document.getElementById('editKeyNameBtn').onclick = () => renameKey(detail.key);
+            document.getElementById('setTtlBtn').onclick = () => showTtlModal(detail.key);
+            const persistBtn = document.getElementById('persistBtn');
+            if (persistBtn) persistBtn.onclick = () => persistKey(detail.key);
+            document.getElementById('deleteKeyBtn').onclick = () => deleteKey(detail.key);
+            document.getElementById('saveBtn').onclick = () => saveKey(detail.type);
+        }
+
+        function renderTypeEditor(detail) {
+            switch (detail.type) {
+                case 'string':
+                    return renderStringEditor(detail);
+                case 'hash':
+                    return renderHashEditor(detail);
+                case 'list':
+                    return renderListEditor(detail);
+                case 'set':
+                    return renderSetEditor(detail);
+                case 'zset':
+                    return renderZSetEditor(detail);
+                case 'stream':
+                    return renderStreamViewer(detail);
+                default:
+                    return '<p>Unknown type</p>';
+            }
+        }
+
+        function renderStringEditor(detail) {
+            if (detail.value === null) {
+                return `
+                    <div class="large-value-warning">
+                        <p>Value too large (${formatBytes(detail.length)}). Load anyway?</p>
+                        <button class="btn btn-sm" onclick="loadLargeValue()">Load Value</button>
+                    </div>
+                `;
+            }
+            return `
+                <div class="string-editor">
+                    <textarea id="stringValue">${escapeHtml(String(detail.value))}</textarea>
+                </div>
+            `;
+        }
+
+        function renderHashEditor(detail) {
+            const entries = Object.entries(detail.value || {});
+            return `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Field</th>
+                            <th>Value</th>
+                            <th style="width: 80px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hashTableBody">
+                        ${entries.map(([field, value]) => `
+                            <tr data-field="${escapeHtml(field)}">
+                                <td>${escapeHtml(field)}</td>
+                                <td>${escapeHtml(String(value))}</td>
+                                <td>
+                                    <button class="btn btn-sm" onclick="editHashField('${escapeHtml(field)}')">✎</button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteHashField('${escapeHtml(field)}')">🗑</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                <div class="add-row-form">
+                    <input type="text" id="hashFieldInput" placeholder="Field">
+                    <input type="text" id="hashValueInput" placeholder="Value">
+                    <button class="btn btn-primary" onclick="addHashField()">Add Field</button>
+                </div>
+            `;
+        }
+
+        function renderListEditor(detail) {
+            const items = Array.isArray(detail.value) ? detail.value : [];
+            return `
+                <div id="listContainer">
+                    ${items.map((item, i) => `
+                        <div class="list-item-row">
+                            <span class="list-item-index">[${i}]</span>
+                            <span class="list-item-value">${escapeHtml(String(item))}</span>
+                            <button class="btn btn-sm btn-danger" onclick="removeListItem('${escapeHtml(String(item))}')">🗑</button>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="add-row-form">
+                    <input type="text" id="listValueInput" placeholder="Value">
+                    <button class="btn" onclick="pushListItem(false)">Push Head</button>
+                    <button class="btn btn-primary" onclick="pushListItem(true)">Push Tail</button>
+                </div>
+            `;
+        }
+
+        function renderSetEditor(detail) {
+            const members = Array.isArray(detail.value) ? detail.value : [];
+            return `
+                <div id="setContainer">
+                    ${members.map(member => `
+                        <div class="list-item-row">
+                            <span class="list-item-value">${escapeHtml(String(member))}</span>
+                            <button class="btn btn-sm btn-danger" onclick="removeSetMember('${escapeHtml(String(member))}')">🗑</button>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="add-row-form">
+                    <input type="text" id="setMemberInput" placeholder="Member">
+                    <button class="btn btn-primary" onclick="addSetMember()">Add Member</button>
+                </div>
+            `;
+        }
+
+        function renderZSetEditor(detail) {
+            const members = Array.isArray(detail.value) ? detail.value : [];
+            return `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Score</th>
+                            <th>Member</th>
+                            <th style="width: 80px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="zsetTableBody">
+                        ${members.map(m => `
+                            <tr>
+                                <td>${m.score}</td>
+                                <td>${escapeHtml(m.member)}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger" onclick="removeZSetMember('${escapeHtml(m.member)}')">🗑</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                <div class="add-row-form">
+                    <input type="text" id="zsetMemberInput" placeholder="Member">
+                    <input type="number" id="zsetScoreInput" placeholder="Score" step="0.01">
+                    <button class="btn btn-primary" onclick="addZSetMember()">Add</button>
+                </div>
+            `;
+        }
+
+        function renderStreamViewer(detail) {
+            const entries = Array.isArray(detail.value) ? detail.value : [];
+            return `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Fields</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${entries.map(entry => `
+                            <tr>
+                                <td>${escapeHtml(entry.id)}</td>
+                                <td>
+                                    ${Object.entries(entry.fields).map(([k, v]) => 
+                                        `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(v))}</div>`
+                                    ).join('')}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        // Key operations
+        async function deleteKey(key) {
+            const confirmed = await showModal(
+                'Delete Key',
+                `<p>Are you sure you want to delete key:</p><code style="background:var(--color-bg-tertiary);padding:4px 8px;">${escapeHtml(key)}</code>?`,
+                null,
+                'Delete'
+            );
+            if (!confirmed) return;
+
+            try {
+                await api.delete(`/api/redis/key?key=${encodeURIComponent(key)}&db=${state.currentDb}`);
+                showToast('Key deleted', 'success');
+                state.selectedKey = null;
+                document.getElementById('keyViewer').innerHTML = `
+                    <div class="empty-state">
+                        <p>Select a key to view details</p>
+                    </div>
+                `;
+                scanKeys(false);
+                loadDatabases();
+            } catch (error) {
+                showToast('Failed to delete key: ' + error.message, 'error');
+            }
+        }
+
+        async function renameKey(oldKey) {
+            const newKey = prompt('Enter new key name:', oldKey);
+            if (!newKey || newKey === oldKey) return;
+
+            try {
+                await api.post('/api/redis/key/rename', {
+                    oldKey, newKey, db: state.currentDb
+                });
+                showToast('Key renamed', 'success');
+                state.selectedKey = newKey;
+                loadKey(newKey);
+                scanKeys(false);
+            } catch (error) {
+                showToast('Failed to rename key: ' + error.message, 'error');
+            }
+        }
+
+        async function showTtlModal(key) {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.innerHTML = `
+                <div class="modal">
+                    <div class="modal-title">Set TTL for ${escapeHtml(key)}</div>
+                    <div class="modal-body">
+                        <div class="ttl-presets">
+                            <button class="btn btn-sm" data-seconds="60">1m</button>
+                            <button class="btn btn-sm" data-seconds="3600">1h</button>
+                            <button class="btn btn-sm" data-seconds="86400">1d</button>
+                            <button class="btn btn-sm" data-seconds="604800">1w</button>
+                        </div>
+                        <div class="ttl-input-row">
+                            <input type="number" id="ttlSecondsInput" placeholder="Seconds" min="1">
+                            <button class="btn btn-primary" id="confirmTtlBtn">Set TTL</button>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn" id="cancelTtlBtn">Cancel</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+
+            // Preset buttons
+            overlay.querySelectorAll('.ttl-presets button').forEach(btn => {
+                btn.onclick = () => {
+                    document.getElementById('ttlSecondsInput').value = btn.dataset.seconds;
+                };
+            });
+
+            // Confirm button
+            document.getElementById('confirmTtlBtn').onclick = async () => {
+                const seconds = parseInt(document.getElementById('ttlSecondsInput').value);
+                if (!seconds || seconds <= 0) {
+                    showToast('Please enter a valid number of seconds', 'error');
+                    return;
+                }
+                overlay.remove();
+                await setTtl(key, seconds);
+            };
+
+            // Cancel button
+            document.getElementById('cancelTtlBtn').onclick = () => overlay.remove();
+        }
+
+        async function setTtl(key, seconds) {
+            try {
+                await api.post('/api/redis/key/ttl', {
+                    key, ttlSeconds: seconds, db: state.currentDb
+                });
+                showToast('TTL set', 'success');
+                loadKey(key);
+            } catch (error) {
+                showToast('Failed to set TTL: ' + error.message, 'error');
+            }
+        }
+
+        async function persistKey(key) {
+            try {
+                await api.post('/api/redis/key/persist', {
+                    key, db: state.currentDb
+                });
+                showToast('TTL removed', 'success');
+                loadKey(key);
+            } catch (error) {
+                showToast('Failed to persist key: ' + error.message, 'error');
+            }
+        }
+
+        async function saveKey(type) {
+            const key = state.selectedKey;
+            if (!key) return;
+
+            try {
+                switch (type) {
+                    case 'string': {
+                        const value = document.getElementById('stringValue').value;
+                        await api.post('/api/redis/key/string', {
+                            "Key": key, "Value": value, "TtlSeconds": 0, "Db": state.currentDb
+                        });
+                        break;
+                    }
+                    // Other types are modified inline
+                }
+                showToast('Saved', 'success');
+            } catch (error) {
+                showToast('Failed to save: ' + error.message, 'error');
+            }
+        }
+
+        // Hash operations
+        async function addHashField() {
+            const field = document.getElementById('hashFieldInput').value;
+            const value = document.getElementById('hashValueInput').value;
+            if (!field) return;
+
+            try {
+                await api.post('/api/redis/hash/set', {
+                    key: state.selectedKey, field, value, db: state.currentDb
+                });
+                showToast('Field added', 'success');
+                loadKey(state.selectedKey);
+            } catch (error) {
+                showToast('Failed to add field: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteHashField(field) {
+            try {
+                await api.delete(`/api/redis/hash/field?key=${encodeURIComponent(state.selectedKey)}&field=${encodeURIComponent(field)}&db=${state.currentDb}`);
+                showToast('Field deleted', 'success');
+                loadKey(state.selectedKey);
+            } catch (error) {
+                showToast('Failed to delete field: ' + error.message, 'error');
+            }
+        }
+
+        function editHashField(field) {
+            const row = document.querySelector(`tr[data-field="${CSS.escape(field)}"]`);
+            const valueCell = row.cells[1];
+            const currentValue = valueCell.textContent;
+            const newValue = prompt('Edit value:', currentValue);
+            if (newValue !== null && newValue !== currentValue) {
+                api.post('/api/redis/hash/set', {
+                    key: state.selectedKey, field, value: newValue, db: state.currentDb
+                }).then(() => {
+                    showToast('Field updated', 'success');
+                    loadKey(state.selectedKey);
+                }).catch(err => {
+                    showToast('Failed to update: ' + err.message, 'error');
+                });
+            }
+        }
+
+        // List operations
+        async function pushListItem(tail) {
+            const value = document.getElementById('listValueInput').value;
+            if (!value) return;
+
+            try {
+                await api.post('/api/redis/list/push', {
+                    key: state.selectedKey, value, tail, db: state.currentDb
+                });
+                showToast('Item added', 'success');
+                loadKey(state.selectedKey);
+            } catch (error) {
+                showToast('Failed to push: ' + error.message, 'error');
+            }
+        }
+
+        async function removeListItem(value) {
+            try {
+                await api.delete(`/api/redis/list/item?key=${encodeURIComponent(state.selectedKey)}&value=${encodeURIComponent(value)}&db=${state.currentDb}`);
+                showToast('Item removed', 'success');
+                loadKey(state.selectedKey);
+            } catch (error) {
+                showToast('Failed to remove: ' + error.message, 'error');
+            }
+        }
+
+        // Set operations
+        async function addSetMember() {
+            const value = document.getElementById('setMemberInput').value;
+            if (!value) return;
+
+            try {
+                await api.post('/api/redis/set/add', {
+                    key: state.selectedKey, value, db: state.currentDb
+                });
+                showToast('Member added', 'success');
+                loadKey(state.selectedKey);
+            } catch (error) {
+                showToast('Failed to add: ' + error.message, 'error');
+            }
+        }
+
+        async function removeSetMember(value) {
+            try {
+                await api.delete(`/api/redis/set/member?key=${encodeURIComponent(state.selectedKey)}&value=${encodeURIComponent(value)}&db=${state.currentDb}`);
+                showToast('Member removed', 'success');
+                loadKey(state.selectedKey);
+            } catch (error) {
+                showToast('Failed to remove: ' + error.message, 'error');
+            }
+        }
+
+        // ZSet operations
+        async function addZSetMember() {
+            const member = document.getElementById('zsetMemberInput').value;
+            const score = parseFloat(document.getElementById('zsetScoreInput').value);
+            if (!member || isNaN(score)) return;
+
+            try {
+                await api.post('/api/redis/zset/add', {
+                    key: state.selectedKey, member, score, db: state.currentDb
+                });
+                showToast('Member added', 'success');
+                loadKey(state.selectedKey);
+            } catch (error) {
+                showToast('Failed to add: ' + error.message, 'error');
+            }
+        }
+
+        async function removeZSetMember(member) {
+            try {
+                await api.delete(`/api/redis/zset/member?key=${encodeURIComponent(state.selectedKey)}&member=${encodeURIComponent(member)}&db=${state.currentDb}`);
+                showToast('Member removed', 'success');
+                loadKey(state.selectedKey);
+            } catch (error) {
+                showToast('Failed to remove: ' + error.message, 'error');
+            }
+        }
+
+        // Utility
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Event handlers
+        document.getElementById('dbSelect').addEventListener('change', (e) => {
+            state.currentDb = parseInt(e.target.value);
+            state.cursors = [0];
+            state.cursorIndex = 0;
+            state.selectedKey = null;
+            document.getElementById('keyViewer').innerHTML = `
+                <div class="empty-state">
+                    <p>Select a key to view details</p>
+                </div>
+            `;
+            scanKeys();
+            //loadDatabases();
+        });
+
+        document.getElementById('scanBtn').addEventListener('click', () => scanKeys());
+        document.getElementById('refreshBtn').addEventListener('click', () => scanKeys());
+
+        document.getElementById('prevBtn').addEventListener('click', () => {
+            if (state.cursorIndex > 0) {
+                state.cursorIndex--;
+                scanKeys(false);
+            }
+        });
+
+        document.getElementById('nextBtn').addEventListener('click', () => {
+            if (state.cursorIndex < state.cursors.length - 1) {
+                state.cursorIndex++;
+                scanKeys(false);
+            }
+        });
+
+        document.getElementById('patternInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') scanKeys();
+        });
+
+        // Initialize
+        async function init() {
+            await loadDatabases();
+            await loadMetrics();
+            
+            // Refresh metrics every 2 seconds
+            setInterval(loadMetrics, 2000);
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -301,6 +301,22 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--color-text-tertiary);
+            margin-left: auto;
+        }
+
+        .status-indicator.connected {
+            background-color: var(--color-success);
+        }
+
+        .status-indicator.disconnected {
+            background-color: var(--color-error);
+        }
     </style>
 </head>
 <body>
@@ -312,8 +328,10 @@
             <li>
                 <a href="/commands" class="active">
                     Commands
+                    <span class="status-indicator connected" id="statusIndicator"></span>
                 </a>
             </li>
+            <li><a href="/redis">Redis</a></li>
         </ul>
     </aside>
 
