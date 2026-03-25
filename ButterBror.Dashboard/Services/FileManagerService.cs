@@ -13,7 +13,7 @@ public record FileSystemEntry(
 public class FileManagerService
 {
     private readonly string _root;
-    private const long MaxUploadBytes = 100 * 1024 * 1024; // 100 MB
+    private const long MaxUploadBytes = 100 * 1024 * 1024;
 
     public FileManagerService(IAppDataPathProvider pathProvider)
     {
@@ -22,24 +22,15 @@ public class FileManagerService
     }
 
     /// <summary>
-    /// Нормализует путь и проверяет, что он находится внутри корневой папки.
+    /// Normalizes the path and checks that it is inside the root folder
     /// </summary>
-    /// <exception cref="UnauthorizedAccessException">Выбрасывается при попытке выхода за пределы корня</exception>
+    /// <exception cref="UnauthorizedAccessException">Thrown when attempting to access a path outside the root folder</exception>
     private string ResolveSafe(string relativePath)
     {
-        // Очищаем путь от потенциально опасных символов
         var sanitized = relativePath?.Replace('\\', '/') ?? string.Empty;
-        
-        // Удаляем начальные слеши
         sanitized = sanitized.TrimStart('/');
-        
-        // Комбинируем с корнем
         var combined = Path.Combine(_root, sanitized);
-        
-        // Получаем полный канонический путь
         var fullPath = Path.GetFullPath(combined);
-        
-        // Проверяем, что путь начинается с корня (защита от path traversal)
         var rootNormalized = Path.GetFullPath(_root).TrimEnd(Path.DirectorySeparatorChar);
         
         if (!fullPath.StartsWith(rootNormalized, StringComparison.OrdinalIgnoreCase))
@@ -47,7 +38,6 @@ public class FileManagerService
             throw new UnauthorizedAccessException("Access denied: path traversal detected");
         }
         
-        // Проверяем символические ссылки - не позволяем выходить за пределы корня
         if (Directory.Exists(fullPath) || File.Exists(fullPath))
         {
             var realPath = Path.GetFullPath(fullPath);
@@ -72,7 +62,6 @@ public class FileManagerService
         var entries = new List<FileSystemEntry>();
         var rootDir = new DirectoryInfo(fullPath);
 
-        // Добавляем папки
         foreach (var dir in rootDir.GetDirectories())
         {
             entries.Add(new FileSystemEntry(
@@ -84,7 +73,6 @@ public class FileManagerService
             ));
         }
 
-        // Добавляем файлы
         foreach (var file in rootDir.GetFiles())
         {
             entries.Add(new FileSystemEntry(
@@ -106,7 +94,6 @@ public class FileManagerService
             throw new ArgumentException("File name cannot be empty", nameof(fileName));
         }
 
-        // Проверяем имя файла на опасные символы
         var invalidChars = Path.GetInvalidFileNameChars();
         if (fileName.IndexOfAny(invalidChars) >= 0)
         {
@@ -120,12 +107,8 @@ public class FileManagerService
             Directory.CreateDirectory(fullPath);
         }
 
-        var filePath = Path.Combine(fullPath, fileName);
-        
-        // Проверяем после комбинирования
         var resolvedPath = ResolveSafe(Path.Combine(relativeDir, fileName).Replace('\\', '/'));
 
-        // Ограничение размера
         if (content.CanSeek)
         {
             if (content.Length > MaxUploadBytes)
@@ -135,9 +118,8 @@ public class FileManagerService
         }
         else
         {
-            // Если поток не поддерживает Seek, читаем в буфер с проверкой размера
             using var ms = new MemoryStream();
-            var buffer = new byte[81920]; // 80 KB
+            var buffer = new byte[81920];
             int bytesRead;
             long totalBytes = 0;
             
@@ -163,7 +145,6 @@ public class FileManagerService
     {
         var fullPath = ResolveSafe(relativePath);
         
-        // Запрещаем удалять корень
         if (string.Equals(fullPath, _root, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException("Cannot delete root directory");
@@ -192,7 +173,6 @@ public class FileManagerService
     {
         var fullPath = ResolveSafe(relativePath);
         
-        // Запрещаем создавать папку в корне с пустым именем
         if (string.Equals(fullPath, _root, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException("Cannot create directory at root");
@@ -208,14 +188,12 @@ public class FileManagerService
             throw new ArgumentException("New name cannot be empty", nameof(newName));
         }
 
-        // Проверяем имя на опасные символы
         var invalidChars = Path.GetInvalidFileNameChars();
         if (newName.IndexOfAny(invalidChars) >= 0)
         {
             throw new ArgumentException("New name contains invalid characters", nameof(newName));
         }
 
-        // newName должно быть только именем, не путем
         if (newName.Contains('/') || newName.Contains('\\'))
         {
             throw new ArgumentException("New name must be a file/folder name, not a path", nameof(newName));
@@ -223,7 +201,6 @@ public class FileManagerService
 
         var fullPath = ResolveSafe(relativePath);
         
-        // Запрещаем переименовывать корень
         if (string.Equals(fullPath, _root, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException("Cannot rename root directory");
@@ -237,7 +214,6 @@ public class FileManagerService
         var parentDir = Path.GetDirectoryName(fullPath)!;
         var newPath = Path.Combine(parentDir, newName);
         
-        // Проверяем новый путь на безопасность
         var resolvedNewPath = Path.GetFullPath(newPath);
         var rootNormalized = Path.GetFullPath(_root).TrimEnd(Path.DirectorySeparatorChar);
         
