@@ -141,26 +141,4 @@ public class CommandRegistry : ICommandRegistry
             _logger.LogDebug("Unregistered {Count} command(s) for module '{ModuleId}'", keysToRemove.Count, moduleId);
         }
     }
-
-    // Legacy methods for backward compatibility
-    public void RegisterCommand(string name, ICommand command)
-    {
-        // Legacy method - not used in new architecture
-    }
-
-    public bool TryGetUnifiedCommand(string name, out ICommand? command)
-    {
-        command = null;
-        return false;
-    }
-
-    public IEnumerable<string> GetRegisteredCommandNames()
-    {
-        return _commands.Keys.ToList();
-    }
-
-    public ICommandMetadata? GetCommand(string name)
-    {
-        return GetCommandMetadata(name);
-    }
 }

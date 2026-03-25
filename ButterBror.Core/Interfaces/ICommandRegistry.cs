@@ -23,9 +23,4 @@ public interface ICommandRegistry
     /// Removes all commands registered under the given moduleId
     /// </summary>
     void UnregisterModuleCommands(string moduleId);
-
-    // Legacy methods for backward compatibility
-    bool TryGetUnifiedCommand(string name, out ICommand? command);
-    IEnumerable<string> GetRegisteredCommandNames();
-    ICommandMetadata? GetCommand(string name);
 }
