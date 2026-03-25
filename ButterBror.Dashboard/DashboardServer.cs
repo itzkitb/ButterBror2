@@ -21,6 +21,7 @@ public class DashboardServer : IHostedService, IDisposable
     private readonly MetricsCollector _metrics;
     private readonly AdminCommandExecutor _executor;
     private readonly RedisExplorerService _redisExplorer;
+    private readonly FileManagerService _fileManager;
     private readonly SseHub _hub;
     private readonly ILogger<DashboardServer> _logger;
 
@@ -35,6 +36,7 @@ public class DashboardServer : IHostedService, IDisposable
         MetricsCollector metrics,
         AdminCommandExecutor executor,
         RedisExplorerService redisExplorer,
+        FileManagerService fileManager,
         ILogger<DashboardServer> logger)
     {
         _opts = opts.Value;
@@ -42,6 +44,7 @@ public class DashboardServer : IHostedService, IDisposable
         _metrics = metrics;
         _executor = executor;
         _redisExplorer = redisExplorer;
+        _fileManager = fileManager;
         _hub = new SseHub();
         _logger = logger;
 
@@ -225,6 +228,35 @@ public class DashboardServer : IHostedService, IDisposable
                 // Stream operations
                 case "/api/redis/stream/read" when req.HttpMethod == "GET":
                     await HandleRedisStreamReadAsync(req, res, ct);
+                    break;
+
+                // File Manager API
+                case "/files":
+                    await ServePageAsync(res, "files.html", ct);
+                    break;
+
+                case "/api/files/list" when req.HttpMethod == "GET":
+                    await HandleFilesListAsync(req, res, ct);
+                    break;
+
+                case "/api/files/upload" when req.HttpMethod == "POST":
+                    await HandleFilesUploadAsync(req, res, ct);
+                    break;
+
+                case "/api/files/delete" when req.HttpMethod == "DELETE":
+                    await HandleFilesDeleteAsync(req, res, ct);
+                    break;
+
+                case "/api/files/mkdir" when req.HttpMethod == "POST":
+                    await HandleFilesMkdirAsync(req, res, ct);
+                    break;
+
+                case "/api/files/rename" when req.HttpMethod == "POST":
+                    await HandleFilesRenameAsync(req, res, ct);
+                    break;
+
+                case string p when p.StartsWith("/api/files/download") && req.HttpMethod == "GET":
+                    await HandleFilesDownloadAsync(req, res, ct);
                     break;
 
                 default:
@@ -913,6 +945,235 @@ public class DashboardServer : IHostedService, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to read Redis stream");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    // File Manager API Handlers
+    private async Task HandleFilesListAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var relativePath = req.QueryString["path"] ?? string.Empty;
+            var entries = await _fileManager.ListDirectoryAsync(relativePath);
+            await ServeJsonAsync(res, entries);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "File manager access denied");
+            res.StatusCode = 403;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            res.StatusCode = 404;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to list directory");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleFilesUploadAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var dir = req.QueryString["dir"] ?? string.Empty;
+            var name = req.QueryString["name"];
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "File name is required" });
+                return;
+            }
+
+            await _fileManager.UploadFileAsync(dir, name, req.InputStream);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "File manager access denied");
+            res.StatusCode = 403;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("size exceeds"))
+        {
+            res.StatusCode = 413;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to upload file");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleFilesDeleteAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<DeleteRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Path))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Path is required" });
+                return;
+            }
+
+            await _fileManager.DeleteAsync(request.Path);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "File manager access denied");
+            res.StatusCode = 403;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (FileNotFoundException ex)
+        {
+            res.StatusCode = 404;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete file");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleFilesMkdirAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<CreateDirectoryRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Path))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Path is required" });
+                return;
+            }
+
+            await _fileManager.CreateDirectoryAsync(request.Path);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "File manager access denied");
+            res.StatusCode = 403;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create directory");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleFilesRenameAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var reader = new StreamReader(req.InputStream);
+            var body = await reader.ReadToEndAsync(ct);
+            var request = JsonSerializer.Deserialize<RenameRequest>(body);
+
+            if (request == null || string.IsNullOrEmpty(request.Path) || string.IsNullOrEmpty(request.NewName))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Path and newName are required" });
+                return;
+            }
+
+            await _fileManager.RenameAsync(request.Path, request.NewName);
+            await ServeJsonAsync(res, new { ok = true });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "File manager access denied");
+            res.StatusCode = 403;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (FileNotFoundException ex)
+        {
+            res.StatusCode = 404;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to rename file");
+            res.StatusCode = 500;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+    }
+
+    private async Task HandleFilesDownloadAsync(
+        HttpListenerRequest req,
+        HttpListenerResponse res,
+        CancellationToken ct)
+    {
+        try
+        {
+            var relativePath = req.QueryString["path"];
+
+            if (string.IsNullOrEmpty(relativePath))
+            {
+                res.StatusCode = 400;
+                await ServeJsonAsync(res, new { error = "Path parameter is required" });
+                return;
+            }
+
+            using var stream = await _fileManager.GetFileStreamAsync(relativePath);
+            var fileName = Path.GetFileName(relativePath);
+            
+            res.ContentType = "application/octet-stream";
+            res.Headers.Add("Content-Disposition", $"attachment; filename=\"{fileName}\"");
+            res.ContentLength64 = stream.Length;
+            await stream.CopyToAsync(res.OutputStream, ct);
+            res.Close();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "File manager access denied");
+            res.StatusCode = 403;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (FileNotFoundException ex)
+        {
+            res.StatusCode = 404;
+            await ServeJsonAsync(res, new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to download file");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }

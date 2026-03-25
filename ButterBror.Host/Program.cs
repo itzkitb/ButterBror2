@@ -50,6 +50,7 @@ builder.Services.AddSingleton<IDashboardBridge, DashboardBridge>();
 builder.Services.AddSingleton<MetricsCollector>();
 builder.Services.AddSingleton<AdminCommandExecutor>();
 builder.Services.AddSingleton<RedisExplorerService>();
+builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddHostedService<DashboardServer>();
 
 // Services

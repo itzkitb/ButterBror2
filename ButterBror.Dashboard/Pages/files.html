@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Dashboard ⚬ File Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-primary: #92F2FF;
+            --color-primary-hover: #7AE5F5;
+            --color-primary-dim: rgba(146, 242, 255, 0.1);
+            --color-error: #F6BBB4;
+            --color-error-bg: rgba(246, 187, 180, 0.1);
+            --color-success: #5EEAD4;
+            --color-warning: #FCD34D;
+            --color-bg: #000000;
+            --color-bg-secondary: #111111;
+            --color-bg-tertiary: #222222;
+            --color-bg-elevated: #1A1A1A;
+            --color-text: #FFFFFF;
+            --color-text-secondary: #888888;
+            --color-text-tertiary: #666666;
+            --color-border: #333333;
+            --color-border-light: #444444;
+            --border-radius: 0px;
+            --transition-fast: 0.15s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background-color: var(--color-bg-secondary);
+            border-right: 1px solid var(--color-border);
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: 32px;
+            padding: 0 12px;
+        }
+
+        .logo span {
+            color: var(--color-primary);
+        }
+
+        .nav-links {
+            list-style: none;
+        }
+
+        .nav-links li {
+            margin-bottom: 4px;
+        }
+
+        .nav-links a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            transition: all var(--transition-fast);
+            border: 1px solid transparent;
+        }
+
+        .nav-links a:hover {
+            background-color: var(--color-bg-tertiary);
+            color: var(--color-text);
+        }
+
+        .nav-links a.active {
+            background-color: var(--color-primary-dim);
+            color: var(--color-primary);
+            border-color: var(--color-primary);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--color-text-tertiary);
+            margin-left: auto;
+        }
+
+        .status-indicator.connected {
+            background-color: var(--color-success);
+        }
+
+        .status-indicator.disconnected {
+            background-color: var(--color-error);
+        }
+
+        /* Main content */
+        .main-content {
+            margin-left: 240px;
+            flex: 1;
+            padding: 32px;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .page-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        /* Breadcrumbs */
+        .breadcrumbs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+            font-size: 0.875rem;
+            flex-wrap: wrap;
+        }
+
+        .breadcrumb-item {
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            transition: color var(--transition-fast);
+        }
+
+        .breadcrumb-item:hover {
+            color: var(--color-primary);
+        }
+
+        .breadcrumb-item.active {
+            color: var(--color-text);
+            cursor: default;
+        }
+
+        .breadcrumb-separator {
+            color: var(--color-text-tertiary);
+        }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            align-items: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 20px;
+            font-family: inherit;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: var(--border-radius);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            background-color: var(--color-bg-tertiary);
+            color: var(--color-text);
+            border-color: var(--color-border);
+        }
+
+        .btn:hover {
+            background-color: var(--color-bg-elevated);
+            border-color: var(--color-border-light);
+        }
+
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--color-primary-hover);
+        }
+
+        .btn-danger {
+            background-color: rgba(246, 187, 180, 0.1);
+            border-color: var(--color-error);
+            color: var(--color-error);
+        }
+
+        .btn-danger:hover {
+            background-color: var(--color-error);
+            color: var(--color-bg);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.75rem;
+        }
+
+        /* Progress bar */
+        .progress-container {
+            width: 100%;
+            height: 4px;
+            background-color: var(--color-bg-tertiary);
+            border-radius: var(--border-radius);
+            margin-bottom: 16px;
+            display: none;
+            overflow: hidden;
+        }
+
+        .progress-container.visible {
+            display: block;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--color-primary);
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+
+        /* File table */
+        .file-table-container {
+            background-color: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+        }
+
+        .file-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .file-table th {
+            text-align: left;
+            padding: 12px 16px;
+            color: var(--color-text-secondary);
+            border-bottom: 1px solid var(--color-border);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .file-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--color-bg-tertiary);
+            transition: background-color var(--transition-fast);
+        }
+
+        .file-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .file-table tbody tr:hover {
+            background-color: var(--color-bg-tertiary);
+        }
+
+        .file-icon {
+            font-size: 1.125rem;
+            margin-right: 8px;
+        }
+
+        .file-name {
+            cursor: pointer;
+            color: var(--color-text);
+            transition: color var(--transition-fast);
+        }
+
+        .file-name:hover {
+            color: var(--color-primary);
+        }
+
+        .file-size {
+            color: var(--color-text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+        }
+
+        .file-modified {
+            color: var(--color-text-secondary);
+            font-size: 0.8125rem;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 64px 16px;
+            color: var(--color-text-secondary);
+            text-align: center;
+        }
+
+        /* Loading spinner */
+        .loading-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 64px 16px;
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--color-border);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error banner */
+        .error-banner {
+            background-color: var(--color-error-bg);
+            border: 1px solid var(--color-error);
+            color: var(--color-error);
+            padding: 12px 16px;
+            border-radius: var(--border-radius);
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .error-banner.visible {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .error-banner button {
+            background: none;
+            border: none;
+            color: var(--color-error);
+            cursor: pointer;
+            font-size: 1.25rem;
+            line-height: 1;
+        }
+
+        /* Inline rename input */
+        .rename-input {
+            background-color: var(--color-bg-tertiary);
+            border: 1px solid var(--color-primary);
+            color: var(--color-text);
+            padding: 6px 10px;
+            font-family: inherit;
+            font-size: 0.875rem;
+            border-radius: var(--border-radius);
+            width: 200px;
+        }
+
+        .rename-input:focus {
+            outline: none;
+        }
+
+        /* Inline confirm */
+        .inline-confirm {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+        }
+
+        .inline-confirm-yes {
+            color: var(--color-error);
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .inline-confirm-no {
+            color: var(--color-text-secondary);
+            cursor: pointer;
+        }
+
+        /* Drag drop overlay */
+        .drag-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(146, 242, 255, 0.1);
+            border: 2px dashed var(--color-primary);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .drag-overlay.visible {
+            display: flex;
+        }
+
+        .drag-overlay-text {
+            font-size: 1.5rem;
+            color: var(--color-primary);
+            background-color: var(--color-bg-secondary);
+            padding: 24px 48px;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--color-primary);
+        }
+
+        /* Hidden file input */
+        .hidden-input {
+            display: none;
+        }
+
+        /* New folder input row */
+        .new-folder-row td {
+            padding: 12px 16px;
+            background-color: var(--color-bg-tertiary);
+        }
+
+        .new-folder-input {
+            background-color: var(--color-bg-secondary);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: 0.875rem;
+            border-radius: var(--border-radius);
+            width: 300px;
+        }
+
+        .new-folder-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--color-text-tertiary);
+            margin-left: auto;
+        }
+
+        .status-indicator.connected {
+            background-color: var(--color-success);
+        }
+
+        .status-indicator.disconnected {
+            background-color: var(--color-error);
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">ButterBror <span>Core</span></div>
+        <ul class="nav-links">
+            <li><a href="/">Dashboard</a></li>
+            <li><a href="/logs">Logs</a></li>
+            <li><a href="/commands">Commands</a></li>
+            <li><a href="/redis">Redis</a></li>
+            <li>
+                <a href="/files" class="active">
+                    Files
+                    <span class="status-indicator connected" id="statusIndicator"></span>
+                </a>
+            </li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1 class="page-title">File Manager</h1>
+        </header>
+
+        <div class="breadcrumbs" id="breadcrumbs"></div>
+
+        <div class="toolbar">
+            <button class="btn" id="newFolderBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    <line x1="12" y1="11" x2="12" y2="17"></line>
+                    <line x1="9" y1="14" x2="15" y2="14"></line>
+                </svg>
+                New Folder
+            </button>
+            <button class="btn btn-primary" id="uploadBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                Upload
+            </button>
+            <input type="file" id="fileInput" class="hidden-input" multiple>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <div class="error-banner" id="errorBanner">
+            <span id="errorMessage"></span>
+            <button onclick="hideError()">×</button>
+        </div>
+
+        <div class="file-table-container" id="fileTableContainer">
+            <div class="loading-state" id="loadingState">
+                <div class="spinner"></div>
+            </div>
+            <table class="file-table" id="fileTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Name</th>
+                        <th style="width: 15%;">Size</th>
+                        <th style="width: 25%;">Modified</th>
+                        <th style="width: 20%;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="fileTableBody"></tbody>
+            </table>
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <p>This folder is empty</p>
+            </div>
+        </div>
+    </main>
+
+    <div class="drag-overlay" id="dragOverlay">
+        <div class="drag-overlay-text">Drop files to upload</div>
+    </div>
+
+    <script>
+        const state = {
+            currentPath: '',
+            entries: [],
+            loading: false,
+            error: null,
+            uploading: false,
+            uploadProgress: 0,
+            renamingPath: null,
+            deletingPath: null,
+            creatingFolder: false
+        };
+
+        // Get token from URL
+        function getToken() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('token') || localStorage.getItem('dashboardToken') || '';
+        }
+
+        function api_url(path) {
+            const token = getToken();
+            const separator = path.includes('?') ? '&' : '?';
+            return token ? `${path}${separator}token=${token}` : path;
+        }
+
+        // Format file size
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Format date
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleString();
+        }
+
+        // Render breadcrumbs
+        function renderBreadcrumbs() {
+            const container = document.getElementById('breadcrumbs');
+            const parts = state.currentPath.split('/').filter(p => p);
+            
+            let html = `<span class="breadcrumb-item" onclick="navigateTo('')">AppData</span>`;
+            
+            let accumulatedPath = '';
+            parts.forEach((part, index) => {
+                accumulatedPath += (accumulatedPath ? '/' : '') + part;
+                const isLast = index === parts.length - 1;
+                if (isLast) {
+                    html += `<span class="breadcrumb-separator">/</span>`;
+                    html += `<span class="breadcrumb-item active">${part}</span>`;
+                } else {
+                    const pathToHere = parts.slice(0, index + 1).join('/');
+                    html += `<span class="breadcrumb-separator">/</span>`;
+                    html += `<span class="breadcrumb-item" onclick="navigateTo('${pathToHere}')">${part}</span>`;
+                }
+            });
+            
+            container.innerHTML = html;
+        }
+
+        // Navigate to path
+        function navigateTo(path) {
+            state.currentPath = path;
+            loadDirectory(path);
+        }
+
+        // Load directory
+        async function loadDirectory(path) {
+            state.loading = true;
+            state.error = null;
+            render();
+
+            try {
+                const url = api_url(`/api/files/list?path=${encodeURIComponent(path)}`);
+                const res = await fetch(url);
+                
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || `HTTP ${res.status}`);
+                }
+
+                state.entries = await res.json();
+                state.loading = false;
+            } catch (e) {
+                state.loading = false;
+                state.error = e.message;
+            }
+            
+            render();
+        }
+
+        // Upload files
+        async function uploadFiles(dir, files) {
+            if (files.length === 0) return;
+
+            state.uploading = true;
+            state.uploadProgress = 0;
+            render();
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const url = api_url(`/api/files/upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(file.name)}`);
+
+                try {
+                    await new Promise((resolve, reject) => {
+                        const xhr = new XMLHttpRequest();
+                        
+                        xhr.upload.onprogress = (e) => {
+                            if (e.lengthComputable) {
+                                const totalProgress = ((i + e.loaded / e.total) / files.length) * 100;
+                                state.uploadProgress = totalProgress;
+                                render();
+                            }
+                        };
+
+                        xhr.onload = () => {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                resolve();
+                            } else {
+                                reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+                            }
+                        };
+
+                        xhr.onerror = () => reject(new Error('Network error'));
+                        
+                        xhr.open('POST', url, true);
+                        xhr.send(file);
+                    });
+                } catch (e) {
+                    state.error = `Failed to upload ${file.name}: ${e.message}`;
+                }
+            }
+
+            state.uploading = false;
+            state.uploadProgress = 0;
+            loadDirectory(state.currentPath);
+        }
+
+        // Delete entry
+        async function deleteEntry(path) {
+            try {
+                const url = api_url('/api/files/delete');
+                const res = await fetch(url, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ "Path": path })
+                });
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || `HTTP ${res.status}`);
+                }
+
+                state.deletingPath = null;
+                loadDirectory(state.currentPath);
+            } catch (e) {
+                state.error = e.message;
+                state.deletingPath = null;
+                render();
+            }
+        }
+
+        // Create directory
+        async function createDirectory(path) {
+            try {
+                const url = api_url('/api/files/mkdir');
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ "Path": path })
+                });
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || `HTTP ${res.status}`);
+                }
+
+                state.creatingFolder = false;
+                loadDirectory(state.currentPath);
+            } catch (e) {
+                state.error = e.message;
+                state.creatingFolder = false;
+                render();
+            }
+        }
+
+        // Rename entry
+        async function renameEntry(path, newName) {
+            try {
+                const url = api_url('/api/files/rename');
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ "Path": path, "NewName": newName })
+                });
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || `HTTP ${res.status}`);
+                }
+
+                state.renamingPath = null;
+                loadDirectory(state.currentPath);
+            } catch (e) {
+                state.error = e.message;
+                state.renamingPath = null;
+                render();
+            }
+        }
+
+        // Download file
+        function downloadFile(path) {
+            const token = getToken();
+            const url = api_url(`/api/files/download?path=${encodeURIComponent(path)}`);
+            window.open(url, '_blank');
+        }
+
+        // Hide error
+        function hideError() {
+            state.error = null;
+            render();
+        }
+
+        // Render UI
+        function render() {
+            renderBreadcrumbs();
+
+            // Error banner
+            const errorBanner = document.getElementById('errorBanner');
+            const errorMessage = document.getElementById('errorMessage');
+            if (state.error) {
+                errorBanner.classList.add('visible');
+                errorMessage.textContent = state.error;
+            } else {
+                errorBanner.classList.remove('visible');
+            }
+
+            // Progress bar
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            if (state.uploading) {
+                progressContainer.classList.add('visible');
+                progressBar.style.width = state.uploadProgress + '%';
+            } else {
+                progressContainer.classList.remove('visible');
+            }
+
+            // File table
+            const loadingState = document.getElementById('loadingState');
+            const fileTable = document.getElementById('fileTable');
+            const emptyState = document.getElementById('emptyState');
+            const tbody = document.getElementById('fileTableBody');
+
+            tbody.innerHTML = "";
+
+            if (state.loading) {
+                loadingState.style.display = 'flex';
+                fileTable.style.display = 'none';
+                emptyState.style.display = 'none';
+                return;
+            }
+
+            loadingState.style.display = 'none';
+
+            if (state.entries.length === 0) {
+                fileTable.style.display = 'none';
+                emptyState.style.display = 'flex';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            fileTable.style.display = 'table';
+
+            // New folder input row
+            if (state.creatingFolder) {
+                const row = document.createElement('tr');
+                row.className = 'new-folder-row';
+                row.innerHTML = `
+                    <td colspan="4">
+                        <input type="text" class="new-folder-input" id="newFolderInput" placeholder="Folder name" autofocus>
+                        <button class="btn btn-primary btn-sm" onclick="confirmNewFolder()">Create</button>
+                        <button class="btn btn-sm" onclick="cancelNewFolder()">Cancel</button>
+                    </td>
+                `;
+                tbody.insertBefore(row, tbody.firstChild);
+                
+                setTimeout(() => {
+                    const input = document.getElementById('newFolderInput');
+                    if (input) input.focus();
+                }, 0);
+            }
+
+            tbody.innerHTML += state.entries.map(entry => {
+                const isRenaming = state.renamingPath === entry.relativePath;
+                const isDeleting = state.deletingPath === entry.relativePath;
+
+                return `
+                    <tr>
+                        <td>
+                            <span class="file-icon">${entry.isDirectory ? '📁' : '📄'}</span>
+                            ${isRenaming 
+                                ? `<input type="text" class="rename-input" value="${entry.name}" id="renameInput_${entry.relativePath}" 
+                                      onkeydown="handleRenameKeydown(event, '${entry.relativePath}', '${entry.name}')">`
+                                : `<span class="file-name" onclick="${entry.isDirectory ? `navigateTo('${entry.relativePath}')` : ''}">${entry.name}</span>`
+                            }
+                        </td>
+                        <td>
+                            <span class="file-size">${entry.isDirectory ? '—' : formatSize(entry.sizeBytes)}</span>
+                        </td>
+                        <td>
+                            <span class="file-modified">${formatDate(entry.modifiedAt)}</span>
+                        </td>
+                        <td>
+                            <div class="file-actions">
+                                ${!entry.isDirectory ? `
+                                    <button class="btn btn-sm" onclick="downloadFile('${entry.relativePath}')">Download</button>
+                                ` : ''}
+                                ${isRenaming ? `
+                                    <button class="btn btn-primary btn-sm" onclick="confirmRename('${entry.relativePath}', '${entry.name}')">OK</button>
+                                    <button class="btn btn-sm" onclick="cancelRename('${entry.relativePath}')">Cancel</button>
+                                ` : isDeleting ? `
+                                    <span class="inline-confirm">
+                                        <span class="inline-confirm-yes" onclick="deleteEntry('${entry.relativePath}')">Yes</span>
+                                        <span class="inline-confirm-no" onclick="cancelDelete('${entry.relativePath}')">No</span>
+                                    </span>
+                                ` : `
+                                    <button class="btn btn-sm" onclick="startRename('${entry.relativePath}')">Rename</button>
+                                    <button class="btn btn-danger btn-sm" onclick="startDelete('${entry.relativePath}')">Delete</button>
+                                `}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Focus rename input if renaming
+            if (state.renamingPath) {
+                setTimeout(() => {
+                    const input = document.getElementById(`renameInput_${state.renamingPath}`);
+                    if (input) {
+                        input.focus();
+                        input.select();
+                    }
+                }, 0);
+            }
+        }
+
+        // New folder handlers
+        function startNewFolder() {
+            state.creatingFolder = true;
+            render();
+        }
+
+        function confirmNewFolder() {
+            const input = document.getElementById('newFolderInput');
+            const name = input?.value.trim();
+            if (!name) return;
+            
+            const newPath = state.currentPath ? `${state.currentPath}/${name}` : name;
+            createDirectory(newPath);
+        }
+
+        function cancelNewFolder() {
+            state.creatingFolder = false;
+            render();
+        }
+
+        // Rename handlers
+        function startRename(path) {
+            state.renamingPath = path;
+            render();
+        }
+
+        function confirmRename(path, oldName) {
+            const input = document.getElementById(`renameInput_${path}`);
+            const newName = input?.value.trim();
+            if (!newName || newName === oldName) {
+                cancelRename(path);
+                return;
+            }
+            renameEntry(path, newName);
+        }
+
+        function cancelRename(path) {
+            state.renamingPath = null;
+            render();
+        }
+
+        function handleRenameKeydown(event, path, oldName) {
+            if (event.key === 'Enter') {
+                confirmRename(path, oldName);
+            } else if (event.key === 'Escape') {
+                cancelRename(path);
+            }
+        }
+
+        // Delete handlers
+        function startDelete(path) {
+            state.deletingPath = path;
+            render();
+        }
+
+        function cancelDelete(path) {
+            state.deletingPath = null;
+            render();
+        }
+
+        // Event listeners
+        document.getElementById('newFolderBtn').addEventListener('click', startNewFolder);
+
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files?.length) {
+                uploadFiles(state.currentPath, e.target.files);
+                e.target.value = '';
+            }
+        });
+
+        // Drag and drop
+        const dragOverlay = document.getElementById('dragOverlay');
+        const fileTableContainer = document.getElementById('fileTableContainer');
+
+        window.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            dragOverlay.classList.add('visible');
+        });
+
+        window.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget === null) {
+                dragOverlay.classList.remove('visible');
+            }
+        });
+
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragOverlay.classList.remove('visible');
+            
+            if (e.dataTransfer?.files?.length) {
+                uploadFiles(state.currentPath, e.dataTransfer.files);
+            }
+        });
+
+        // Initialize
+        loadDirectory('');
+    </script>
+</body>
+</html>
