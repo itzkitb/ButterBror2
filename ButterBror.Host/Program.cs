@@ -1,7 +1,6 @@
 using ButterBror.Application.Commands;
 using ButterBror.Application.Commands.Meta;
 using ButterBror.ChatModule;
-using ButterBror.ChatModules.Loader;
 using ButterBror.Core.Interfaces;
 using ButterBror.Dashboard;
 using ButterBror.Dashboard.Services;
@@ -13,6 +12,7 @@ using ButterBror.Infrastructure.Resilience;
 using ButterBror.Infrastructure.Services;
 using ButterBror.Infrastructure.Storage;
 using ButterBror.Localization.Services;
+using ButterBror.Modules.Loader;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

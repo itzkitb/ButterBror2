@@ -5,7 +5,7 @@ using ButterBror.ChatModule;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.ChatModules.Loader;
+namespace ButterBror.Modules.Loader;
 
 /// <summary>
 /// Implementing a CML
@@ -18,7 +18,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
     private readonly List<AssemblyLoadContext> _loadContexts = new();
     private readonly List<IChatModule> _loadedModules = new();
     private readonly List<string> _tempDirectories = new();
-    private readonly Dictionary<string, string> _moduleToZipPath = new();
+    private readonly Dictionary<string, string> _moduleToArchivePath = new();
     private readonly SemaphoreSlim _reloadLock = new(1, 1);
     private bool _disposed;
 
@@ -43,7 +43,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
         if (!Directory.Exists(chatModulesPath))
         {
-            _logger.LogInformation("Chat modules directory does not exist: {Path}. Creating...", chatModulesPath);
+            _logger.LogInformation("Chat modules directory does not exist. Creating...");
             Directory.CreateDirectory(chatModulesPath);
             return Array.Empty<IChatModule>();
         }
@@ -51,24 +51,24 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         _logger.LogInformation("Loading chat modules from: {Path}", chatModulesPath);
 
         // Looking for archives with modules
-        var moduleFiles = Directory.GetFiles(chatModulesPath, "*.zip", SearchOption.TopDirectoryOnly);
+        var moduleFiles = Directory.GetFiles(chatModulesPath, "*.pag", SearchOption.TopDirectoryOnly);
 
         if (moduleFiles.Length == 0)
         {
-            _logger.LogInformation("No chat modules (ZIP archives) found in {Path}", chatModulesPath);
+            _logger.LogInformation("No chat modules found: {Path}", chatModulesPath);
             return Array.Empty<IChatModule>();
         }
 
-        foreach (var zipFile in moduleFiles)
+        foreach (var file in moduleFiles)
         {
             try
             {
-                var modules = await LoadModuleFromZipAsync(zipFile, cancellationToken);
+                var modules = await LoadModuleFromArchiveAsync(file, cancellationToken);
                 _loadedModules.AddRange(modules);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load module from: {ZipFile}", zipFile);
+                _logger.LogError(ex, "Failed to load module from: {file}", file);
             }
         }
 
@@ -76,7 +76,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         return _loadedModules.AsReadOnly();
     }
 
-    private async Task<IReadOnlyList<IChatModule>> LoadModuleFromZipAsync(string zipPath, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<IChatModule>> LoadModuleFromArchiveAsync(string path, CancellationToken cancellationToken)
     {
         var modules = new List<IChatModule>();
 
@@ -87,9 +87,9 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
         try
         {
-            _logger.LogDebug("Extracting module archive: {ZipPath} to {TempDir}", zipPath, tempDir);
+            _logger.LogDebug("Extracting module archive: {Path} to {TempDir}", path, tempDir);
 
-            ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+            ZipFile.ExtractToDirectory(path, tempDir, overwriteFiles: true);
 
             // Reading the manifesto
             var manifestPath = Path.Combine(tempDir, ManifestFileName);
@@ -99,7 +99,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
             {
                 var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
                 manifest = JsonSerializer.Deserialize<ModuleManifest>(manifestJson);
-                _logger.LogDebug("Loaded manifest: {ManifestName} v{ManifestVersion}", manifest?.Name, manifest?.Version);
+                _logger.LogDebug("Loaded manifest: {ManifestName} v.{ManifestVersion}", manifest?.Name, manifest?.Version);
             }
 
             // Defining the Master DLL
@@ -117,14 +117,14 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
             if (mainDll == null)
             {
-                _logger.LogWarning("No module DLL found in archive: {ZipPath}", zipPath);
+                _logger.LogWarning("No module DLL found in archive: {Path}", path);
                 return modules;
             }
 
             _logger.LogDebug("Found main module DLL: {Dll}", mainDll);
 
             // Creating a New Boot Context for Isolation
-            var moduleName = manifest?.Name ?? Path.GetFileNameWithoutExtension(zipPath);
+            var moduleName = manifest?.Name ?? Path.GetFileNameWithoutExtension(path);
             var loadContext = new ModuleAssemblyLoadContext(moduleName, tempDir, isCollectible: true, _logger);
             _loadContexts.Add(loadContext);
 
@@ -149,8 +149,8 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     {
                         chatModule.InitializeWithServices(_serviceProvider);
                         modules.Add(chatModule);
-                        // Store mapping from module platform name to zip path
-                        _moduleToZipPath[chatModule.PlatformName] = zipPath;
+                        // Store mapping from module platform name to archive path
+                        _moduleToArchivePath[chatModule.PlatformName] = path;
                         _logger.LogInformation(
                             "Loaded chat module: {ModuleName} (Platform: {PlatformName})",
                             moduleType.Name,
@@ -170,7 +170,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load module from archive: {ZipPath}", zipPath);
+            _logger.LogError(ex, "Failed to load module from archive: {Path}", path);
             throw;
         }
 
@@ -235,18 +235,18 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
             // Find module in loaded modules
             var existingModule = _loadedModules.FirstOrDefault(m => m.PlatformName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
-            string? zipPath = null;
+            string? archivePath = null;
 
             if (existingModule != null)
             {
-                // Get zip path from mapping
-                if (!_moduleToZipPath.TryGetValue(moduleName, out zipPath) || !File.Exists(zipPath))
+                // Get archive path from mapping
+                if (!_moduleToArchivePath.TryGetValue(moduleName, out archivePath) || !File.Exists(archivePath))
                 {
-                    _logger.LogError("Module ZIP file not found for '{ModuleName}'", moduleName);
-                    throw new FileNotFoundException($"Module ZIP file not found for '{moduleName}'");
+                    _logger.LogError("Module not found for '{ModuleName}'", moduleName);
+                    throw new FileNotFoundException($"Module file not found for '{moduleName}'");
                 }
 
-                _logger.LogDebug("Found existing module {ModuleName} with ZIP: {ZipPath}", moduleName, zipPath);
+                _logger.LogDebug("Found existing module {ModuleName}: {ArchivePath}", moduleName, archivePath);
 
                 // Shutdown module
                 await existingModule.ShutdownAsync();
@@ -281,23 +281,23 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 }
 
                 // Remove from mapping
-                _moduleToZipPath.Remove(moduleName);
+                _moduleToArchivePath.Remove(moduleName);
             }
             else
             {
-                // Module not found in memory - try to find ZIP by name
+                // Module not found in memory - try to find archive by name
                 var chatModulesPath = Path.Combine(_pathProvider.GetAppDataPath(), "Chat");
                 
                 // First try exact file name match
-                var exactZipPath = Path.Combine(chatModulesPath, $"{moduleName}.zip");
-                if (File.Exists(exactZipPath))
+                var exactArchivePath = Path.Combine(chatModulesPath, $"{moduleName}.pag");
+                if (File.Exists(exactArchivePath))
                 {
-                    zipPath = exactZipPath;
+                    archivePath = exactArchivePath;
                 }
                 else
                 {
                     // Try to find by manifest name
-                    var moduleFiles = Directory.GetFiles(chatModulesPath, "*.zip", SearchOption.TopDirectoryOnly);
+                    var moduleFiles = Directory.GetFiles(chatModulesPath, "*.pag", SearchOption.TopDirectoryOnly);
                     foreach (var file in moduleFiles)
                     {
                         var tempExtractDir = Path.Combine(Path.GetTempPath(), $"ButterBror_Module_{Guid.NewGuid()}");
@@ -311,7 +311,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                                 var manifest = JsonSerializer.Deserialize<ModuleManifest>(manifestJson);
                                 if (manifest?.Name?.Equals(moduleName, StringComparison.OrdinalIgnoreCase) == true)
                                 {
-                                    zipPath = file;
+                                    archivePath = file;
                                     break;
                                 }
                             }
@@ -330,9 +330,9 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     }
                 }
 
-                if (zipPath == null)
+                if (archivePath == null)
                 {
-                    _logger.LogError("Module '{ModuleName}' not found in loaded modules or ZIP files", moduleName);
+                    _logger.LogError("Module '{ModuleName}' not found in loaded modules or files", moduleName);
                     throw new FileNotFoundException($"Module '{moduleName}' not found");
                 }
             }
@@ -344,9 +344,9 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 GC.WaitForPendingFinalizers();
             }, cancellationToken);
 
-            // Load module from ZIP
-            _logger.LogDebug("Loading module from ZIP: {ZipPath}", zipPath);
-            var newModules = await LoadModuleFromZipAsync(zipPath, cancellationToken);
+            // Load module from archive
+            _logger.LogDebug("Loading module from archive: {Path}", archivePath);
+            var newModules = await LoadModuleFromArchiveAsync(archivePath, cancellationToken);
 
             _logger.LogInformation("Reloaded chat module '{ModuleName}': {Count} module(s) loaded", moduleName, newModules.Count);
 

@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/Modules/">
-    <Project Path="ButterBror.ChatModules.Loader/ButterBror.ChatModules.Loader.csproj" />
+    <Project Path="ButterBror.ChatModules.Loader/ButterBror.Modules.Loader.csproj" />
   </Folder>
   <Folder Name="/Modules/Chats/">
     <Project Path="ButterBror.ChatModules.Discord/ButterBror.ChatModules.Discord.csproj" />

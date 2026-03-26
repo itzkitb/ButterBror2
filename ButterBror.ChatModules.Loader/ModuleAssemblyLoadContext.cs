@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.ChatModules.Loader;
+namespace ButterBror.Modules.Loader;
 
 /// <summary>
 /// Loading context for dependencies-enabled modules
