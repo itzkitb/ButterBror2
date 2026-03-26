@@ -13,19 +13,18 @@ public class DashboardBridge : IDashboardBridge
 {
     private readonly DashboardOptions _options;
     private readonly ConcurrentQueue<LogEntry> _logBuffer = new();
-
-    // Rolling minute counters
-    private readonly Queue<(DateTime At, int Count)> _commandTicks = new();
-    private readonly Queue<(DateTime At, int Count)> _messageTicks = new();
-    private readonly object _tickLock = new();
+    private readonly IBotStatsService _stats;
 
     // Callbacks registered by SseHub
     public event Action<LogEntry>? OnLogEntry;
     public event Action<MetricsSnapshot>? OnMetrics;
 
-    public DashboardBridge(IOptions<DashboardOptions> options)
+    public DashboardBridge(
+        IOptions<DashboardOptions> options,
+        IBotStatsService stats)
     {
         _options = options.Value;
+        _stats = stats;
     }
 
     public void PushLog(LogEntry entry)
@@ -38,41 +37,24 @@ public class DashboardBridge : IDashboardBridge
 
     public void IncrementCommandCount()
     {
-        lock (_tickLock)
-            _commandTicks.Enqueue((DateTime.UtcNow, 1));
+        _stats.IncrementCommandCount();
     }
 
     public void IncrementMessageCount()
     {
-        lock (_tickLock)
-            _messageTicks.Enqueue((DateTime.UtcNow, 1));
+        _stats.IncrementMessageCount();
     }
 
     public double GetCommandsPerMinute()
     {
-        lock (_tickLock)
-        {
-            PruneOldTicks(_commandTicks);
-            return _commandTicks.Sum(t => t.Count);
-        }
+        return _stats.CommandsPerMinute;
     }
 
     public double GetMessagesPerMinute()
     {
-        lock (_tickLock)
-        {
-            PruneOldTicks(_messageTicks);
-            return _messageTicks.Sum(t => t.Count);
-        }
+        return _stats.MessagesPerMinute;
     }
 
     public IReadOnlyList<LogEntry> GetRecentLogs(int count = 200) =>
         _logBuffer.TakeLast(count).ToList();
-
-    private static void PruneOldTicks(Queue<(DateTime At, int Count)> queue)
-    {
-        var cutoff = DateTime.UtcNow.AddMinutes(-1);
-        while (queue.TryPeek(out var head) && head.At < cutoff)
-            queue.Dequeue();
-    }
 }

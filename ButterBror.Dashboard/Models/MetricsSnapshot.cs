@@ -29,8 +29,14 @@ public class MetricsSnapshot
     public long RedisMemoryUsedBytes { get; set; }
     public long RedisConnectedClients { get; set; }
     public long RedisOpsPerSecond { get; set; }
+    public long RedisOpsPerMinute { get; set; }
+    public long RedisOpsPerHour { get; set; }
 
     // Bot
     public double CommandsPerMinute { get; set; }
     public double MessagesPerMinute { get; set; }
+    public TimeSpan BotSessionUptime { get; set; }
+    public long TotalCommandsExecuted { get; set; }
+    public long TotalRepliesSent { get; set; }
+    public TimeSpan TotalUptime { get; set; }
 }

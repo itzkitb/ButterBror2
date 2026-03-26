@@ -13,7 +13,7 @@ namespace ButterBror.Dashboard.Services;
 public class MetricsCollector
 {
     private readonly IConnectionMultiplexer _redis;
-    private readonly IDashboardBridge _bridge;
+    private readonly IBotStatsService _stats;
     private readonly ILogger<MetricsCollector> _logger;
 
     // Tracking previous values for delta calculation
@@ -28,11 +28,11 @@ public class MetricsCollector
 
     public MetricsCollector(
         IConnectionMultiplexer redis,
-        IDashboardBridge bridge,
+        IBotStatsService stats,
         ILogger<MetricsCollector> logger)
     {
         _redis = redis;
-        _bridge = bridge;
+        _stats = stats;
         _logger = logger;
     }
 
@@ -120,8 +120,20 @@ public class MetricsCollector
         }
 
         // Bot
-        snapshot.CommandsPerMinute = _bridge.GetCommandsPerMinute();
-        snapshot.MessagesPerMinute = _bridge.GetMessagesPerMinute();
+        snapshot.CommandsPerMinute = _stats.CommandsPerMinute;
+        snapshot.MessagesPerMinute = _stats.MessagesPerMinute;
+        snapshot.RedisOpsPerMinute = _stats.RedisOpsPerMinute;
+        snapshot.RedisOpsPerHour = _stats.RedisOpsPerHour;
+        snapshot.BotSessionUptime = _stats.CurrentSessionUptime;
+        snapshot.TotalCommandsExecuted = _stats.TotalCommandsExecuted;
+        snapshot.TotalRepliesSent = _stats.TotalRepliesSent;
+        snapshot.TotalUptime = _stats.TotalUptime;
+
+        // Update Redis stats in the service
+        _stats.UpdateRedisStats(
+            snapshot.RedisMemoryUsedBytes,
+            snapshot.RedisConnectedClients,
+            snapshot.RedisOpsPerSecond);
 
         return snapshot;
     }

@@ -59,6 +59,9 @@ builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
 builder.Services.AddSingleton<AppDataStorageProvider>();
 builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
 
+// Bot Stats Service
+builder.Services.AddSingleton<IBotStatsService, BotStatsService>();
+
 // Use the new unified command dispatcher
 builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
 builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
@@ -114,6 +117,17 @@ var host = builder.Build();
 var bridge = host.Services.GetRequiredService<IDashboardBridge>();
 var loggerFactory = host.Services.GetRequiredService<ILoggerFactory>();
 loggerFactory.AddProvider(new DashboardLoggerProvider(bridge));
+
+// Initialize BotStatsService
+var statsService = host.Services.GetRequiredService<IBotStatsService>();
+await statsService.InitializeAsync(CancellationToken.None);
+
+// Register graceful shutdown for BotStatsService
+var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStopping.Register(async () =>
+{
+    await statsService.FlushAsync(CancellationToken.None);
+});
 
 // Initialize dashboard admin user in Redis
 using (var scope = host.Services.CreateScope())
