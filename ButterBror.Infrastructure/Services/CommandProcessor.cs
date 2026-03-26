@@ -13,8 +13,8 @@ public class CommandProcessor : ICommandProcessor
     private readonly IUserService _userService;
     private readonly ICommandRegistry _commandRegistry;
     private readonly ILogger<CommandProcessor> _logger;
-    private readonly IBanphraseService _banphraseService; // New dependency
-    private readonly IPermissionManager _permissionManager; // New dependency
+    private readonly IBanphraseService _banphraseService;
+    private readonly IPermissionManager _permissionManager;
 
     public CommandProcessor(
         ICommandDispatcher commandDispatcher,
@@ -168,7 +168,7 @@ public class CommandProcessor : ICommandProcessor
                 ((TimeSpan)betweenUses).TotalSeconds,
                 commandMetadata.CooldownSeconds
             );
-            return CommandResult.Failure($"Command '{commandName}' is on cooldown. Please, wait {((TimeSpan)betweenUses).TotalSeconds} seconds", sendResult:false);
+            return CommandResult.Failure($"Command '{commandName}' is on cooldown. Please, wait {(commandMetadata.CooldownSeconds - ((TimeSpan)betweenUses).TotalSeconds)} seconds", sendResult:false);
         }
         _ = _userService.SetCommandLastUseAsync(commandMetadata.Id, user.UnifiedUserId, DateTime.UtcNow);
 
