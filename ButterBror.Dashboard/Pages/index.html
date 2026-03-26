@@ -432,17 +432,34 @@
                         borderColor: color,
                         backgroundColor: color + '20',
                         fill: true,
-                        tension: 0.3,
+                        tension: 0.4,
                         pointRadius: 0,
-                        borderWidth: 2
+                        borderWidth: 2,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: color,
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 2,
+                        pointHitRadius: 25
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index',
+                    },
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(20, 20, 20, 0.8)',
+                            titleFont: { size: 10 },
+                            bodyFont: { size: 13 },
+                            displayColors: false,
+                            padding: 10,
+                            cornerRadius: 4
+                        }
                     },
                     scales: {
                         x: {
@@ -455,6 +472,7 @@
                             grid: { color: '#333333' },
                             ticks: { 
                                 maxTicksLimit: 5,
+                                color: '#666',
                                 ...(isPercent ? { callback: value => value + '%' } : {})
                             }
                         }
@@ -480,7 +498,7 @@
                 chart.data.labels.shift();
                 chart.data.datasets[0].data.shift();
             }
-            chart.update('none');
+            chart.update();
         }
 
         function updateStatCards(data) {
