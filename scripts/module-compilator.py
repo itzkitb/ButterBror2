@@ -9,7 +9,7 @@ Usage:
 Build & install Twitch chat module
     python3 module-compilator.py --type chat --csproj ButterBror.ChatModules.Twitch/ButterBror.ChatModules.Twitch.csproj
 
-Don't install, save ZIP to ./dist/
+Don't install, save archive to ./dist/
     python3 build_module.py --type chat --csproj ../ButterBror.ChatModules.Discord/ButterBror.ChatModules.Discord.csproj --no-install --output ./dist
 
 Debug build, don't install
@@ -17,10 +17,10 @@ Debug build, don't install
 
 = General options ==========================================================
 Dry-run (show what would happen without doing anything)
-    python build_module.py --type chat --csproj ./MyModule/MyModule.csproj --dry-run
+    python3 build_module.py --type chat --csproj ./MyModule/MyModule.csproj --dry-run
 
-Exclude extra assemblies from ZIP
-    python build_module.py --type chat --csproj ./MyModule/MyModule.csproj --exclude SomeShared.Library
+Exclude extra assemblies from archive
+    python3 build_module.py --type chat --csproj ./MyModule/MyModule.csproj --exclude SomeShared.Library
 """
 
 import argparse
@@ -80,21 +80,18 @@ class ModuleTypeConfig:
     """Static metadata that differs between chat and command module types"""
     module_type: ModuleType
     appdata_subdir: str
-    manifest_filename: str
     label: str
 
 
 CHAT_TYPE = ModuleTypeConfig(
     module_type=ModuleType.CHAT,
     appdata_subdir="Chat",
-    manifest_filename="module.manifest.json",
     label="Chat",
 )
 
 COMMAND_TYPE = ModuleTypeConfig(
     module_type=ModuleType.COMMAND,
     appdata_subdir="Command",
-    manifest_filename="command.manifest.json",
     label="Command",
 )
 
@@ -115,7 +112,7 @@ class ModuleConfig:
     type_cfg: ModuleTypeConfig
     version: str = "1.0.0"
     description: str = ""
-    author: str = "ButterBror Team"
+    author: str = "Author"
     extra_excludes: list = field(default_factory=list)
 
     @property
@@ -168,7 +165,7 @@ def dim(msg: str)  -> None: log(f"    {msg}", Colors.DIM)
 # ---------------------------------------------------------------------------
 
 def get_install_path(type_cfg: ModuleTypeConfig) -> Path:
-    """Returns the platform-specific directory where module ZIPs are installed"""
+    """Returns the platform-specific directory where module PAGs are installed"""
     system = platform.system()
     if system == "Windows":
         appdata = os.environ.get("APPDATA")
@@ -306,38 +303,36 @@ def create_manifest(module_config: ModuleConfig) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# ZIP packaging
+# PAG packaging (ZIP-based archive with .pag extension)
 # ---------------------------------------------------------------------------
 
 def package_module(
     files: dict,
     manifest: dict,
-    manifest_filename: str,
-    zip_path: Path,
+    pag_path: Path,
     dry_run: bool,
 ) -> None:
-    """Packs collected files + manifest into a flat ZIP archive"""
+    """Packs collected files + manifest into a flat PAG archive (ZIP format)"""
     if dry_run:
-        warn(f"[dry-run] would create ZIP: {zip_path}")
+        warn(f"[dry-run] would create PAG: {pag_path}")
         for name in sorted(files):
             dim(f"  + {name}")
-        dim(f"  + {manifest_filename}")
         return
 
-    zip_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = zip_path.with_suffix(".tmp")
+    pag_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = pag_path.with_suffix(".tmp")
 
     try:
+        # .pag is still a ZIP archive, just with a different extension
         with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
             for archive_name, source_path in sorted(files.items()):
                 zf.write(source_path, arcname=archive_name)
                 dim(f"  + {archive_name}  ({source_path.stat().st_size:,} bytes)")
 
             manifest_json = json.dumps(manifest, indent=2, ensure_ascii=False)
-            zf.writestr(manifest_filename, manifest_json)
-            dim(f"  + {manifest_filename}")
+            zf.writestr("module.manifest.json", manifest_json)
 
-        tmp_path.replace(zip_path)
+        tmp_path.replace(pag_path)
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise
@@ -368,7 +363,7 @@ def build_and_package_module(
     info(f"Project   : {csproj}")
     info(f"Config    : {build_config}")
     info(f"Framework : {framework}")
-    info(f"Manifest  : {type_cfg.manifest_filename}")
+    info(f"Manifest  : module.manifest.json")
 
     # 1. Build
     step("1/4  dotnet build")
@@ -396,41 +391,41 @@ def build_and_package_module(
     )
 
     # 4. Package
-    step("4/4  Packaging ZIP")
+    step("4/4  Packaging PAG")
     default_output = module_config.csproj_path.parent.parent / "dist"
-    zip_dest = (
-        Path(output_dir) / f"{module_config.project_name}.zip"
+    pag_dest = (
+        Path(output_dir) / f"{module_config.project_name}.pag"
         if output_dir
-        else default_output / f"{module_config.project_name}.zip"
+        else default_output / f"{module_config.project_name}.pag"
     )
 
-    package_module(files, manifest, type_cfg.manifest_filename, zip_dest, dry_run)
+    package_module(files, manifest, pag_dest, dry_run)
 
     if not dry_run:
-        size_kb = zip_dest.stat().st_size / 1024
-        ok(f"ZIP created: {zip_dest}  ({size_kb:.1f} KB)")
+        size_kb = pag_dest.stat().st_size / 1024
+        ok(f"PAG created: {pag_dest}  ({size_kb:.1f} KB)")
     else:
-        ok(f"[dry-run] ZIP target: {zip_dest}")
+        ok(f"[dry-run] PAG target: {pag_dest}")
 
     # 5. Install
     if install:
         step(f"5/5  Installing to AppData/{type_cfg.appdata_subdir}")
         try:
             install_path = get_install_path(type_cfg)
-            install_zip  = install_path / f"{module_config.project_name}.zip"
-            info(f"Install target: {install_zip}")
+            install_pag  = install_path / f"{module_config.project_name}.pag"
+            info(f"Install target: {install_pag}")
 
             if dry_run:
-                warn(f"[dry-run] would copy {zip_dest.name} -> {install_zip}")
+                warn(f"[dry-run] would copy {pag_dest.name} -> {install_pag}")
             else:
                 install_path.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(zip_dest, install_zip)
-                ok(f"Installed: {install_zip}")
+                shutil.copy2(pag_dest, install_pag)
+                ok(f"Installed: {install_pag}")
         except OSError as exc:
             warn(f"Could not resolve install path: {exc}")
-            warn("Module was built but not installed — copy the ZIP manually")
+            warn("Module was built but not installed — copy the PAG manually")
 
-    return zip_dest
+    return pag_dest
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +434,7 @@ def build_and_package_module(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build & package a ButterBror2 chat or command module as a ZIP archive",
+        description="Build & package a ButterBror2 chat or command module as a PAG archive",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -488,12 +483,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output", "-o",
         metavar="DIR",
-        help="Directory for the output ZIP (default: <project_root>/dist/)",
+        help="Directory for the output PAG (default: <project_root>/dist/)",
     )
     parser.add_argument(
         "--no-install",
         action="store_true",
-        help="Skip installation to AppData; only produce the ZIP file.",
+        help="Skip installation to AppData; only produce the PAG file.",
     )
 
     # Misc
@@ -507,7 +502,7 @@ def parse_args() -> argparse.Namespace:
         metavar="PREFIX",
         action="append",
         default=[],
-        help="Additional assembly prefix to exclude from the ZIP (repeatable).",
+        help="Additional assembly prefix to exclude from the PAG (repeatable).",
     )
 
     return parser.parse_args()
@@ -537,7 +532,7 @@ def main() -> int:
     log(f"  Project root : {project_root}")
     log(f"  Build config : {args.config}")
     log(f"  Framework    : {args.framework}")
-    log(f"  Manifest     : {type_cfg.manifest_filename}")
+    log(f"  Manifest     : module.manifest.json")
     log(f"  Install dir  : AppData/{type_cfg.appdata_subdir}/")
     if args.dry_run:
         log(f"  {Colors.YELLOW}DRY-RUN -- no files will be created{Colors.RESET}")
@@ -556,7 +551,7 @@ def main() -> int:
 
     # Process
     try:
-        zip_path = build_and_package_module(
+        pag_path = build_and_package_module(
             module_config=module_config,
             build_config=args.config,
             framework=args.framework,
@@ -564,7 +559,7 @@ def main() -> int:
             install=install,
             dry_run=args.dry_run,
         )
-        ok(f"{module_config.project_name}  ->  {zip_path}")
+        ok(f"{module_config.project_name}  ->  {pag_path}")
         return 0
     except Exception as exc:
         err(f"\nFailed to build {module_config.project_name}: {exc}")
