@@ -1,5 +1,3 @@
-#nullable enable
-
 namespace ButterBror.Core.Interfaces;
 
 /// <summary>

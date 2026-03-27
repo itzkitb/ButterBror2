@@ -53,6 +53,10 @@ builder.Services.AddSingleton<RedisExplorerService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddHostedService<DashboardServer>();
 
+// Drive statistics service
+builder.Services.AddSingleton<IDeviceStatsService, DeviceStatsService>();
+builder.Services.AddHostedService<DeviceStatsHostedService>();
+
 // Services
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
