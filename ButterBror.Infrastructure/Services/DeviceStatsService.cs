@@ -3,12 +3,17 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Management;
 using System.Net.NetworkInformation;
+using System.Text.RegularExpressions;
+using System.Globalization;
+using LibreHardwareMonitor.Hardware;
 
 namespace ButterBror.Infrastructure.Services;
 
 public class DeviceStatsService : IDeviceStatsService, IDisposable
 {
     private ILogger<DeviceStatsService> _logger;
+
+    private readonly CpuTemperatureReader _cpuTempReader;
 
     // Public
     public double CpuLoad => _cpuLoad;
@@ -38,6 +43,7 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
         ILogger<DeviceStatsService> logger)
     {
         _logger = logger;
+        _cpuTempReader = new CpuTemperatureReader(logger);
     }
 
     public void Start()
@@ -66,7 +72,7 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
 
                 // System CPU
                 _cpuLoad = GetSystemCpuPercent();
-                _cpuTemp = GetCpuTemperature();
+                _cpuTemp = _cpuTempReader.Read() ?? 0;
 
                 // System RAM
                 var gcInfo = GC.GetGCMemoryInfo();
@@ -193,56 +199,6 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
         return 0;
     }
 
-    public static double GetCpuTemperature()
-    {
-        // Linux
-        if (OperatingSystem.IsLinux())
-        {
-            try
-            {
-                string thermalPath = "/sys/class/thermal/thermal_zone0/temp";
-
-                if (File.Exists(thermalPath))
-                {
-                    string tempRaw = File.ReadAllText(thermalPath).Trim();
-                    if (double.TryParse(tempRaw, out double tempMilli))
-                    {
-                        // Millidegrees Celsius -> Degrees Celsius
-                        return tempMilli / 1000.0;
-                    }
-                }
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-        
-        // Windows
-        if (OperatingSystem.IsWindows())
-        {
-            try
-            {
-                // Some hardware/drivers do not report to MSAcpi_ThermalZoneTemperature
-                using var searcher = new ManagementObjectSearcher(@"root\WMI", "SELECT * FROM MSAcpi_ThermalZoneTemperature");
-                var query = searcher.Get().Cast<ManagementObject>();
-
-                foreach (var obj in query)
-                {
-                    // Tenths of degrees Kelvin -> Degrees Celsius
-                    double temp = Convert.ToDouble(obj["CurrentTemperature"]);
-                    return (temp - 2732) / 10.0; 
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Windows WMI Error: {ex.Message}");
-            }
-        }
-
-        return 0;
-    }
-
     private static (long sent, long recv) GetNetworkBytes()
     {
         long sent = 0, recv = 0;
@@ -312,5 +268,368 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
     {
         Stop();
         _cts.Dispose();
+    }
+}
+
+// ┌──────────────────────────────────────────────┐
+// │ Through me the way is to the city dolent;    │
+// │ Through me the way is to the eternal dolour; │
+// │ Through me the way is to the race condemned. │
+// │                                              │
+// │ Abandon all hope, ye who enter here.         │
+// └──────────────────────────────────────────────┘
+
+/// <summary>
+/// Contract for CPU temperature readers
+/// </summary>
+public interface ICpuTemperatureReader
+{
+    /// <summary>
+    /// Reads the current CPU temperature in Celsius
+    /// </summary>
+    double? Read();
+}
+
+/// <summary>
+/// Cross-platform CPU temperature reader
+/// </summary>
+public sealed class CpuTemperatureReader
+{
+
+    private static readonly TimeSpan MinReadInterval = TimeSpan.FromSeconds(1);
+
+    private readonly ILogger<DeviceStatsService>? _logger;
+    private readonly ICpuTemperatureReader _platformReader;
+    
+    private double? _cachedValue;
+    private DateTime _lastReadTime;
+
+    public CpuTemperatureReader(ILogger<DeviceStatsService>? logger = null)
+    {
+        _logger = logger;
+        _platformReader = CreatePlatformReader(logger);
+    }
+
+    public double? Read()
+    {
+        // Return cached value if read too recently
+        if (_cachedValue.HasValue && 
+            DateTime.UtcNow - _lastReadTime < MinReadInterval)
+        {
+            return _cachedValue;
+        }
+
+        try
+        {
+            var temperature = _platformReader.Read();
+            _cachedValue = temperature;
+            _lastReadTime = DateTime.UtcNow;
+            
+            _logger?.LogDebug("CPU temperature read: {Temperature}°C", temperature);
+            return temperature;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to read CPU temperature");
+            _cachedValue = null;
+            return null;
+        }
+    }
+
+    private static ICpuTemperatureReader CreatePlatformReader(
+        ILogger<DeviceStatsService>? logger)
+    {
+        return OperatingSystem.IsWindows()
+            ? new WindowsCpuTemperatureReader(logger)
+            : new LinuxCpuTemperatureReader(logger);
+    }
+}
+
+// Linux
+internal sealed class LinuxCpuTemperatureReader : ICpuTemperatureReader
+{
+    private static readonly string[] KnownCpuDrivers =
+        ["k10temp", "coretemp", "cpu_thermal", "acpitz", "k8temp", "zenpower"];
+
+    private readonly ILogger? _logger;
+
+    public LinuxCpuTemperatureReader(ILogger? logger)
+    {
+        _logger = logger;
+    }
+
+    public double? Read()
+    {
+        // S0. hwmon
+        var temp = TryReadHwmon();
+        if (temp.HasValue) return temp;
+
+        // S1. ACPI
+        temp = TryReadThermalZones();
+        if (temp.HasValue) return temp;
+
+        // S2. Fallback to sensors CLI
+        return TryReadViaSensorsCli();
+    }
+
+    private double? TryReadHwmon()
+    {
+        const string hwmonPath = "/sys/class/hwmon";
+        
+        if (!Directory.Exists(hwmonPath))
+        {
+            return null;
+        }
+
+        double? cpuTemp = null;
+
+        foreach (var hwmonDir in Directory.GetDirectories(hwmonPath))
+        {
+            var nameFile = Path.Combine(hwmonDir, "name");
+            if (!File.Exists(nameFile)) continue;
+
+            var driverName = File.ReadAllText(nameFile).Trim();
+            if (!KnownCpuDrivers.Contains(driverName)) continue;
+
+            // Read temp1_input
+            for (int i = 1; i <= 8; i++)
+            {
+                var inputFile = Path.Combine(hwmonDir, $"temp{i}_input");
+                if (!File.Exists(inputFile)) continue;
+
+                var labelFile = Path.Combine(hwmonDir, $"temp{i}_label");
+                string label = "";
+                
+                if (File.Exists(labelFile))
+                {
+                    label = File.ReadAllText(labelFile).Trim().ToLowerInvariant();
+                }
+
+                if (!string.IsNullOrEmpty(label))
+                {
+                    var isCpuLabel = label.Contains("core") || 
+                                     label.Contains("package") ||
+                                     label.Contains("tdie") ||
+                                     label.Contains("tctl");
+                    
+                    if (!isCpuLabel && i > 1) continue;
+                }
+
+                if (File.ReadAllText(inputFile).Trim() is { } raw &&
+                    int.TryParse(raw, out int milli) && milli > 0)
+                {
+                    var celsius = milli / 1000.0;
+                    
+                    // Validate (If you cool your processor with
+                    // liquid nitrogen, then use a different software
+                    // to check the processor temperature)
+                    if (celsius is >= 20 and <= 100)
+                    {
+                        cpuTemp = celsius;
+                        _logger?.LogDebug(
+                            "Read CPU temp from hwmon {Driver}/{Label}: {Temp}°C",
+                            driverName, label, celsius);
+                        return cpuTemp;
+                    }
+                }
+            }
+        }
+
+        return cpuTemp;
+    }
+
+    private double? TryReadThermalZones()
+    {
+        const string thermalPath = "/sys/class/thermal";
+        
+        if (!Directory.Exists(thermalPath))
+        {
+            return null;
+        }
+
+        foreach (var zone in Directory.GetDirectories(thermalPath, "thermal_zone*"))
+        {
+            var typeFile = Path.Combine(zone, "type");
+            var tempFile = Path.Combine(zone, "temp");
+            
+            if (!File.Exists(tempFile)) continue;
+
+            if (!int.TryParse(File.ReadAllText(tempFile).Trim(), out int milli))
+                continue;
+
+            var celsius = milli / 1000.0;
+
+            // Validate temperature (If you cool your processor with
+            // liquid nitrogen, then use a different software
+            // to check the processor temperature)
+            if (celsius is < 20 or > 100) continue;
+            
+            // 16.8°C is a common fake value
+            if (Math.Abs(celsius - 16.8) < 0.5) continue;
+
+            string type = "";
+            if (File.Exists(typeFile))
+            {
+                type = File.ReadAllText(typeFile).Trim().ToLowerInvariant();
+            }
+
+            // Prefer CPU-related zones
+            if (type.Contains("cpu") || type.Contains("package") || type.Contains("x86"))
+            {
+                _logger?.LogDebug(
+                    "Read CPU temp from thermal zone {Type}: {Temp}°C",
+                    type, celsius);
+                return celsius;
+            }
+        }
+
+        return null;
+    }
+
+    private double? TryReadViaSensorsCli()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("sensors", "-A")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null) return null;
+
+            var output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit();
+
+            // Parse lines
+            var regex = new Regex(
+                @"^(?<label>Core\s*\d+|Tdie|Tctl|Package|CPU):\s+\+?(?<temp>\d+\.\d+)\s*°?C",
+                RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+            foreach (Match m in regex.Matches(output))
+            {
+                if (double.TryParse(m.Groups["temp"].Value,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double t) && t is >= 20 and <= 100)
+                {
+                    _logger?.LogDebug("Read CPU temp from sensors CLI: {Temp}°C", t);
+                    return t;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "sensors CLI not available");
+        }
+
+        return null;
+    }
+}
+
+// Windows
+internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader
+{
+    private readonly ILogger? _logger;
+
+    public WindowsCpuTemperatureReader(ILogger? logger)
+    {
+        _logger = logger;
+    }
+
+    public double? Read()
+    {
+        // S0. WMI first
+        var temp = TryReadWmi();
+        if (temp.HasValue) return temp;
+
+        // S1. LibreHardwareMonitor
+        return TryReadLibreHardwareMonitor();
+    }
+
+    private double? TryReadWmi()
+    {
+        try
+        {
+            // Warn: This often returns motherboard temp XD
+            using var searcher = new ManagementObjectSearcher(
+                "root\\wmi",
+                "SELECT * FROM MSAcpi_ThermalZoneTemperature"
+                );
+
+            foreach (var obj in searcher.Get())
+            {
+                if (obj["CurrentTemperature"] is uint rawKelvin)
+                {
+                    var celsius = (rawKelvin / 10.0) - 273.15;
+                    
+                    if (celsius is >= 20 and <= 100)
+                    {
+                        _logger?.LogDebug(
+                            "Read temp from WMI thermal zone: {Temp}°C", celsius);
+                        return celsius;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "WMI thermal zone read failed");
+        }
+
+        return null;
+    }
+
+    private double? TryReadLibreHardwareMonitor()
+    {
+        try
+        {
+            var computer = new Computer
+            {
+                IsCpuEnabled = true,
+                IsMotherboardEnabled = false,
+                IsGpuEnabled = false,
+                IsMemoryEnabled = false,
+                IsNetworkEnabled = false,
+                IsStorageEnabled = false
+            };
+
+            computer.Open();
+
+            foreach (var hardware in computer.Hardware)
+            {
+                if (hardware.HardwareType == HardwareType.Cpu)
+                {
+                    hardware.Update();
+                    
+                    foreach (var sensor in hardware.Sensors)
+                    {
+                        if (sensor.SensorType == 
+                            SensorType.Temperature &&
+                            sensor.Name.Contains("Core") || 
+                            sensor.Name.Contains("Package") ||
+                            sensor.Name.Contains("Tdie"))
+                        {
+                            if (sensor.Value is float value && value is >= 20 and <= 100)
+                            {
+                                _logger?.LogDebug(
+                                    "Read CPU temp from LibreHardwareMonitor: {Temp}°C", value);
+                                return value;
+                            }
+                        }
+                    }
+                }
+            }
+
+            computer.Close();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "LibreHardwareMonitor read failed");
+        }
+
+        return null;
     }
 }
