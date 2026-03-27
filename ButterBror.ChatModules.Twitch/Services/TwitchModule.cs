@@ -17,8 +17,6 @@ namespace ButterBror.ChatModules.Twitch.Services;
 public class TwitchModule : IChatModule
 {
     public string PlatformName => "sillyapps:twitch";
-
-    // Factories
     private Func<ICommand> _joinCommandFactory = null!;
     private Func<ICommand> _partCommandFactory = null!;
 
@@ -51,7 +49,7 @@ public class TwitchModule : IChatModule
             serviceProvider.GetRequiredService<ILogger<TwitchLibClient>>()
         );
 
-        // Updating factories with client capture
+        // Updating factories
         _joinCommandFactory = () => new JoinChannelCommand(_twitchClient);
         _partCommandFactory = () => new PartChannelCommand(_twitchClient);
     }
@@ -59,12 +57,12 @@ public class TwitchModule : IChatModule
     public async Task InitializeAsync(IBotCore core)
     {
         _botCore = core;
-        // Main events
+        // S0: Main events
         _twitchClient.OnMessageReceived += OnMessageReceived;
         _twitchClient.OnConnected += OnConnected;
         _twitchClient.OnDisconnected += OnDisconnected;
 
-        // Subscribing to additional features
+        // S1: Subscribing to additional features
         if (_twitchClient is TwitchLibClient libClient)
         {
             libClient.OnNewSubscriber += OnNewSubscriber;
@@ -129,7 +127,7 @@ public class TwitchModule : IChatModule
 
     private async Task SafeHandleMessageAsync(Events.OnMessageReceivedArgs e)
     {
-        // Notify dashboard about received message
+        // Notify dashboard
         _dashboardBridge?.IncrementMessageCount();
 
         if (TryParseCommand(e.ChatMessage.Message, out var commandName, out var arguments))

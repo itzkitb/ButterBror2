@@ -16,7 +16,13 @@ public interface IChatModule
 {
     string PlatformName { get; }
     IReadOnlyList<ModuleCommandExport> ExportedCommands { get; }
-    
+
+    /// <summary>
+    /// Built-in default translations for this module
+    /// </summary>
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations => 
+        new Dictionary<string, IReadOnlyDictionary<string, string>>();
+
     /// <summary>
     /// Module initialization
     /// </summary>

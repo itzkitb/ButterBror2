@@ -6,18 +6,20 @@ using Microsoft.Extensions.Logging;
 namespace ButterBror.Localization.Services;
 
 /// <summary>
-/// Main localization service with caching and fallback support
+/// Main localization service
 /// </summary>
 public class LocalizationService : ILocalizationService
 {
     private readonly LocaleRegistryService _registry;
     private readonly TranslationFileLoader _fileLoader;
     private readonly ILogger<LocalizationService> _logger;
-    
-    // Cache: localeCode -> (key -> formatted string template)
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _translationCache 
+
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _translationCache
         = new(StringComparer.OrdinalIgnoreCase);
-    
+
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _moduleDefaultsCache
+        = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     private string? _defaultLocale;
 
@@ -44,18 +46,18 @@ public class LocalizationService : ILocalizationService
         params object[] args)
     {
         if (string.IsNullOrWhiteSpace(key))
-            return key; // Fallback: return key itself
+            return key;
 
         var resolvedLocale = _registry.ResolveLocale(locale) ?? _defaultLocale ?? "EN_US";
         
-        // Try cache first
+        // S0: Try cache
         if (TryGetFromCache(resolvedLocale, key, args, out var cached))
             return cached;
 
-        // Load from file if not cached
+        // S1: Load from file
         var result = await LoadAndFormatStringAsync(resolvedLocale, key, args);
         
-        // Fallback chain
+        // S2: Fallback chain
         if (result == key && resolvedLocale != _defaultLocale)
         {
             _logger.LogDebug("Fallback: key '{Key}' not found in {Locale}, trying {Default}", 
@@ -63,7 +65,7 @@ public class LocalizationService : ILocalizationService
             result = await LoadAndFormatStringAsync(_defaultLocale!, key, args);
         }
 
-        // Final fallback: return formatted key
+        // S3: Final fallback
         if (result == key && args?.Length > 0)
         {
             try
@@ -72,11 +74,11 @@ public class LocalizationService : ILocalizationService
             }
             catch
             {
-                // Ignore formatting errors in fallback
+                //
             }
         }
 
-        // Cache the result (even if it's a fallback)
+        // S4: Cache the result
         CacheString(resolvedLocale, key, result);
 
         return result;
@@ -102,27 +104,74 @@ public class LocalizationService : ILocalizationService
     public bool IsLocaleRegistered(string locale) => _registry.IsLocaleRegistered(locale);
     public string ResolveLocale(string locale) => _registry.ResolveLocale(locale) ?? _defaultLocale ?? "EN_US";
 
+    public void RegisterModuleTranslations(
+        string moduleId,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> translations)
+    {
+        if (translations == null || translations.Count == 0)
+        {
+            _logger.LogDebug("No translations to register for module: {ModuleId}", moduleId);
+            return;
+        }
+
+        foreach (var (locale, localeTranslations) in translations)
+        {
+            var localeCache = _moduleDefaultsCache.GetOrAdd(locale, _ => new ConcurrentDictionary<string, string>());
+            foreach (var (key, value) in localeTranslations)
+            {
+                localeCache.TryAdd(key, value);
+            }
+        }
+
+        _logger.LogDebug(
+            "Registered {Count} translation(s) for module {ModuleId}",
+            translations.Values.Sum(v => v.Count),
+            moduleId);
+    }
+
     private bool TryGetFromCache(string locale, string key, object[] args, out string result)
     {
         result = key;
-        if (!_translationCache.TryGetValue(locale, out var localeCache))
-            return false;
-        
-        if (!localeCache.TryGetValue(key, out var template))
-            return false;
 
-        try
+        // S0: File-based cache
+        if (_translationCache.TryGetValue(locale, out var fileLocaleCache))
         {
-            result = args?.Length > 0 
-                ? string.Format(CultureInfo.InvariantCulture, template, args) 
-                : template;
-            return true;
+            if (fileLocaleCache.TryGetValue(key, out var fileTemplate))
+            {
+                try
+                {
+                    result = args?.Length > 0
+                        ? string.Format(CultureInfo.InvariantCulture, fileTemplate, args)
+                        : fileTemplate;
+                    return true;
+                }
+                catch (FormatException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to format key '{Key}' in locale {Locale}", key, locale);
+                }
+            }
         }
-        catch (FormatException ex)
+
+        // S1: Module defaults cache
+        if (_moduleDefaultsCache.TryGetValue(locale, out var moduleLocaleCache))
         {
-            _logger.LogWarning(ex, "Failed to format key '{Key}' in locale {Locale}", key, locale);
-            return false;
+            if (moduleLocaleCache.TryGetValue(key, out var moduleTemplate))
+            {
+                try
+                {
+                    result = args?.Length > 0
+                        ? string.Format(CultureInfo.InvariantCulture, moduleTemplate, args)
+                        : moduleTemplate;
+                    return true;
+                }
+                catch (FormatException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to format key '{Key}' from module defaults in locale {Locale}", key, locale);
+                }
+            }
         }
+
+        return false;
     }
 
     private void CacheString(string locale, string key, string value)
@@ -138,21 +187,21 @@ public class LocalizationService : ILocalizationService
             return key;
 
         var translation = await _fileLoader.LoadTranslationAsync(metadata.FilePath);
-        if (translation?.Strings.TryGetValue(key, out var template) != true)
+        if (translation?.Strings.TryGetValue(key, out var template) != true || template == null)
             return key;
 
         CacheString(locale, key, template);
 
         try
         {
-            return args?.Length > 0 
-                ? string.Format(CultureInfo.InvariantCulture, template, args) 
+            return args?.Length > 0
+                ? string.Format(CultureInfo.InvariantCulture, template, args)
                 : template;
         }
         catch (FormatException ex)
         {
             _logger.LogError(ex, "Failed to format translation key '{Key}' in locale {Locale}", key, locale);
-            return template; // Return unformatted template as fallback
+            return template;
         }
     }
 

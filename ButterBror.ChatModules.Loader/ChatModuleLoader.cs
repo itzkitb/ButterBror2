@@ -15,6 +15,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
     private readonly IAppDataPathProvider _pathProvider;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ChatModuleLoader> _logger;
+    private readonly ILocalizationService _localizationService;
     private readonly List<AssemblyLoadContext> _loadContexts = new();
     private readonly List<IChatModule> _loadedModules = new();
     private readonly List<string> _tempDirectories = new();
@@ -27,11 +28,13 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
     public ChatModuleLoader(
         IAppDataPathProvider pathProvider,
         IServiceProvider serviceProvider,
-        ILogger<ChatModuleLoader> logger)
+        ILogger<ChatModuleLoader> logger,
+        ILocalizationService localizationService)
     {
         _pathProvider = pathProvider;
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _localizationService = localizationService;
     }
 
     public async Task<IReadOnlyList<IChatModule>> LoadModulesAsync(CancellationToken cancellationToken = default)
@@ -151,6 +154,10 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                         modules.Add(chatModule);
                         // Store mapping from module platform name to archive path
                         _moduleToArchivePath[chatModule.PlatformName] = path;
+                        // Register built-in locales
+                        _localizationService.RegisterModuleTranslations(
+                            chatModule.PlatformName,
+                            chatModule.DefaultTranslations);
                         _logger.LogInformation(
                             "Loaded chat module: {ModuleName} (Platform: {PlatformName})",
                             moduleType.Name,
@@ -181,7 +188,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
     {
         _logger.LogInformation("Unloading chat modules...");
 
-        // Unloading all contexts
+        // S0: Unloading contexts
         foreach (var context in _loadContexts)
         {
             try
@@ -198,7 +205,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         _loadContexts.Clear();
         _loadedModules.Clear();
 
-        // Clearing temporary directories
+        // S1: Clearing temp
         foreach (var tempDir in _tempDirectories)
         {
             try
@@ -217,6 +224,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
         _tempDirectories.Clear();
 
+        // S2: Force GC to free memory. IDK if this is actually needed, but let's be sure
         await Task.Run(() =>
         {
             GC.Collect();
@@ -233,13 +241,13 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         {
             _logger.LogInformation("Reloading chat module: {ModuleName}", moduleName);
 
-            // Find module in loaded modules
+            // S0: Find module in loaded
             var existingModule = _loadedModules.FirstOrDefault(m => m.PlatformName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
             string? archivePath = null;
 
             if (existingModule != null)
             {
-                // Get archive path from mapping
+                // S1: Get archive path from mapping
                 if (!_moduleToArchivePath.TryGetValue(moduleName, out archivePath) || !File.Exists(archivePath))
                 {
                     _logger.LogError("Module not found for '{ModuleName}'", moduleName);
@@ -248,11 +256,11 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
                 _logger.LogDebug("Found existing module {ModuleName}: {ArchivePath}", moduleName, archivePath);
 
-                // Shutdown module
+                // S2: Shutdown module
                 await existingModule.ShutdownAsync();
                 _logger.LogDebug("Shutdown module: {ModuleName}", moduleName);
 
-                // Find and unload the corresponding load context
+                // S3: Find and unload the corresponding load context
                 var contextToUnload = _loadContexts.FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
                 if (contextToUnload != null)
                 {
@@ -261,10 +269,10 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     _logger.LogDebug("Unloaded context: {ContextName}", contextToUnload.Name);
                 }
 
-                // Remove from loaded modules
+                // S4: Remove from loaded modules
                 _loadedModules.RemoveAll(m => m.PlatformName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
 
-                // Remove temp directory
+                // S5: Remove temp directory
                 var tempDirToDelete = _tempDirectories.FirstOrDefault(t => t.Contains(moduleName));
                 if (!string.IsNullOrEmpty(tempDirToDelete) && Directory.Exists(tempDirToDelete))
                 {
@@ -280,15 +288,15 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     }
                 }
 
-                // Remove from mapping
+                // S6: Remove from mapping
                 _moduleToArchivePath.Remove(moduleName);
             }
             else
             {
-                // Module not found in memory - try to find archive by name
+                // S1: Try to find archive by name
                 var chatModulesPath = Path.Combine(_pathProvider.GetAppDataPath(), "Chat");
                 
-                // First try exact file name match
+                // S2: First try exact file name match
                 var exactArchivePath = Path.Combine(chatModulesPath, $"{moduleName}.pag");
                 if (File.Exists(exactArchivePath))
                 {
@@ -296,7 +304,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 }
                 else
                 {
-                    // Try to find by manifest name
+                    // S3: Try to find by manifest name
                     var moduleFiles = Directory.GetFiles(chatModulesPath, "*.pag", SearchOption.TopDirectoryOnly);
                     foreach (var file in moduleFiles)
                     {
@@ -318,7 +326,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                         }
                         catch
                         {
-                            // Ignore extraction errors during search
+                            //
                         }
                         finally
                         {
@@ -337,14 +345,14 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 }
             }
 
-            // Force GC to free memory
+            // S7: Force GC
             await Task.Run(() =>
             {
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
             }, cancellationToken);
 
-            // Load module from archive
+            // S8: Load module from archive
             _logger.LogDebug("Loading module from archive: {Path}", archivePath);
             var newModules = await LoadModuleFromArchiveAsync(archivePath, cancellationToken);
 
@@ -397,7 +405,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 }
                 catch
                 {
-                    // shit
+                    //
                 }
             }
             _tempDirectories.Clear();

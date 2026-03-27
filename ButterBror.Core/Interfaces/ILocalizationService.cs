@@ -13,8 +13,8 @@ public interface ILocalizationService
     /// <param name="args">Optional arguments for string.Format</param>
     /// <returns>Localized and formatted string, or fallback if not found</returns>
     Task<string> GetStringAsync(
-        string key, 
-        string locale, 
+        string key,
+        string locale,
         params object[] args);
 
     /// <summary>
@@ -31,4 +31,15 @@ public interface ILocalizationService
     /// Resolves locale alias to canonical code
     /// </summary>
     string ResolveLocale(string locale);
+
+    /// <summary>
+    /// Registers built-in default translations for a module
+    /// </summary>
+    /// <param name="moduleId">Unique identifier of the module</param>
+    /// <param name="translations">
+    /// Dictionary: locale code -> (translation key -> translation value)
+    /// </param>
+    void RegisterModuleTranslations(
+        string moduleId,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> translations);
 }
