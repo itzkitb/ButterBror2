@@ -10,6 +10,7 @@ public class CommandExecutionContext : ICommandExecutionContext
     public IPlatformChannel Channel { get; }
     public List<string> Arguments { get; }
     public IPlatformUser User { get; }
+    public string Locale { get; }
 
     [JsonIgnore]
     public CancellationToken CancellationToken { get; }
@@ -18,11 +19,13 @@ public class CommandExecutionContext : ICommandExecutionContext
         IPlatformChannel channel,
         List<string> arguments,
         IPlatformUser user,
+        string locale,
         CancellationToken cancellationToken = default)
     {
         Channel = channel;
         Arguments = arguments;
         User = user;
+        Locale = locale;
         CancellationToken = cancellationToken;
     }
 }

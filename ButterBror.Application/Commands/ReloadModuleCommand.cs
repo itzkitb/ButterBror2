@@ -16,15 +16,10 @@ public class ReloadModuleCommand : CommandBase
         var localizationService = GetService<ILocalizationService>(serviceProvider);
         var logger = GetLogger<ReloadModuleCommand>(serviceProvider);
         var moduleManager = GetService<IPlatformModuleManager>(serviceProvider);
-        var userRepository = GetService<IUserRepository>(serviceProvider);
-
-        var platform = context.Channel.Platform.ToLowerInvariant();
-        var executor = await userRepository.GetByPlatformIdAsync(platform, context.User.Id);
-        var executorLocale = executor != null ? executor.PreferredLocale : "EN_US";
 
         if (context.Arguments.Count < 2)
         {
-            string locale = await localizationService.GetStringAsync("command.modulereload.usage", executorLocale);
+            string locale = await localizationService.GetStringAsync("command.modulereload.usage", context.Locale);
             return CommandResult.Failure(locale);
         }
 
@@ -42,7 +37,7 @@ public class ReloadModuleCommand : CommandBase
 
             if (result == null)
             {
-                string locale = await localizationService.GetStringAsync("command.modulereload.unknown.type", executorLocale, type);
+                string locale = await localizationService.GetStringAsync("command.modulereload.unknown.type", context.Locale, type);
                 return CommandResult.Failure(locale);
             }
 

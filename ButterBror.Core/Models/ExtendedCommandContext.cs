@@ -5,7 +5,7 @@ namespace ButterBror.Core.Models;
 
 public class ExtendedCommandContext : ICommandContext
 {
-    public ExtendedCommandContext(ICommandContext originalContext, Guid unifiedUserId)
+    public ExtendedCommandContext(ICommandContext originalContext, Guid unifiedUserId, string locale)
     {
         CommandName = originalContext.CommandName;
         Arguments = originalContext.Arguments;
@@ -15,6 +15,7 @@ public class ExtendedCommandContext : ICommandContext
         Platform = originalContext.Platform;
         CorrelationId = originalContext.CorrelationId;
         UnifiedUserId = unifiedUserId;
+        Locale = locale;
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
         CancellationToken = cts.Token;
     }
@@ -27,5 +28,6 @@ public class ExtendedCommandContext : ICommandContext
     public string Platform { get; }
     public Guid CorrelationId { get; }
     public Guid UnifiedUserId { get; }
+    public string Locale { get; }
     public CancellationToken CancellationToken { get; set; }
 }

@@ -1,6 +1,7 @@
 using ButterBror.CommandModule.Commands;
 using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -41,7 +42,8 @@ public class CommandDispatcher : ICommandDispatcher
             var command = factory();
 
             // S2: Create an execution context and service provider
-            var commandContext = new CommandExecutionContext(context.Channel, context.Arguments.ToList(), context.User);
+            var locale = (context as ExtendedCommandContext)?.Locale ?? "EN_US";
+            var commandContext = new CommandExecutionContext(context.Channel, context.Arguments.ToList(), context.User, locale);
             var serviceProvider = new CommandServiceProvider(_serviceProvider);
 
             var result = await command.ExecuteAsync(commandContext, serviceProvider);

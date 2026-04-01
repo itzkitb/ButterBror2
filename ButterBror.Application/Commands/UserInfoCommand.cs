@@ -18,8 +18,6 @@ public class UserInfoCommand : CommandBase
             var userRepository = GetService<IUserRepository>(serviceProvider);
 
             var platform = context.Channel.Platform.ToLowerInvariant();
-            var executor = await userRepository.GetByPlatformIdAsync(platform, context.User.Id);
-            var executorLocale = executor != null ? executor.PreferredLocale : "EN_US";
 
             // Determine target username - either from arguments or use caller's username
             var targetUsername = context.Arguments.Count > 0
@@ -30,11 +28,11 @@ public class UserInfoCommand : CommandBase
 
             if (userEntity == null)
             {
-                var notFound = await localizationService.GetStringAsync("command.userinfo.error.user_not_found", executorLocale);
+                var notFound = await localizationService.GetStringAsync("command.userinfo.error.user_not_found", context.Locale);
                 return CommandResult.Failure(notFound);
             }
 
-            var result = await localizationService.GetStringAsync("command.userinfo.result", executorLocale, userEntity.DisplayName, userEntity.UnifiedUserId);
+            var result = await localizationService.GetStringAsync("command.userinfo.result", context.Locale, userEntity.DisplayName, userEntity.UnifiedUserId);
             return CommandResult.Successfully(result);
         }
         catch (Exception ex)

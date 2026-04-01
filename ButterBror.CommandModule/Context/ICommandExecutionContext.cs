@@ -12,6 +12,7 @@ public interface ICommandExecutionContext
     IPlatformChannel Channel { get; }
     List<string> Arguments { get; }
     IPlatformUser User { get; }
+    string Locale { get; }
     
     [JsonIgnore]
     CancellationToken CancellationToken { get; }

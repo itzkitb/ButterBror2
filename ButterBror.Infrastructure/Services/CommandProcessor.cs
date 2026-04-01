@@ -55,7 +55,7 @@ public class CommandProcessor : ICommandProcessor
             }
 
             // S2: Proceed with user management and command execution
-            var extendedContext = new ExtendedCommandContext(context, user.UnifiedUserId);
+            var extendedContext = new ExtendedCommandContext(context, user.UnifiedUserId, user.PreferredLocale);
 
             // S3: Command Dispatch
             var result = await _commandDispatcher.DispatchAsync(extendedContext);
