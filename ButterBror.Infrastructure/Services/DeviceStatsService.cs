@@ -6,13 +6,13 @@ using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
 using System.Globalization;
 using LibreHardwareMonitor.Hardware;
+using Polly.Fallback;
 
 namespace ButterBror.Infrastructure.Services;
 
 public class DeviceStatsService : IDeviceStatsService, IDisposable
 {
     private ILogger<DeviceStatsService> _logger;
-
     private readonly CpuTemperatureReader _cpuTempReader;
 
     // Public
@@ -530,75 +530,130 @@ internal sealed class LinuxCpuTemperatureReader : ICpuTemperatureReader
 }
 
 // Windows
-internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader
+internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader, IDisposable
 {
     private readonly ILogger? _logger;
+    private readonly Computer? _lhmComputer;
+    private bool _lhmStarted = false;
+    private bool _canGetTemp = true;
 
     public WindowsCpuTemperatureReader(ILogger? logger)
     {
         _logger = logger;
-    }
 
-    public double? Read()
-    {
-        // S0. WMI first
-        var temp = TryReadWmi();
-        if (temp.HasValue) return temp;
-
-        // S1. LibreHardwareMonitor
-        return TryReadLibreHardwareMonitor();
-    }
-
-    private double? TryReadWmi()
-    {
         try
         {
-            // Warn: This often returns motherboard temp XD
-            using var searcher = new ManagementObjectSearcher(
-                "root\\wmi",
-                "SELECT * FROM MSAcpi_ThermalZoneTemperature"
-                );
-
-            foreach (var obj in searcher.Get())
-            {
-                if (obj["CurrentTemperature"] is uint rawKelvin)
-                {
-                    var celsius = (rawKelvin / 10.0) - 273.15;
-                    
-                    if (celsius is >= 20 and <= 100)
-                    {
-                        _logger?.LogDebug(
-                            "Read temp from WMI thermal zone: {Temp}°C", celsius);
-                        return celsius;
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogDebug(ex, "WMI thermal zone read failed");
-        }
-
-        return null;
-    }
-
-    private double? TryReadLibreHardwareMonitor()
-    {
-        try
-        {
-            var computer = new Computer
+            _lhmComputer = new Computer
             {
                 IsCpuEnabled = true,
-                IsMotherboardEnabled = false,
+                IsMotherboardEnabled = true,
                 IsGpuEnabled = false,
                 IsMemoryEnabled = false,
                 IsNetworkEnabled = false,
                 IsStorageEnabled = false
             };
+            _lhmComputer.Open();
+            _lhmStarted = true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "LHM initialization failed");
+        }
 
-            computer.Open();
+        try
+        {
+            var result = Read();
+            if (!result.HasValue || result == 0)
+            {
+                _canGetTemp = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Temperature read failed");
+        }
+    }
 
-            foreach (var hardware in computer.Hardware)
+    public double? Read()
+    {
+        if (!_canGetTemp) return 0;
+
+        // S0. WMI
+        var temp = TryReadWmiAcpi();
+        if (temp.HasValue) return temp;
+
+        // S1. Performance Counters
+        temp = TryReadPerformanceCounter();
+        if (temp.HasValue) return temp;
+
+        // S2. WMI Probe
+        temp = TryReadWmiProbe();
+        if (temp.HasValue) return temp;
+
+        // S3. LibreHardwareMonitor
+        return TryReadLibreHardwareMonitor();
+    }
+
+    private double? TryReadWmiAcpi()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(@"root\wmi", "SELECT * FROM MSAcpi_ThermalZoneTemperature");
+            foreach (var obj in searcher.Get())
+            {
+                var raw = Convert.ToDouble(obj["CurrentTemperature"]);
+                var celsius = (raw / 10.0) - 273.15;
+                if (celsius is > 10 and < 110) return celsius;
+            }
+        }
+        catch
+        {
+            //
+        }
+        return null;
+    }
+
+    private double? TryReadPerformanceCounter()
+    {
+        try
+        {
+            using var pc = new PerformanceCounter("Thermal Zone Information", "Temperature", @"\_TZ.THM0", true);
+            float kelvin = pc.NextValue();
+            if (kelvin <= 0) return null;
+            
+            return kelvin - 273.15;
+        }
+        catch 
+        { 
+            return null;
+        }
+    }
+
+    private double? TryReadWmiProbe()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_TemperatureProbe");
+            foreach (var obj in searcher.Get())
+            {
+                var val = obj["CurrentReading"];
+                if (val != null) return Convert.ToDouble(val);
+            }
+        }
+        catch 
+        { 
+            //
+        }
+        return null;
+    }
+
+    private double TryReadLibreHardwareMonitor()
+    {
+        if (!_lhmStarted) return 0;
+
+        try
+        {
+            foreach (var hardware in _lhmComputer.Hardware)
             {
                 if (hardware.HardwareType == HardwareType.Cpu)
                 {
@@ -614,22 +669,30 @@ internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader
                         {
                             if (sensor.Value is float value && value is >= 20 and <= 100)
                             {
-                                _logger?.LogDebug(
-                                    "Read CPU temp from LibreHardwareMonitor: {Temp}°C", value);
                                 return value;
                             }
                         }
                     }
                 }
             }
-
-            computer.Close();
         }
         catch (Exception ex)
         {
             _logger?.LogDebug(ex, "LibreHardwareMonitor read failed");
         }
 
-        return null;
+        return 0;
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            _lhmComputer?.Close();
+        }
+        catch
+        { 
+            //
+        }
     }
 }
