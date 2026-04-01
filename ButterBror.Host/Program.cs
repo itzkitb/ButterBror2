@@ -44,6 +44,9 @@ builder.Logging.AddFilter("Polly", LogLevel.Warning);
 builder.Logging.AddFilter("Polly.Core", LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 
+// Version checker
+builder.Services.AddSingleton<IBotCoreInfo, BotCoreInfo>();
+
 // Dashboard
 builder.Services.Configure<DashboardOptions>(builder.Configuration.GetSection("Dashboard"));
 builder.Services.AddSingleton<IDashboardBridge, DashboardBridge>();
@@ -116,6 +119,9 @@ builder.Services.AddSingleton<LocaleRegistryService>();
 builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
 
 var host = builder.Build();
+
+var coreInfoService = host.Services.GetRequiredService<IBotCoreInfo>();
+coreInfoService.Initialize();
 
 // Register Dashboard logger provider after build
 var bridge = host.Services.GetRequiredService<IDashboardBridge>();
