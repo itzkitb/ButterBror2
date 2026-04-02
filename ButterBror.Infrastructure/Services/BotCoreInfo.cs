@@ -50,7 +50,7 @@ public class BotCoreInfo : IBotCoreInfo
         }
         else
         {
-            _logger.LogWarning("The version file was not found. If you built the core manually, we recommend creating a \"version\" file in the root directory of the program and filling it with the following template: https://github.com/itzkitb/ButterBror2/blob/master/version");
+            _logger.LogWarning("The version file was not found. If you built the core manually, we recommend creating a \"version\" file in the root directory of the program and filling it with the following template: https://github.com/itzkitb/ButterBror2/blob/main/version");
         }
     }
 }
