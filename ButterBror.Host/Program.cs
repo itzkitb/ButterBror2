@@ -65,6 +65,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
 builder.Services.AddSingleton<AppDataStorageProvider>();
 builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
+builder.Services.AddScoped<IFormatterService, FormatterService>();
 
 // Bot Stats Service
 builder.Services.AddSingleton<IBotStatsService, BotStatsService>();
