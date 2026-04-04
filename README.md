@@ -7,6 +7,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/itzkitb/butterbror2)
 ![Bot status](https://img.shields.io/website?url=https%3A%2F%2Fbot.tupid.lol%2Fhealth&label=twitch.tv%2Fbutterbror)
 ![GitHub top language](https://img.shields.io/github/languages/top/itzkitb/butterbror2)
+![CodeQL](https://github.com/itzkitb/ButterBror2/actions/workflows/github-code-scanning/codeql/badge.svg)
 ![GitHub Repo stars](https://img.shields.io/github/stars/itzkitb/butterbror2)
 
 
