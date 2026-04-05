@@ -89,6 +89,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 builder.Services.RegisterResilienceStrategies();
 builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
 builder.Services.AddScoped<ICommandUsageRepository, RedisCommandUsageRepository>();
+builder.Services.AddSingleton<ICustomDataRepository, RedisCustomDataRepository>();
 
 // Permission Manager
 builder.Services.AddScoped<IPermissionManager, PermissionManager>();
