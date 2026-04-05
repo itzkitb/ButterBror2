@@ -6,6 +6,7 @@ using ButterBror.CommandModule.Commands;
 using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
+using ButterBror.Domain.Chat;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -129,6 +130,31 @@ public class TwitchModule : IChatModule
     {
         // Notify dashboard
         _dashboardBridge?.IncrementMessageCount();
+
+        var extra = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            e.ChatMessage.IsModerator,
+            e.ChatMessage.IsBroadcaster,
+            e.ChatMessage.IsSubscriber,
+            e.ChatMessage.IsVIP,
+            e.ChatMessage.Color,
+            e.ChatMessage.Channel,
+            e.ChatMessage.ChannelId,
+            e.ChatMessage.Badges
+        });
+
+        await _botCore.RaiseMessageReceivedAsync(
+            PlatformName,
+            new IncomingChatMessage(
+                Text: e.ChatMessage.Message,
+                ChannelId: e.ChatMessage.ChannelId,
+                ExtraData: extra,
+                ReceivedAt: DateTime.UtcNow,
+                PlatformUserId: e.ChatMessage.UserId,
+                PlatformUserName: e.ChatMessage.Username
+            ),
+            platform: PlatformName
+        );
 
         if (TryParseCommand(e.ChatMessage.Message, out var commandName, out var arguments))
         {
