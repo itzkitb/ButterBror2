@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.Registry;
+using TwitchLib.Api.Helix;
 using TwitchLib.Client.Events;
 
 namespace ButterBror.ChatModules.Twitch.Services;
@@ -147,11 +148,11 @@ public class TwitchModule : IChatModule
             PlatformName,
             new IncomingChatMessage(
                 Text: e.ChatMessage.Message,
-                ChannelId: e.ChatMessage.ChannelId,
                 ExtraData: extra,
                 ReceivedAt: DateTime.UtcNow,
                 PlatformUserId: e.ChatMessage.UserId,
-                PlatformUserName: e.ChatMessage.Username
+                PlatformUserName: e.ChatMessage.Username,
+                PlatformChatId: e.ChatMessage.ChannelId
             ),
             platform: PlatformName
         );

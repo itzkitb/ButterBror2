@@ -8,6 +8,6 @@ public record IncomingChatMessage(
     string Text,
     string PlatformUserId,
     string PlatformUserName,
-    string ChannelId,
+    string PlatformChatId,
     string ExtraData
 );
