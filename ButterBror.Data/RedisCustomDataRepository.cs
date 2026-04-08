@@ -53,4 +53,28 @@ public class RedisCustomDataRepository : ICustomDataRepository
             return await db.KeyDeleteAsync($"{CustomPrefix}{key}");
         });
     }
+
+    public async Task<IReadOnlyDictionary<string, string>> ScanAsync(string pattern)
+    {
+        return await _redisPipeline.ExecuteAsync(async ct =>
+        {
+            var result = new Dictionary<string, string>();
+ 
+            var server = _redis.GetServer(_redis.GetEndPoints().First());
+            var db = _redis.GetDatabase();
+ 
+            var fullPattern = $"{CustomPrefix}{pattern}";
+ 
+            await foreach (var redisKey in server.KeysAsync(pattern: fullPattern))
+            {
+                var val = await db.StringGetAsync(redisKey);
+                if (!val.HasValue) continue;
+ 
+                var userKey = redisKey.ToString().Substring(CustomPrefix.Length);
+                result[userKey] = val.ToString();
+            }
+ 
+            return (IReadOnlyDictionary<string, string>)result;
+        });
+    }
 }
