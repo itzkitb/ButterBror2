@@ -7,5 +7,6 @@ public class ChatMessageReceivedEventArgs : EventArgs
     public required string Text { get; init; }
     public required Guid UnifiedUserId { get; init; }
     public required string PlatformChatId { get; init; }
+    public required string PlatformChatName { get; init; }
     public required string ExtraData { get; init; }
 }

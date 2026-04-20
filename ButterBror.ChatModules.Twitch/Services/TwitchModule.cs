@@ -152,7 +152,8 @@ public class TwitchModule : IChatModule
                 ReceivedAt: DateTime.UtcNow,
                 PlatformUserId: e.ChatMessage.UserId,
                 PlatformUserName: e.ChatMessage.Username,
-                PlatformChatId: e.ChatMessage.ChannelId
+                PlatformChatId: e.ChatMessage.ChannelId,
+                PlatformChatName: e.ChatMessage.Channel
             ),
             platform: PlatformName
         );

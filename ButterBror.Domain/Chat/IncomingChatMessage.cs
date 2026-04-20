@@ -9,5 +9,6 @@ public record IncomingChatMessage(
     string PlatformUserId,
     string PlatformUserName,
     string PlatformChatId,
+    string PlatformChatName,
     string ExtraData
 );

@@ -67,7 +67,8 @@ public class BotCoreService : IBotCore
             ExtraData = message.ExtraData,
             ReceivedAt = message.ReceivedAt,
             UnifiedUserId = user.UnifiedUserId,
-            PlatformChatId = message.PlatformChatId
+            PlatformChatId = message.PlatformChatId,
+            PlatformChatName = message.PlatformChatName
         });
     }
 }
