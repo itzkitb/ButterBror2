@@ -8,17 +8,17 @@
 
   <ItemGroup>
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Resilience" Version="10.5.0" />
     <PackageReference Include="Polly.Core" Version="8.6.6" />
     <PackageReference Include="StackExchange.Redis" Version="2.12.14" />
-    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.6" />
-    <PackageReference Include="System.Management" Version="10.0.6" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.7" />
+    <PackageReference Include="System.Management" Version="10.0.7" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
     <ProjectReference Include="../ButterBror.ChatModule/ButterBror.ChatModule.csproj" />
     <ProjectReference Include="../ButterBror.ChatModules.Loader/ButterBror.Modules.Loader.csproj" />
     <ProjectReference Include="..\ButterBror.Core\ButterBror.Core.csproj" />
