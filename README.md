@@ -13,16 +13,12 @@
 
 ButterBror2 is a modular, multi-platform chatbot framework built on .NET 10. It is designed around a plugin architecture - chat integrations (Twitch, Discord, Telegram) and commands are distributed as self-contained `.pag` packages and loaded at runtime without recompiling the host application
 
----
-
 <img src="https://tupid.lol/i/bb2/requirements.png" width="100%">
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
 - Python 3.10+ (only required to build `.pag` module packages with `scripts/module-compilator.py`)
 - Git
 - Windows, Linux, or macOS
-
----
 
 <img src="https://tupid.lol/i/bb2/installation.png" width="100%">
 
@@ -49,8 +45,6 @@ dotnet build ButterBror.Host/ButterBror.Host.csproj -c Release
 
 The compiled output will be placed in `ButterBror.Host/bin/Release/net10.0/`
 
----
-
 <img src="https://tupid.lol/i/bb2/usage.png" width="100%">
 
 Once the host is running, it will scan the platform-specific AppData directory for installed `.pag` modules:
@@ -61,8 +55,6 @@ Once the host is running, it will scan the platform-specific AppData directory f
 | Linux / macOS | `~/.local/share/SillyApps/ButterBror2\` |
 
 Chat modules are loaded from the `Chat/` subdirectory and command modules from `Command/`. Any `.pag` file placed in the correct folder will be picked up automatically on the next startup or reload
-
----
 
 <img src="https://tupid.lol/i/bb2/project_structure.png" width="100%">
 
@@ -97,8 +89,6 @@ The solution is organized into the following groups:
 **Tests**
 
 - `ButterBror.UnitTests`, `ButterBror.IntegrationTests`, `ButterBror.PlatformTests`, `ButterBror.E2ETests`
-
----
 
 <img src="https://tupid.lol/i/bb2/creating_and_installing_modules.png" width="100%">
 
@@ -151,6 +141,8 @@ If you're using **Visual Studio Code** or other IDE, it will look like this:
 ```
 
 > When running `scripts/module-compilator.py`, all core ButterBror assemblies are automatically excluded from the `.pag` file, since they will already be in the core context when the module is loaded
+
+---
 
 ## Chat Modules
 
@@ -264,6 +256,8 @@ public class MyCommandModule : ICommandModule
 }
 ```
 
+---
+
 ## Building a .pag File
 
 Use the included Python build script to compile the project and package it into a `.pag` archive:
@@ -329,6 +323,8 @@ The generated `module.manifest.json` inside the archive has the following struct
 }
 ```
 
+---
+
 ## Installing a .pag File
 
 If you used `--no-install` or want to install a pre-built package manually, copy the `.pag` file to the appropriate AppData directory:
@@ -340,15 +336,11 @@ If you used `--no-install` or want to install a pre-built package manually, copy
 
 After placing the file, restart the host (or trigger a hot-reload) and the module will be discovered automatically
 
----
-
 <img src="https://tupid.lol/i/bb2/localization.png" width="100%">
 
 ButterBror2 has a built-in localization system. Translation files are stored in the `Localization/` subdirectory of the AppData folder, alongside an `Available.json` registry that maps locale codes to file paths and aliases
 
 By default, the registry is bootstrapped with `EN_US` and `RU_RU`. Module authors can bundle default translations directly in their `IChatModule.DefaultTranslations` or `ICommandModule.DefaultTranslations` property - these are merged into the localization cache at load time and act as fallbacks when no translation file exists for a given key
-
----
 
 <img src="https://tupid.lol/i/bb2/contributing.png" width="100%">
 
@@ -363,15 +355,11 @@ Contributions are welcome! To get started:
 
 Please keep PRs focused and include a clear description of what was changed and why
 
----
-
 <img src="https://tupid.lol/i/bb2/license.png" width="100%">
 
 This project is licensed under the **MIT License**. See [LICENSE.txt](LICENSE.txt) for the full text
 
 Copyright © 2026 DumbDev (aka. ItzKITb)
-
----
 
 <img src="https://tupid.lol/i/bb2/support.png" width="100%">
 
