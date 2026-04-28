@@ -94,6 +94,8 @@ The solution is organized into the following groups:
 
 Modules are packaged as `.pag` files - ZIP archives with a `.pag` extension that contain compiled DLL assemblies and a `module.manifest.json` descriptor. The build script `scripts/module-compilator.py` handles the full build-and-package pipeline
 
+---
+
 ## Setting Up the SDK Reference
 
 Before writing a module, you need to make the ButterBror2 SDK projects available to your module's `.csproj`. The recommended approach is to add the main repository as a **Git submodule** inside a `libs/` folder in your module's repository. This way you always have access to the correct SDK source without manually copying files
@@ -189,7 +191,7 @@ public class MyPlatformModule : IChatModule
 
 ---
 
-### Command Modules
+## Command Modules
 
 A command module exposes one or more chat commands. To create one:
 
