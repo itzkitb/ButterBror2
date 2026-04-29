@@ -13,6 +13,7 @@ public interface ICommandExecutionContext
     List<string> Arguments { get; }
     IPlatformUser User { get; }
     string Locale { get; }
+    string CommandName { get; }
     
     [JsonIgnore]
     CancellationToken CancellationToken { get; }

@@ -43,7 +43,7 @@ public class CommandDispatcher : ICommandDispatcher
 
             // S2: Create an execution context and service provider
             var locale = (context as ExtendedCommandContext)?.Locale ?? "EN_US";
-            var commandContext = new CommandExecutionContext(context.Channel, context.Arguments.ToList(), context.User, locale);
+            var commandContext = new CommandExecutionContext(context.Channel, context.Arguments.ToList(), context.User, locale, context.CommandName);
             var serviceProvider = new CommandServiceProvider(_serviceProvider);
 
             var result = await command.ExecuteAsync(commandContext, serviceProvider);
