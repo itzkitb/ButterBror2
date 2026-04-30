@@ -29,6 +29,7 @@ public class DashboardServer : IHostedService, IDisposable
     private CancellationTokenSource _cts = null!;
     private Task _listenerTask = Task.CompletedTask;
     private Task _metricsTask = Task.CompletedTask;
+    private Task _startupTask = Task.CompletedTask;
 
     public DashboardServer(
         IOptions<DashboardOptions> opts,
@@ -58,18 +59,23 @@ public class DashboardServer : IHostedService, IDisposable
         }
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://localhost:{_opts.Port}/");
-        _listener.Start();
-        _logger.LogInformation("Dashboard running on http://localhost:{Port}", _opts.Port);
+        if (!_opts.Enable) return;
 
-        _listenerTask = Task.Run(() => AcceptLoopAsync(_cts.Token), _cts.Token);
-        _metricsTask  = Task.Run(() => MetricsLoopAsync(_cts.Token), _cts.Token);
+        _startupTask = Task.Run(() =>
+        {
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _listener = new HttpListener();
+            _listener.Prefixes.Add($"http://{_opts.Address}:{_opts.Port}/");
+            _listener.Start();
+            _logger.LogInformation("Dashboard successfully launched. url=http://{Address}:{Port}/", _opts.Address, _opts.Port);
 
-        return Task.CompletedTask;
+            _listenerTask = Task.Run(() => AcceptLoopAsync(_cts.Token), _cts.Token);
+            _metricsTask = Task.Run(() => MetricsLoopAsync(_cts.Token), _cts.Token);
+        });
+
+        return;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
