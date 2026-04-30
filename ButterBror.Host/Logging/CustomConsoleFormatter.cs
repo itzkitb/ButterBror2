@@ -32,7 +32,7 @@ public class CustomConsoleFormatter : ConsoleFormatter
         StringBuilder logLine = new StringBuilder();
 
         // Timestamp
-        logLine.Append(DateTime.Now.ToString(@"dd\/MM\/yy HH:mm:ss"));
+        logLine.Append(DateTime.Now.ToString(@"dd-MM-yy HH:mm:ss.fff"));
         logLine.Append(' ');
 
         // Log level with color
@@ -48,18 +48,19 @@ public class CustomConsoleFormatter : ConsoleFormatter
         {
             if (_options.UseColors)
             {
-                textWriter.Write("\x1b[38;2;255;85;85m"); // Soft red (#FF5555)
+                textWriter.Write("\n\x1b[38;2;255;85;85m"); // Soft red (#FF5555)
                 textWriter.WriteLine(logEntry.Exception.ToString());
                 textWriter.Write("\x1b[0m");
             }
             else
             {
+                textWriter.Write("\n");
                 textWriter.WriteLine(logEntry.Exception.ToString());
             }
         }
 
         // Category and message
-        logLine.Append(" \x1b[90m- ");
+        /*logLine.Append(" \x1b[90m- ");
         logLine.Append(logEntry.Category.Replace("ButterBror.", ""));
         logLine.Append("");
 
@@ -69,7 +70,7 @@ public class CustomConsoleFormatter : ConsoleFormatter
             logLine.Append(logEntry.EventId.Id);
             logLine.Append(']');
         }
-        logLine.Append("\x1b[0m");
+        logLine.Append("\x1b[0m");*/
 
         textWriter.WriteLine(logLine.ToString());
 
@@ -80,13 +81,11 @@ public class CustomConsoleFormatter : ConsoleFormatter
     {
         if (!_options.UseColors)
         {
-            builder.Append('<');
             builder.Append(GetLogLevelAbbreviation(logLevel));
-            builder.Append("> ");
+            builder.Append(' ');
             return;
         }
 
-        // Get color based on strategy
         string colorCode = _options.UseTrueColor
             ? GetTrueColorCode(logLevel)
             : GetBasicAnsiCode(logLevel);
@@ -94,25 +93,22 @@ public class CustomConsoleFormatter : ConsoleFormatter
         string levelText = GetLogLevelAbbreviation(logLevel);
 
         builder.Append(colorCode);
-        builder.Append('<');
         builder.Append(levelText);
-        builder.Append('>');
         builder.Append("\x1b[0m");
         builder.Append(' ');
     }
 
     private static string GetLogLevelAbbreviation(LogLevel logLevel) => logLevel switch
     {
-        LogLevel.Trace => "t",
-        LogLevel.Debug => "d",
-        LogLevel.Information => "i",
-        LogLevel.Warning => "w",
-        LogLevel.Error => "f",
-        LogLevel.Critical => "c",
+        LogLevel.Trace => "·",
+        LogLevel.Debug => "◇",
+        LogLevel.Information => "•",
+        LogLevel.Warning => "△",
+        LogLevel.Error => "▲",
+        LogLevel.Critical => "◈",
         _ => "n"
     };
 
-    // Базовые 8-цветные ANSI коды (максимальная совместимость)
     private static string GetBasicAnsiCode(LogLevel logLevel) => logLevel switch
     {
         LogLevel.Trace => "\x1b[90m",       // Dark gray
@@ -124,10 +120,8 @@ public class CustomConsoleFormatter : ConsoleFormatter
         _ => "\x1b[37m" // White
     };
 
-    // True color (24-bit) через hex → RGB конвертацию
     private static string GetTrueColorCode(LogLevel logLevel)
     {
-        // Красивая палитра в стиле Dracula/Nord
         string hexColor = logLevel switch
         {
             LogLevel.Trace => "#6272a4",    // Dracula comment (серо-голубой)

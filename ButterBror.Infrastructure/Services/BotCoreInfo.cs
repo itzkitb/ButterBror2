@@ -35,8 +35,8 @@ public class BotCoreInfo : IBotCoreInfo
                     RepositoryUrl = lines[6].Trim();
 
                     _logger.LogInformation(
-                        "version={Version} commit={Commit} branch={Branch}",
-                        Version, BuildCommit, BuildBranch);
+                        "ButterBror version={Version}, commit={Commit}, branch={Branch}, repo={RepositoryUrl}",
+                        Version, BuildCommit, BuildBranch, RepositoryUrl);
                 }
                 else
                 {

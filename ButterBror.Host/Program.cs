@@ -122,6 +122,9 @@ builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
 
 var host = builder.Build();
 
+var logger = host.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("· - —==≡ ButterBror is starting ≡==- — ·");
+
 var coreInfoService = host.Services.GetRequiredService<IBotCoreInfo>();
 coreInfoService.Initialize();
 
@@ -159,14 +162,12 @@ using (var scope = host.Services.CreateScope())
         // Grant super-admin permissions if not already granted
         await permManager.AddPermissionAsync(adminUser.UnifiedUserId, "su:*");
 
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         logger.LogInformation(
             "Dashboard admin initialized: UnifiedUserId={UserId}",
             adminUser.UnifiedUserId);
     }
     catch (Exception ex)
     {
-        var logger = host.Services.GetRequiredService<ILogger<Program>>();
         logger.LogWarning(ex, "Failed to initialize dashboard admin user (Redis may not be ready yet)");
         // Non-fatal — the dashboard will still work for most scenarios
     }
