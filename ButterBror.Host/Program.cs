@@ -167,13 +167,12 @@ using (var scope = host.Services.CreateScope())
         await permManager.AddPermissionAsync(adminUser.UnifiedUserId, "su:*");
 
         logger.LogInformation(
-            "Dashboard admin initialized: UnifiedUserId={UserId}",
+            "Dashboard admin initialized. unified_uid='{UserId}'",
             adminUser.UnifiedUserId);
     }
     catch (Exception ex)
     {
         logger.LogWarning(ex, "Failed to initialize dashboard admin user (Redis may not be ready yet)");
-        // Non-fatal — the dashboard will still work for most scenarios
     }
 }
 

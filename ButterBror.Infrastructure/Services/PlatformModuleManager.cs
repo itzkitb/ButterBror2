@@ -54,7 +54,6 @@ public class PlatformModuleManager : IPlatformModuleManager
     public async Task InitializeAsync(IBotCore core, CancellationToken cancellationToken = default)
     {
         _core = core;
-        _logger.LogInformation("Initializing platform modules...");
 
         // Initialize built-in modules from DI container
         var builtInModules = _serviceProvider.GetServices<IChatModule>();
@@ -66,7 +65,7 @@ public class PlatformModuleManager : IPlatformModuleManager
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize built-in platform module: {PlatformName}", module.PlatformName);
+                _logger.LogError(ex, "Failed to initialize built-in platform module. name='{PlatformName}'", module.ModuleId);
             }
         }
 
@@ -77,7 +76,7 @@ public class PlatformModuleManager : IPlatformModuleManager
 
     private async Task LoadAndInitializeCommandModulesAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Loading command modules from AppData/Commands...");
+        _logger.LogInformation("Loading command modules...");
         var commandModules = await _commandModuleLoader.LoadModulesAsync(cancellationToken);
         
         foreach (var module in commandModules)
@@ -97,7 +96,7 @@ public class PlatformModuleManager : IPlatformModuleManager
                 
                 _loadedCommandModules.Add(module);
                 _logger.LogInformation(
-                    "Initialized command module: {ModuleId} v{Version} with {CommandCount} commands",
+                    "Initialized command module. id='{ModuleId}', version={Version}, commands={CommandCount}",
                     module.ModuleId,
                     module.Version,
                     module.ExportedCommands.Count
@@ -105,14 +104,14 @@ public class PlatformModuleManager : IPlatformModuleManager
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize command module: {ModuleId}", module.ModuleId);
+                _logger.LogError(ex, "Failed to initialize command module. id={ModuleId}", module.ModuleId);
             }
         }
     }
 
     private async Task LoadAndInitializeChatModulesAsync(IBotCore core, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Loading chat modules from AppData/Chat...");
+        _logger.LogInformation("Loading chat modules...");
 
         var chatModules = await _chatModuleLoader.LoadModulesAsync(cancellationToken);
 
@@ -122,10 +121,16 @@ public class PlatformModuleManager : IPlatformModuleManager
             {
                 await InitializeModuleAsync(module, core);
                 _loadedChatModules.Add(module);
+                _logger.LogInformation(
+                    "Initialized chat module. id='{ModuleId}', version={Version}, commands={CommandCount}",
+                    module.ModuleId,
+                    module.Version,
+                    module.ExportedCommands.Count
+                );
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize chat module: {PlatformName}", module.PlatformName);
+                _logger.LogError(ex, "Failed to initialize chat module: {PlatformName}", module.ModuleId);
             }
         }
     }
@@ -137,7 +142,7 @@ public class PlatformModuleManager : IPlatformModuleManager
         {
             _commandRegistry.RegisterModuleCommand(
                 exportedCommand.CommandName,
-                module.PlatformName,
+                module.ModuleId,
                 exportedCommand.Factory,
                 exportedCommand.Metadata
             );
@@ -145,11 +150,6 @@ public class PlatformModuleManager : IPlatformModuleManager
 
         await module.InitializeAsync(core);
         _moduleRegistry.RegisterModule(module);
-        _logger.LogInformation(
-            "Initialized platform module: {PlatformName} with {CommandCount} commands",
-            module.PlatformName,
-            module.ExportedCommands.Count
-        );
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken = default)
@@ -162,11 +162,11 @@ public class PlatformModuleManager : IPlatformModuleManager
             try
             {
                 await module.ShutdownAsync();
-                _logger.LogInformation("Shutdown platform module: {PlatformName}", module.PlatformName);
+                _logger.LogInformation("Shutdown platform module. id='{ModuleId}'", module.ModuleId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error shutting down platform module: {PlatformName}", module.PlatformName);
+                _logger.LogError(ex, "Error shutting down platform module. id='{ModuleId}'", module.ModuleId);
             }
         }
 
@@ -176,11 +176,11 @@ public class PlatformModuleManager : IPlatformModuleManager
             try
             {
                 await module.ShutdownAsync();
-                _logger.LogInformation("Shutdown chat module: {PlatformName}", module.PlatformName);
+                _logger.LogInformation("Shutdown chat module. id='{ModuleId}'", module.ModuleId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error shutting down chat module: {PlatformName}", module.PlatformName);
+                _logger.LogError(ex, "Error shutting down chat module. id='{ModuleId}'", module.ModuleId);
             }
         }
 
@@ -190,11 +190,11 @@ public class PlatformModuleManager : IPlatformModuleManager
             try
             {
                 await module.ShutdownAsync();
-                _logger.LogInformation("Shutdown command module: {ModuleId}", module.ModuleId);
+                _logger.LogInformation("Shutdown command module. id='{ModuleId}'", module.ModuleId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error shutting down command module: {ModuleId}", module.ModuleId);
+                _logger.LogError(ex, "Error shutting down command module. id='{ModuleId}'", module.ModuleId);
             }
         }
 
@@ -202,15 +202,15 @@ public class PlatformModuleManager : IPlatformModuleManager
         await _commandModuleLoader.UnloadModulesAsync(cancellationToken);
     }
 
-    public async Task<string> ReloadChatModuleAsync(string platformName, CancellationToken cancellationToken = default)
+    public async Task<string> ReloadChatModuleAsync(string moduleId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Reloading chat module: {PlatformName}", platformName);
+        _logger.LogInformation("Reloading chat module. id='{PlatformName}'", moduleId);
 
         // Find module in loaded chat modules
-        var existingModule = _loadedChatModules.FirstOrDefault(m => m.PlatformName.Equals(platformName, StringComparison.OrdinalIgnoreCase));
+        var existingModule = _loadedChatModules.FirstOrDefault(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
         if (existingModule == null)
         {
-            var error = $"Chat module '{platformName}' not found in loaded modules";
+            var error = $"Chat module not found in loaded modules. id='{moduleId}'";
             _logger.LogError(error);
             return error;
         }
@@ -226,25 +226,25 @@ public class PlatformModuleManager : IPlatformModuleManager
         {
             // Shutdown module
             await existingModule.ShutdownAsync();
-            _logger.LogDebug("Shutdown chat module: {PlatformName}", platformName);
+            _logger.LogDebug("Shutdown chat module. id='{PlatformName}'", moduleId);
 
             // Unregister commands
-            _commandRegistry.UnregisterModuleCommands(platformName);
-            _logger.LogDebug("Unregistered commands for module: {PlatformName}", platformName);
+            _commandRegistry.UnregisterModuleCommands(moduleId);
+            _logger.LogDebug("Unregistered commands for module. id='{PlatformName}'", moduleId);
 
             // Unregister from module registry
-            _moduleRegistry.UnregisterModule(platformName);
-            _logger.LogDebug("Unregistered module from registry: {PlatformName}", platformName);
+            _moduleRegistry.UnregisterModule(moduleId);
+            _logger.LogDebug("Unregistered module from registry. id='{PlatformName}'", moduleId);
 
             // Remove from loaded modules
             _loadedChatModules.Remove(existingModule);
 
             // Reload module from ZIP
-            var newModules = await _chatModuleLoader.ReloadModuleAsync(platformName, cancellationToken);
+            var newModules = await _chatModuleLoader.ReloadModuleAsync(moduleId, cancellationToken);
 
             if (newModules.Count == 0)
             {
-                var error = $"No modules loaded for '{platformName}'";
+                var error = $"Module not found. id='{moduleId}'";
                 _logger.LogError(error);
                 return error;
             }
@@ -256,26 +256,26 @@ public class PlatformModuleManager : IPlatformModuleManager
                 _loadedChatModules.Add(module);
             }
 
-            var result = $"Reloaded chat module '{platformName}': {newModules.Count} module(s) loaded";
+            var result = $"Reloaded chat module. id='{moduleId}'";
             _logger.LogInformation(result);
             return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to reload chat module '{PlatformName}'", platformName);
-            return $"Failed to reload chat module '{platformName}': {ex.Message}";
+            _logger.LogError(ex, "Failed to reload chat module. id='{ModuleId}'", moduleId);
+            return $"Failed to reload chat module '{moduleId}': {ex.Message}";
         }
     }
 
     public async Task<string> ReloadCommandModuleAsync(string moduleId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Reloading command module: {ModuleId}", moduleId);
+        _logger.LogInformation("Reloading command module. id='{ModuleId}'", moduleId);
 
         // Find module in loaded command modules
         var existingModule = _loadedCommandModules.FirstOrDefault(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
         if (existingModule == null)
         {
-            var error = $"Command module '{moduleId}' not found in loaded modules";
+            var error = $"Command module not found in loaded modules. id='{moduleId}'";
             _logger.LogError(error);
             return error;
         }
@@ -284,7 +284,7 @@ public class PlatformModuleManager : IPlatformModuleManager
         {
             // Unregister commands
             _commandRegistry.UnregisterModuleCommands(moduleId);
-            _logger.LogDebug("Unregistered commands for module: {ModuleId}", moduleId);
+            _logger.LogDebug("Unregistered commands for module. id='{ModuleId}'", moduleId);
 
             // Remove from loaded modules
             _loadedCommandModules.Remove(existingModule);
@@ -294,7 +294,7 @@ public class PlatformModuleManager : IPlatformModuleManager
 
             if (newModules.Count == 0)
             {
-                var error = $"No modules loaded for '{moduleId}'";
+                var error = $"Module not found. id='{moduleId}'";
                 _logger.LogError(error);
                 return error;
             }
@@ -314,20 +314,20 @@ public class PlatformModuleManager : IPlatformModuleManager
 
                 _loadedCommandModules.Add(module);
                 _logger.LogInformation(
-                    "Reloaded command module: {ModuleId} v{Version} with {CommandCount} commands",
+                    "Reloaded command module. id='{ModuleId}', version={Version}, commands_count={CommandCount}",
                     module.ModuleId,
                     module.Version,
                     module.ExportedCommands.Count
                 );
             }
 
-            var result = $"Reloaded command module '{moduleId}': {newModules.Count} module(s) loaded";
+            var result = $"Reloaded command module. id='{moduleId}'";
             _logger.LogInformation(result);
             return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to reload command module '{ModuleId}'", moduleId);
+            _logger.LogError(ex, "Failed to reload command module. id='{ModuleId}'", moduleId);
             return $"Failed to reload command module '{moduleId}': {ex.Message}";
         }
     }
@@ -336,6 +336,6 @@ public class PlatformModuleManager : IPlatformModuleManager
     {
         return _moduleRegistry.GetModules()
             .Concat(_loadedChatModules.OfType<IChatModule>())
-            .FirstOrDefault(m => m.PlatformName.Equals(platformName, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(m => m.ModuleId.Equals(platformName, StringComparison.OrdinalIgnoreCase));
     }
 }

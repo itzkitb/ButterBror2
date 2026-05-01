@@ -17,14 +17,12 @@ public class BotHostedService : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting bot hosted service...");
         await _botCore.StartAsync(cancellationToken);
         _logger.LogInformation("Bot hosted service started successfully");
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Stopping bot hosted service...");
         await _botCore.StopAsync(cancellationToken);
         _logger.LogInformation("Bot hosted service stopped successfully");
     }

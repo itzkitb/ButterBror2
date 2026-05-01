@@ -14,7 +14,8 @@ public record ModuleCommandExport(
 
 public interface IChatModule
 {
-    string PlatformName { get; }
+    string ModuleId { get; }
+    Version Version { get; }
     IReadOnlyList<ModuleCommandExport> ExportedCommands { get; }
 
     /// <summary>

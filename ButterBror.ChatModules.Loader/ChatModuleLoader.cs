@@ -1,9 +1,10 @@
-using System.IO.Compression;
-using System.Runtime.Loader;
-using System.Text.Json;
 using ButterBror.ChatModule;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;
+using System.IO.Compression;
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Text.Json;
 
 namespace ButterBror.Modules.Loader;
 
@@ -46,19 +47,17 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
         if (!Directory.Exists(chatModulesPath))
         {
-            _logger.LogInformation("Chat modules directory does not exist. Creating...");
+            _logger.LogInformation("Chat modules directory does not exist. I'm creating this for you");
             Directory.CreateDirectory(chatModulesPath);
             return Array.Empty<IChatModule>();
         }
-
-        _logger.LogInformation("Loading chat modules from: {Path}", chatModulesPath);
 
         // Looking for archives with modules
         var moduleFiles = Directory.GetFiles(chatModulesPath, "*.pag", SearchOption.TopDirectoryOnly);
 
         if (moduleFiles.Length == 0)
         {
-            _logger.LogInformation("No chat modules found: {Path}", chatModulesPath);
+            _logger.LogInformation("No chat modules found. path='{Path}'", chatModulesPath);
             return Array.Empty<IChatModule>();
         }
 
@@ -71,11 +70,11 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load module from: {file}", file);
+                _logger.LogError(ex, "Failed to load module. module='{File}'", file);
             }
         }
 
-        _logger.LogInformation("Loaded {Count} chat module(s)", _loadedModules.Count);
+        _logger.LogInformation("Chat modules successfully loaded. count={Count}", _loadedModules.Count);
         return _loadedModules.AsReadOnly();
     }
 
@@ -90,7 +89,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
         try
         {
-            _logger.LogDebug("Extracting module archive: {Path} to {TempDir}", path, tempDir);
+            _logger.LogDebug("Extracting module archive. path='{Path}', to='{TempDir}'", path, tempDir);
 
             ZipFile.ExtractToDirectory(path, tempDir, overwriteFiles: true);
 
@@ -102,7 +101,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
             {
                 var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
                 manifest = JsonSerializer.Deserialize<ModuleManifest>(manifestJson);
-                _logger.LogDebug("Loaded manifest: {ManifestName} v.{ManifestVersion}", manifest?.Name, manifest?.Version);
+                _logger.LogDebug("Loaded manifest. name='{ManifestName}', version='{ManifestVersion}'", manifest?.Name, manifest?.Version);
             }
 
             // Defining the Master DLL
@@ -113,18 +112,18 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 mainDll = Path.Combine(tempDir, manifest.MainDll);
                 if (!File.Exists(mainDll))
                 {
-                    _logger.LogWarning("Main DLL from manifest not found: {Dll}", manifest.MainDll);
+                    _logger.LogWarning("Main DLL from manifest not found. name='{Dll}'", manifest.MainDll);
                     mainDll = null;
                 }
             }
 
             if (mainDll == null)
             {
-                _logger.LogWarning("No module DLL found in archive: {Path}", path);
+                _logger.LogWarning("No module DLL found in archive. path='{Path}'", path);
                 return modules;
             }
 
-            _logger.LogDebug("Found main module DLL: {Dll}", mainDll);
+            _logger.LogDebug("Found main module DLL. name='{Dll}'", mainDll);
 
             // Creating a New Boot Context for Isolation
             var moduleName = manifest?.Name ?? Path.GetFileNameWithoutExtension(path);
@@ -133,7 +132,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
             // Loading the main assembly
             var assembly = loadContext.LoadFromAssemblyPath(mainDll);
-            _logger.LogDebug("Loaded assembly: {AssemblyName}", assembly.FullName);
+            _logger.LogDebug("Loaded assembly. name='{AssemblyName}'", assembly.FullName);
 
             // Looking for all classes that implement IChatModule
             var moduleTypes = assembly.GetTypes()
@@ -153,31 +152,31 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                         chatModule.InitializeWithServices(_serviceProvider);
                         modules.Add(chatModule);
                         // Store mapping from module platform name to archive path
-                        _moduleToArchivePath[chatModule.PlatformName] = path;
+                        _moduleToArchivePath[chatModule.ModuleId] = path;
                         // Register built-in locales
                         _localizationService.RegisterModuleTranslations(
-                            chatModule.PlatformName,
+                            chatModule.ModuleId,
                             chatModule.DefaultTranslations);
                         _logger.LogInformation(
-                            "Loaded chat module: {ModuleName} (Platform: {PlatformName})",
+                            "Loaded chat module. name='{ModuleName}', platform='{PlatformName}'",
                             moduleType.Name,
-                            chatModule.PlatformName
+                            chatModule.ModuleId
                         );
                     }
                     else
                     {
-                        _logger.LogWarning("Type {TypeName} does not implement IChatModule", moduleType.Name);
+                        _logger.LogWarning("Type does not implement IChatModule. name='{TypeName}'", moduleType.Name);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to create instance of module type: {TypeName}", moduleType.Name);
+                    _logger.LogError(ex, "Failed to create instance of module type. name='{TypeName}'", moduleType.Name);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load module from archive: {Path}", path);
+            _logger.LogError(ex, "Failed to load module from archive. path='{Path}'", path);
             throw;
         }
 
@@ -186,19 +185,17 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
     public async Task UnloadModulesAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Unloading chat modules...");
-
         // S0: Unloading contexts
         foreach (var context in _loadContexts)
         {
             try
             {
                 context.Unload();
-                _logger.LogDebug("Unloaded context: {ContextName}", context.Name);
+                _logger.LogDebug("Unloaded context. name='{ContextName}'", context.Name);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to unload context: {ContextName}", context.Name);
+                _logger.LogError(ex, "Failed to unload context. name='{ContextName}'", context.Name);
             }
         }
 
@@ -213,12 +210,12 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 if (Directory.Exists(tempDir))
                 {
                     Directory.Delete(tempDir, recursive: true);
-                    _logger.LogDebug("Deleted temp directory: {TempDir}", tempDir);
+                    _logger.LogDebug("Deleted temp directory. path='{TempDir}'", tempDir);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to delete temp directory: {TempDir}", tempDir);
+                _logger.LogError(ex, "Failed to delete temp directory. path='{TempDir}'", tempDir);
             }
         }
 
@@ -239,10 +236,10 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         await _reloadLock.WaitAsync(cancellationToken);
         try
         {
-            _logger.LogInformation("Reloading chat module: {ModuleName}", moduleName);
+            _logger.LogInformation("Reloading chat module. name='{ModuleName}'", moduleName);
 
             // S0: Find module in loaded
-            var existingModule = _loadedModules.FirstOrDefault(m => m.PlatformName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+            var existingModule = _loadedModules.FirstOrDefault(m => m.ModuleId.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
             string? archivePath = null;
 
             if (existingModule != null)
@@ -250,15 +247,15 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 // S1: Get archive path from mapping
                 if (!_moduleToArchivePath.TryGetValue(moduleName, out archivePath) || !File.Exists(archivePath))
                 {
-                    _logger.LogError("Module not found for '{ModuleName}'", moduleName);
+                    _logger.LogError("Module not found. name='{ModuleName}'", moduleName);
                     throw new FileNotFoundException($"Module file not found for '{moduleName}'");
                 }
 
-                _logger.LogDebug("Found existing module {ModuleName}: {ArchivePath}", moduleName, archivePath);
+                _logger.LogDebug("Found existing module. name='{ModuleName}', path='{ArchivePath}'", moduleName, archivePath);
 
                 // S2: Shutdown module
                 await existingModule.ShutdownAsync();
-                _logger.LogDebug("Shutdown module: {ModuleName}", moduleName);
+                _logger.LogDebug("Shutdown module. name='{ModuleName}'", moduleName);
 
                 // S3: Find and unload the corresponding load context
                 var contextToUnload = _loadContexts.FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
@@ -266,11 +263,11 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 {
                     contextToUnload.Unload();
                     _loadContexts.Remove(contextToUnload);
-                    _logger.LogDebug("Unloaded context: {ContextName}", contextToUnload.Name);
+                    _logger.LogDebug("Unloaded context. name='{ContextName}'", contextToUnload.Name);
                 }
 
                 // S4: Remove from loaded modules
-                _loadedModules.RemoveAll(m => m.PlatformName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+                _loadedModules.RemoveAll(m => m.ModuleId.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
 
                 // S5: Remove temp directory
                 var tempDirToDelete = _tempDirectories.FirstOrDefault(t => t.Contains(moduleName));
@@ -280,11 +277,11 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     {
                         Directory.Delete(tempDirToDelete, recursive: true);
                         _tempDirectories.Remove(tempDirToDelete);
-                        _logger.LogDebug("Deleted temp directory: {TempDir}", tempDirToDelete);
+                        _logger.LogDebug("Deleted temp directory. path='{TempDir}'", tempDirToDelete);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to delete temp directory: {TempDir}", tempDirToDelete);
+                        _logger.LogError(ex, "Failed to delete temp directory. path='{TempDir}'", tempDirToDelete);
                     }
                 }
 
@@ -340,7 +337,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
                 if (archivePath == null)
                 {
-                    _logger.LogError("Module '{ModuleName}' not found in loaded modules or files", moduleName);
+                    _logger.LogError("Module not found in loaded modules or files. path='{ModuleName}'", moduleName);
                     throw new FileNotFoundException($"Module '{moduleName}' not found");
                 }
             }
@@ -353,10 +350,11 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
             }, cancellationToken);
 
             // S8: Load module from archive
-            _logger.LogDebug("Loading module from archive: {Path}", archivePath);
+            _logger.LogDebug("Loading module from archive. path='{Path}'", archivePath);
             var newModules = await LoadModuleFromArchiveAsync(archivePath, cancellationToken);
+            _loadedModules.AddRange(newModules);
 
-            _logger.LogInformation("Reloaded chat module '{ModuleName}': {Count} module(s) loaded", moduleName, newModules.Count);
+            _logger.LogInformation("Reloaded chat module. name='{ModuleName}'", moduleName);
 
             return newModules;
         }
@@ -387,7 +385,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                 catch (Exception ex)
                 {
                     // Fck off
-                    _logger.LogError($"{context.Name} module unload error", ex);
+                    _logger.LogError($"Module unload error. name='{context.Name}'", ex);
                 }
             }
             _loadContexts.Clear();

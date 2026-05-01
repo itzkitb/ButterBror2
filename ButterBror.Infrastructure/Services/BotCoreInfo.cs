@@ -35,22 +35,22 @@ public class BotCoreInfo : IBotCoreInfo
                     RepositoryUrl = lines[6].Trim();
 
                     _logger.LogInformation(
-                        "ButterBror version={Version}, commit={Commit}, branch={Branch}, repo={RepositoryUrl}",
+                        "ButterBror. version={Version}, commit={Commit}, branch={Branch}, repo='{RepositoryUrl}'",
                         Version, BuildCommit, BuildBranch, RepositoryUrl);
                 }
                 else
                 {
-                    _logger.LogWarning("Version file is malformed");
+                    _logger.LogWarning("Version file is malformed. lines={Lines}", lines.Length);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                _logger.LogError("Failed to read version file");
+                _logger.LogError("Failed to read version file. message='{Message}'", ex.Message);
             }
         }
         else
         {
-            _logger.LogWarning("The version file was not found. If you built the core manually, we recommend creating a \"version\" file in the root directory of the program and filling it with the following template: https://github.com/itzkitb/ButterBror2/blob/main/version");
+            _logger.LogWarning("The version file was not found. If you built the core manually, we recommend creating a \"version\" file in the root of the program and filling it with the template: https://github.com/itzkitb/ButterBror2/blob/main/version. path='{VersionFilePath}'", versionFilePath);
         }
     }
 }

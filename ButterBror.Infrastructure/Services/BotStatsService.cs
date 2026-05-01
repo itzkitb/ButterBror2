@@ -200,7 +200,7 @@ public class BotStatsService : IBotStatsService
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
-            _logger.LogDebug("Created directory {Directory}", directory);
+            _logger.LogDebug("Created directory. path='{Directory}'", directory);
         }
 
         if (File.Exists(statsPath))
@@ -213,17 +213,17 @@ public class BotStatsService : IBotStatsService
                     PropertyNameCaseInsensitive = true
                 };
                 _persistent = JsonSerializer.Deserialize<PersistentBotStats>(json, options) ?? new PersistentBotStats();
-                _logger.LogInformation("Loaded stats from {Path}", statsPath);
+                _logger.LogInformation("Statistics successfully loaded");
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to load stats, starting with defaults");
+                _logger.LogWarning(ex, "Failed to load stats, starting with defaults. path='{Path}', message='{Message}'", statsPath, ex.Message);
                 _persistent = new PersistentBotStats();
             }
         }
         else
         {
-            _logger.LogInformation("No persistent stats found, starting with defaults");
+            _logger.LogInformation("No persistent stats found, starting with defaults. path='{Path}'", statsPath);
             _persistent = new PersistentBotStats();
         }
 
@@ -264,7 +264,7 @@ public class BotStatsService : IBotStatsService
             var json = JsonSerializer.Serialize(_persistent, options);
 
             await File.WriteAllTextAsync(statsPath, json, cancellationToken);
-            _logger.LogDebug("Flushed stats to {Path}", statsPath);
+            _logger.LogDebug("Statistics have been written to a file. path='{Path}'", statsPath);
         }
         catch (Exception ex)
         {

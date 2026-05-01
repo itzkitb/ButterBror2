@@ -56,7 +56,7 @@ public class CommandDispatcher : ICommandDispatcher
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error dispatching command '{CommandName}'", context.CommandName);
+            _logger.LogError(ex, "Error dispatching command. name='{CommandName}'", context.CommandName);
             return CommandResult.Failure($"Internal error executing command: {ex.Message}");
         }
     }

@@ -15,21 +15,21 @@ public class PlatformModuleRegistry : IChatModuleRegistry
 
     public void RegisterModule(IChatModule module)
     {
-        if (_modules.Any(m => m.PlatformName.Equals(module.PlatformName, StringComparison.OrdinalIgnoreCase)))
+        if (_modules.Any(m => m.ModuleId.Equals(module.ModuleId, StringComparison.OrdinalIgnoreCase)))
         {
-            _logger.LogWarning("Module with platform name '{PlatformName}' is already registered", module.PlatformName);
+            _logger.LogWarning("Module with platform name '{PlatformName}' is already registered", module.ModuleId);
             return;
         }
 
         _modules.Add(module);
-        _logger.LogInformation("Registered platform module: {PlatformName}", module.PlatformName);
+        _logger.LogInformation("Registered platform module: {PlatformName}", module.ModuleId);
     }
 
     public IEnumerable<IChatModule> GetModules() => _modules.AsReadOnly();
 
     public bool UnregisterModule(string platformName)
     {
-        var module = _modules.FirstOrDefault(m => m.PlatformName.Equals(platformName, StringComparison.OrdinalIgnoreCase));
+        var module = _modules.FirstOrDefault(m => m.ModuleId.Equals(platformName, StringComparison.OrdinalIgnoreCase));
         if (module == null)
         {
             _logger.LogWarning("Module with platform name '{PlatformName}' not found", platformName);

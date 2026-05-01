@@ -50,14 +50,14 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
     {
         _cts = new CancellationTokenSource();
         _updateTask = Task.Run(() => MetricsLoopAsync(_cts.Token), _cts.Token);
-        _logger.LogInformation("DeviceStatsService started");
+        _logger.LogInformation("Device status service started");
     }
 
     public void Stop()
     {
         _cts.Cancel();
         _updateTask.GetAwaiter().GetResult();
-        _logger.LogInformation("DeviceStatsService stopped");
+        _logger.LogInformation("Device status service stopped");
     }
 
     private async Task MetricsLoopAsync(CancellationToken ct)

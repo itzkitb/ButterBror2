@@ -18,7 +18,8 @@ namespace ButterBror.ChatModules.Twitch.Services;
 
 public class TwitchModule : IChatModule
 {
-    public string PlatformName => "sillyapps:twitch";
+    public string ModuleId => "sillyapps:twitch";
+    public Version Version => new(1, 0, 0);
     private Func<ICommand> _joinCommandFactory = null!;
     private Func<ICommand> _partCommandFactory = null!;
 
@@ -145,7 +146,7 @@ public class TwitchModule : IChatModule
         });
 
         await _botCore.RaiseMessageReceivedAsync(
-            PlatformName,
+            ModuleId,
             new IncomingChatMessage(
                 Text: e.ChatMessage.Message,
                 ExtraData: extra,
@@ -155,7 +156,7 @@ public class TwitchModule : IChatModule
                 PlatformChatId: e.ChatMessage.ChannelId,
                 PlatformChatName: e.ChatMessage.Channel
             ),
-            platform: PlatformName
+            platform: ModuleId
         );
 
         if (TryParseCommand(e.ChatMessage.Message, out var commandName, out var arguments))

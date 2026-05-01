@@ -17,7 +17,7 @@ public record CommandModuleExport(
 public interface ICommandModule
 {
     string ModuleId { get; }
-    string Version { get; }
+    Version Version { get; }
     IReadOnlyList<CommandModuleExport> ExportedCommands { get; }
 
     /// <summary>

@@ -113,8 +113,6 @@ public class BanphraseService : IBanphraseService
 
     public async Task ReloadGlobalCategoriesAsync()
     {
-        _logger.LogInformation("Reloading global banphrase categories...");
-        
         var categories = await _repository.GetAllGlobalCategoriesAsync();
         var newCategories = new ConcurrentDictionary<string, BanphraseCategory>();
         
@@ -141,7 +139,7 @@ public class BanphraseService : IBanphraseService
         }
         
         _logger.LogInformation(
-            "Loaded {Count} global banphrase categories",
+            "Loaded global banphrase categories. count={Count}",
             _globalCategories.Count);
     }
 

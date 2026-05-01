@@ -53,8 +53,8 @@ public class AdminCommandExecutor
         }
 
         _logger.LogInformation(
-            "[Dashboard] Executing admin command: {Command} args=[{Args}] platform={Platform}",
-            commandName, string.Join(", ", args), commandPlatform);
+            "<Dashboard> Executing command. command='{Command}' args=['{Args}'] platform='{Platform}'",
+            commandName, string.Join("', '", args), commandPlatform);
 
         var context = new DashboardCommandContext(commandName, args, commandPlatform);
         context.CancellationToken = ct;
