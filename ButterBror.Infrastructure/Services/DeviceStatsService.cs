@@ -13,7 +13,7 @@ namespace ButterBror.Infrastructure.Services;
 public class DeviceStatsService : IDeviceStatsService, IDisposable
 {
     private ILogger<DeviceStatsService> _logger;
-    private readonly CpuTemperatureReader _cpuTempReader;
+    private CpuTemperatureReader _cpuTempReader;
 
     // Public
     public double CpuLoad => _cpuLoad;
@@ -36,6 +36,7 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
 
     // Task
     private Task _updateTask = Task.CompletedTask;
+    private Task _startupTask = Task.CompletedTask;
     private CancellationTokenSource _cts = null!;
     
 
@@ -43,7 +44,10 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
         ILogger<DeviceStatsService> logger)
     {
         _logger = logger;
-        _cpuTempReader = new CpuTemperatureReader(logger);
+        _updateTask = Task.Run(() =>
+        {
+            _cpuTempReader = new CpuTemperatureReader(logger);
+        });
     }
 
     public void Start()
@@ -72,7 +76,10 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
 
                 // System CPU
                 _cpuLoad = GetSystemCpuPercent();
-                _cpuTemp = _cpuTempReader.Read() ?? 0;
+                if (_cpuTempReader != null)
+                {
+                    _cpuTemp = _cpuTempReader.Read() ?? 0;
+                }
 
                 // System RAM
                 var gcInfo = GC.GetGCMemoryInfo();
@@ -303,15 +310,19 @@ public sealed class CpuTemperatureReader
     
     private double? _cachedValue;
     private DateTime _lastReadTime;
+    private bool _isInitialized = false;
 
     public CpuTemperatureReader(ILogger<DeviceStatsService>? logger = null)
     {
         _logger = logger;
         _platformReader = CreatePlatformReader(logger);
+        _isInitialized = true;
     }
 
     public double? Read()
     {
+        if (!_isInitialized) return 0;
+
         // Return cached value if read too recently
         if (_cachedValue.HasValue && 
             DateTime.UtcNow - _lastReadTime < MinReadInterval)
@@ -541,6 +552,7 @@ internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader, IDisp
     {
         _logger = logger;
 
+        var sw = Stopwatch.StartNew();
         try
         {
             _lhmComputer = new Computer
@@ -560,6 +572,9 @@ internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader, IDisp
             _logger?.LogWarning(ex, "LHM initialization failed");
         }
 
+        logger?.LogInformation("LHM Open() took {Ms}ms", sw.ElapsedMilliseconds);
+        sw.Restart();
+
         try
         {
             var result = Read();
@@ -572,6 +587,8 @@ internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader, IDisp
         {
             _logger?.LogWarning(ex, "Temperature read failed");
         }
+
+        logger?.LogInformation("Initial Read() took {Ms}ms", sw.ElapsedMilliseconds);
     }
 
     public double? Read()
