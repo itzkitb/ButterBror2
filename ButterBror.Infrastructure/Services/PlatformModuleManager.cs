@@ -76,7 +76,6 @@ public class PlatformModuleManager : IPlatformModuleManager
 
     private async Task LoadAndInitializeCommandModulesAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Loading command modules...");
         var commandModules = await _commandModuleLoader.LoadModulesAsync(cancellationToken);
         
         foreach (var module in commandModules)

@@ -51,7 +51,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
             return Array.Empty<ICommandModule>();
         }
 
-        _logger.LogInformation("Loading command modules from: {Path}", commandsPath);
+        _logger.LogInformation("Loading command modules. path={Path}", commandsPath);
 
         // Looking for archives with command modules
         var moduleFiles = Directory.GetFiles(commandsPath, "*.pag", SearchOption.TopDirectoryOnly);
@@ -165,12 +165,6 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
                         _localizationService.RegisterModuleTranslations(
                             commandModule.ModuleId,
                             commandModule.DefaultTranslations);
-                        _logger.LogInformation(
-                            "Loaded command module: {ModuleName} v.{Version} with {CommandCount} commands",
-                            moduleType.Name,
-                            commandModule.Version,
-                            commandModule.ExportedCommands.Count
-                        );
                     }
                 }
                 catch (Exception ex)

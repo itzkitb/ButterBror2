@@ -64,7 +64,7 @@ public class CommandProcessor : ICommandProcessor
             result.ExecutionTime = stopwatch.Elapsed;
 
             _logger.LogInformation(
-                "Command '{CommandName}' executed by user {UserId} in {ExecutionTime}ms. Success: {Success}",
+                "Command executed by user. name='{CommandName}' uid='{UserId}' execution_time={ExecutionTime} success={Success}",
                 context.CommandName, user.UnifiedUserId, stopwatch.ElapsedMilliseconds, result.Success);
 
             // S4: Check banphrases
@@ -84,7 +84,7 @@ public class CommandProcessor : ICommandProcessor
                 if (!banphraseResult.Passed)
                 {
                     _logger.LogInformation(
-                        "Command result blocked by banphrase. Command: {Command}, User: {UserId}, Section: {Section}, Category: {Category}, Pattern: '{Pattern}', Phrase: '{Phrase}'",
+                        "Command result blocked by banphrase. command='{Command}', uid='{UserId}', section='{Section}', category='{Category}', pattern='{Pattern}', phrase='{Phrase}'",
                         context.CommandName,
                         user.UnifiedUserId,
                         banphraseResult.FailedSection,
@@ -99,7 +99,7 @@ public class CommandProcessor : ICommandProcessor
             }
             else
             {
-                _logger.LogInformation("Skipping the ban phrases check");
+                _logger.LogWarning("Skipping the ban phrases check");
             }
 
             if (commandMeta != null)
@@ -121,7 +121,7 @@ public class CommandProcessor : ICommandProcessor
         catch (Exception ex)
         {
             stopwatch.Stop();
-            _logger.LogError(ex, "Error processing command '{CommandName}' for user {UserId}",
+            _logger.LogError(ex, "Error processing command. name='{CommandName}', uid='{UserId}'",
                 context.CommandName, context.User.Id);
 
             return new CommandResult
@@ -162,7 +162,7 @@ public class CommandProcessor : ICommandProcessor
         var betweenUses = DateTime.UtcNow - lastUse;
         if (betweenUses != null && ((TimeSpan)betweenUses).TotalSeconds < commandMetadata.CooldownSeconds)
         {
-            _logger.LogDebug("Command cooldown. User: {UserId}, Command: {CommandId}, Seconds remain: {Seconds}, Command cooldown: {CooldownSeconds}",
+            _logger.LogDebug("Command cooldown. uid='{UserId}', cid='{CommandId}', remain={Seconds}, cooldown={CooldownSeconds}",
                 user.UnifiedUserId,
                 commandMetadata.Id,
                 ((TimeSpan)betweenUses).TotalSeconds,
@@ -173,7 +173,7 @@ public class CommandProcessor : ICommandProcessor
         _ = _userService.SetCommandLastUseAsync(commandMetadata.Id, user.UnifiedUserId, DateTime.UtcNow);
 
         // Yay
-        _logger.LogInformation("Command '{CommandName}' passed all validations", commandName);
+        _logger.LogInformation("Command passed all validations. name='{CommandName}'", commandName);
         return CommandResult.Successfully($"Command '{commandName}' is valid and ready for execution.");
     }
 }

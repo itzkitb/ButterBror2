@@ -35,7 +35,7 @@ public class CommandDispatcher : ICommandDispatcher
             var factory = _commandRegistry.GetCommandFactory(context.CommandName);
             if (factory == null)
             {
-                return CommandResult.Failure($"Command '{context.CommandName}' not found", sendResult: false);
+                return CommandResult.Failure($"Command not found. name='{context.CommandName}'", sendResult: false);
             }
 
             // S1: Create a command instance through a factory

@@ -2,6 +2,7 @@ using ButterBror.ChatModule;
 using ButterBror.ChatModules.Twitch.Commands;
 using ButterBror.ChatModules.Twitch.Events;
 using ButterBror.ChatModules.Twitch.Models;
+using ButterBror.ChatModules.Twitch.Services;
 using ButterBror.CommandModule.Commands;
 using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
@@ -14,7 +15,7 @@ using Polly.Registry;
 using TwitchLib.Api.Helix;
 using TwitchLib.Client.Events;
 
-namespace ButterBror.ChatModules.Twitch.Services;
+namespace ButterBror.ChatModules.Twitch;
 
 public class TwitchModule : IChatModule
 {
