@@ -10,8 +10,8 @@ public class CommandModuleManifest
     [JsonPropertyName("mainDll")]
     public string MainDll { get; set; } = string.Empty;
 
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
 
     [JsonPropertyName("version")]
     public string Version { get; set; } = string.Empty;

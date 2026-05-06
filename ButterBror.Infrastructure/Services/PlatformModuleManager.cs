@@ -110,8 +110,6 @@ public class PlatformModuleManager : IPlatformModuleManager
 
     private async Task LoadAndInitializeChatModulesAsync(IBotCore core, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Loading chat modules...");
-
         var chatModules = await _chatModuleLoader.LoadModulesAsync(cancellationToken);
 
         foreach (var module in chatModules)
@@ -268,8 +266,6 @@ public class PlatformModuleManager : IPlatformModuleManager
 
     public async Task<string> ReloadCommandModuleAsync(string moduleId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Reloading command module. id='{ModuleId}'", moduleId);
-
         // Find module in loaded command modules
         var existingModule = _loadedCommandModules.FirstOrDefault(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
         if (existingModule == null)
@@ -320,7 +316,7 @@ public class PlatformModuleManager : IPlatformModuleManager
                 );
             }
 
-            var result = $"Reloaded command module. id='{moduleId}'";
+            var result = $"Reloaded command module '{moduleId}'";
             _logger.LogInformation(result);
             return result;
         }

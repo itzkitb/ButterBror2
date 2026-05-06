@@ -213,7 +213,7 @@ public class BotStatsService : IBotStatsService
                     PropertyNameCaseInsensitive = true
                 };
                 _persistent = JsonSerializer.Deserialize<PersistentBotStats>(json, options) ?? new PersistentBotStats();
-                _logger.LogInformation("Statistics successfully loaded");
+                _logger.LogInformation("Loaded bot statistics");
             }
             catch (Exception ex)
             {

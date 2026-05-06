@@ -69,7 +69,7 @@ public class DashboardServer : IHostedService, IDisposable
             _listener = new HttpListener();
             _listener.Prefixes.Add($"http://{_opts.Address}:{_opts.Port}/");
             _listener.Start();
-            _logger.LogInformation("Dashboard successfully launched. url=http://{Address}:{Port}/", _opts.Address, _opts.Port);
+            _logger.LogInformation("Launched dashboard. url=http://{Address}:{Port}/", _opts.Address, _opts.Port);
 
             _listenerTask = Task.Run(() => AcceptLoopAsync(_cts.Token), _cts.Token);
             _metricsTask = Task.Run(() => MetricsLoopAsync(_cts.Token), _cts.Token);

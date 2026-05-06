@@ -22,7 +22,6 @@ public class PlatformModuleRegistry : IChatModuleRegistry
         }
 
         _modules.Add(module);
-        _logger.LogInformation("Registered platform module: {PlatformName}", module.ModuleId);
     }
 
     public IEnumerable<IChatModule> GetModules() => _modules.AsReadOnly();
@@ -37,7 +36,6 @@ public class PlatformModuleRegistry : IChatModuleRegistry
         }
 
         _modules.Remove(module);
-        _logger.LogInformation("Unregistered platform module: {PlatformName}", platformName);
         return true;
     }
 }

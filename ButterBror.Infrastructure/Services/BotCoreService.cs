@@ -29,12 +29,10 @@ public class BotCoreService : IBotCore
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting bot core...");
-
         await _userService.InitializeAsync(cancellationToken);
         await _moduleManager.InitializeAsync(this, cancellationToken);
 
-        _logger.LogInformation("Bot core started successfully");
+        _logger.LogInformation("Started bot core");
     }
 
     public async Task<CommandResult> ProcessCommandAsync(ICommandContext context)
@@ -46,7 +44,7 @@ public class BotCoreService : IBotCore
     {
         _cts.Cancel();
         await _moduleManager.ShutdownAsync(cancellationToken);
-        _logger.LogInformation("Bot core stopped successfully");
+        _logger.LogInformation("Stopped bot core");
     }
 
     public async Task RaiseMessageReceivedAsync(

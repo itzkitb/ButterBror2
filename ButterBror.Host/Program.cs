@@ -167,7 +167,7 @@ using (var scope = host.Services.CreateScope())
         await permManager.AddPermissionAsync(adminUser.UnifiedUserId, "su:*");
 
         logger.LogInformation(
-            "Dashboard admin initialized. unified_uid='{UserId}'",
+            "Initialized dashboard admin. unified_uid='{UserId}'",
             adminUser.UnifiedUserId);
     }
     catch (Exception ex)

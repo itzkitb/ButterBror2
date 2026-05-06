@@ -23,7 +23,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
     private readonly SemaphoreSlim _reloadLock = new(1, 1);
     private bool _disposed;
 
-    private const string ManifestFileName = "module.manifest.json";
+    private const string ManifestFileName = "bbmanifest.json";
 
     public CommandModuleLoader(
         IAppDataPathProvider pathProvider,
@@ -100,7 +100,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
             {
                 var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
                 manifest = JsonSerializer.Deserialize<CommandModuleManifest>(manifestJson);
-                _logger.LogDebug("Loaded manifest: {ManifestName} v.{ManifestVersion}", manifest?.Name, manifest?.Version);
+                _logger.LogDebug("Loaded manifest: {ManifestName} v.{ManifestVersion}", manifest?.Id, manifest?.Version);
             }
 
             // S1: Finding main DLL
@@ -135,7 +135,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
             _logger.LogDebug("Found main module DLL: {Dll}", mainDll);
 
             // S2: Creating isolated context
-            var moduleName = manifest?.Name ?? Path.GetFileNameWithoutExtension(path);
+            var moduleName = manifest?.Id ?? Path.GetFileNameWithoutExtension(path);
             var loadContext = new ModuleAssemblyLoadContext(moduleName, tempDir, isCollectible: true, _logger);
             _loadContexts.Add(loadContext);
 
@@ -251,8 +251,6 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
         await _reloadLock.WaitAsync(cancellationToken);
         try
         {
-            _logger.LogInformation("Reloading command module: {ModuleId}", moduleId);
-
             // S0: Find module in loaded modules
             var existingModule = _loadedModules.FirstOrDefault(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
             string? archivePath = null;
@@ -262,7 +260,6 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
                 // S1: Get archive path from mapping
                 if (!_moduleIdToArchivePath.TryGetValue(moduleId, out archivePath) || !File.Exists(archivePath))
                 {
-                    _logger.LogError("Module file not found for '{ModuleId}'", moduleId);
                     throw new FileNotFoundException($"Module file not found for '{moduleId}'");
                 }
 
@@ -272,7 +269,8 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
                 await existingModule.ShutdownAsync();
 
                 // S3: Find and unload the corresponding load context
-                var contextToUnload = _loadContexts.FirstOrDefault(c => c.Name.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
+                var contextToUnload = _loadContexts.FirstOrDefault(c =>
+                    _loadedModules.Any(m => m.ModuleId == moduleId));
                 if (contextToUnload != null)
                 {
                     contextToUnload.Unload();
@@ -328,7 +326,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
                             {
                                 var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
                                 var manifest = JsonSerializer.Deserialize<CommandModuleManifest>(manifestJson);
-                                if (manifest?.Name?.Equals(moduleId, StringComparison.OrdinalIgnoreCase) == true)
+                                if (manifest?.Id?.Equals(moduleId, StringComparison.OrdinalIgnoreCase) == true)
                                 {
                                     archivePath = file;
                                     break;
@@ -366,8 +364,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
             // S8: Load module
             _logger.LogDebug("Loading module: {Path}", archivePath);
             var newModules = await LoadModuleFromArchiveAsync(archivePath, cancellationToken);
-
-            _logger.LogInformation("Reloaded command module '{ModuleId}': {Count} module(s) loaded", moduleId, newModules.Count);
+            _loadedModules.AddRange(newModules);
 
             return newModules;
         }
