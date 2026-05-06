@@ -19,11 +19,8 @@
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="ButterBror.Tools.Analyzer/ButterBror.Tools.Analyzer.csproj" />
-    <Project Path="ButterBror.Tools.Generator/ButterBror.Tools.Generator.csproj" />
-    <Project Path="ButterBror.Tools.Migrator/ButterBror.Tools.Migrator.csproj" />
     <Project Path="ButterBror.Tools.Updater/ButterBror.Tools.Updater.csproj" />
   </Folder>
-  <Project Path="ButterBror.AI/ButterBror.AI.csproj" />
   <Project Path="ButterBror.Application/ButterBror.Application.csproj" />
   <Project Path="ButterBror.Core/ButterBror.Core.csproj" />
   <Project Path="ButterBror.Dashboard/ButterBror.Dashboard.csproj" />
