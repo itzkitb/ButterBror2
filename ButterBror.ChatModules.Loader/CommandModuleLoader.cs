@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Runtime.Loader;
 using System.Text.Json;
@@ -18,7 +19,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
     private readonly ILocalizationService _localizationService;
     private readonly List<AssemblyLoadContext> _loadContexts = new();
     private readonly List<ICommandModule> _loadedModules = new();
-    private readonly List<string> _tempDirectories = new();
+    private readonly ConcurrentBag<string> _tempDirectories = new();
     private readonly Dictionary<string, string> _moduleIdToArchivePath = new();
     private readonly SemaphoreSlim _reloadLock = new(1, 1);
     private bool _disposed;
@@ -37,7 +38,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
         _localizationService = localizationService;
     }
 
-    public async Task<IReadOnlyList<ICommandModule>> LoadModulesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ICommandModule>> LoadModulesAsync(CancellationToken ct = default)
     {
         _loadedModules.Clear();
         _loadContexts.Clear();
@@ -46,36 +47,28 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
         
         if (!Directory.Exists(commandsPath))
         {
-            _logger.LogInformation("Commands directory does not exist: {Path}. Creating...", commandsPath);
             Directory.CreateDirectory(commandsPath);
             return Array.Empty<ICommandModule>();
         }
 
-        _logger.LogInformation("Loading command modules. path={Path}", commandsPath);
+        _logger.LogInformation("Loading command modules. path='{Path}'", commandsPath);
 
         // Looking for archives with command modules
         var moduleFiles = Directory.GetFiles(commandsPath, "*.pag", SearchOption.TopDirectoryOnly);
         
         if (moduleFiles.Length == 0)
         {
-            _logger.LogInformation("No command modules found in {Path}", commandsPath);
+            _logger.LogInformation("No command modules found. path='{Path}'", commandsPath);
             return Array.Empty<ICommandModule>();
         }
 
-        foreach (var file in moduleFiles)
-        {
-            try
-            {
-                var modules = await LoadModuleFromArchiveAsync(file, cancellationToken);
-                _loadedModules.AddRange(modules);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load command module from: {File}", file);
-            }
-        }
+        var tasks = moduleFiles.Select(file => LoadModuleFromArchiveAsync(file, ct));
+        var results = await Task.WhenAll(tasks);
 
-        _logger.LogInformation("Loaded {Count} command module(s)", _loadedModules.Count);
+        var allModules = results.SelectMany(r => r).ToList();
+        _loadedModules.AddRange(allModules);
+
+        _logger.LogInformation("Loaded command modules. count={Count}", _loadedModules.Count);
         return _loadedModules.AsReadOnly();
     }
 
@@ -83,7 +76,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
     {
         var modules = new List<ICommandModule>();
 
-        var tempDir = Path.Combine(Path.GetTempPath(), $"ButterBror_Command_{Guid.NewGuid()}");
+        var tempDir = Path.Combine(Path.GetTempPath(), "ButterBror", $"CommandModule_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);
         _tempDirectories.Add(tempDir);
 
@@ -288,7 +281,6 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
                     try
                     {
                         Directory.Delete(tempDirToDelete, recursive: true);
-                        _tempDirectories.Remove(tempDirToDelete);
                         _logger.LogDebug("Deleted temp directory: {TempDir}", tempDirToDelete);
                     }
                     catch (Exception ex)

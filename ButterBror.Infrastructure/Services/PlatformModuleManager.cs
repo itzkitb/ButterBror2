@@ -51,27 +51,27 @@ public class PlatformModuleManager : IPlatformModuleManager
         _logger = logger;
     }
 
-    public async Task InitializeAsync(IBotCore core, CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(IBotCore core, CancellationToken ct = default)
     {
         _core = core;
 
         // Initialize built-in modules from DI container
-        var builtInModules = _serviceProvider.GetServices<IChatModule>();
-        foreach (var module in builtInModules)
+        var builtInModules = _serviceProvider.GetServices<IChatModule>().ToList();
+        var builtInTasks = builtInModules.Select(async module =>
         {
-            try
-            {
-                await InitializeModuleAsync(module, core);
-            }
+            try { await InitializeModuleAsync(module, core); }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize built-in platform module. name='{PlatformName}'", module.ModuleId);
+                _logger.LogError(ex, "Failed to initialize built-in module. name='{Id}'", module.ModuleId);
             }
-        }
+        });
+        await Task.WhenAll(builtInTasks);
 
-        // Load and initialize modules from DLL files
-        await LoadAndInitializeChatModulesAsync(core, cancellationToken);
-        await LoadAndInitializeCommandModulesAsync(cancellationToken);
+        // 2. Загрузка chat и command модулей параллельно
+        await Task.WhenAll(
+            LoadAndInitializeChatModulesAsync(core, ct),
+            LoadAndInitializeCommandModulesAsync(ct)
+        );
     }
 
     private async Task LoadAndInitializeCommandModulesAsync(CancellationToken cancellationToken)

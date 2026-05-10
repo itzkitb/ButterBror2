@@ -27,10 +27,12 @@ public class BotCoreService : IBotCore
         _logger = logger;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken = default)
+    public async Task StartAsync(CancellationToken ct = default)
     {
-        await _userService.InitializeAsync(cancellationToken);
-        await _moduleManager.InitializeAsync(this, cancellationToken);
+        await Task.WhenAll(
+            _userService.InitializeAsync(ct),
+            _moduleManager.InitializeAsync(this, ct)
+        );
 
         _logger.LogInformation("Started bot core");
     }
@@ -40,10 +42,10 @@ public class BotCoreService : IBotCore
         return await _commandProcessor.ProcessCommandAsync(context);
     }
 
-    public async Task StopAsync(CancellationToken cancellationToken = default)
+    public async Task StopAsync(CancellationToken ct = default)
     {
         _cts.Cancel();
-        await _moduleManager.ShutdownAsync(cancellationToken);
+        await _moduleManager.ShutdownAsync(ct);
         _logger.LogInformation("Stopped bot core");
     }
 

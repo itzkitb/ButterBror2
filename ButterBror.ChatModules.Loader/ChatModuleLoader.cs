@@ -1,6 +1,7 @@
 using ButterBror.ChatModule;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.Loader;
@@ -9,7 +10,7 @@ using System.Text.Json;
 namespace ButterBror.Modules.Loader;
 
 /// <summary>
-/// Implementing a CML
+/// Loader for dynamic chat modules
 /// </summary>
 public class ChatModuleLoader : IChatModuleLoader, IDisposable
 {
@@ -19,7 +20,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
     private readonly ILocalizationService _localizationService;
     private readonly List<AssemblyLoadContext> _loadContexts = new();
     private readonly List<IChatModule> _loadedModules = new();
-    private readonly List<string> _tempDirectories = new();
+    private readonly ConcurrentBag<string> _tempDirectories = new();
     private readonly Dictionary<string, string> _moduleToArchivePath = new();
     private readonly SemaphoreSlim _reloadLock = new(1, 1);
     private bool _disposed;
@@ -38,41 +39,35 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         _localizationService = localizationService;
     }
 
-    public async Task<IReadOnlyList<IChatModule>> LoadModulesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<IChatModule>> LoadModulesAsync(CancellationToken ct = default)
     {
         _loadedModules.Clear();
         _loadContexts.Clear();
 
-        var chatModulesPath = Path.Combine(_pathProvider.GetAppDataPath(), "Chat");
+        var chatsPath = Path.Combine(_pathProvider.GetAppDataPath(), "Chat");
 
-        if (!Directory.Exists(chatModulesPath))
+        if (!Directory.Exists(chatsPath))
         {
-            _logger.LogInformation("Chat modules directory does not exist. I'm creating this for you");
-            Directory.CreateDirectory(chatModulesPath);
+            Directory.CreateDirectory(chatsPath);
             return Array.Empty<IChatModule>();
         }
 
+        _logger.LogInformation("Loading chat modules. path='{Path}'", chatsPath);
+
         // Looking for archives with modules
-        var moduleFiles = Directory.GetFiles(chatModulesPath, "*.pag", SearchOption.TopDirectoryOnly);
+        var moduleFiles = Directory.GetFiles(chatsPath, "*.pag", SearchOption.TopDirectoryOnly);
 
         if (moduleFiles.Length == 0)
         {
-            _logger.LogInformation("No chat modules found. path='{Path}'", chatModulesPath);
+            _logger.LogInformation("No chat modules found. path='{Path}'", chatsPath);
             return Array.Empty<IChatModule>();
         }
 
-        foreach (var file in moduleFiles)
-        {
-            try
-            {
-                var modules = await LoadModuleFromArchiveAsync(file, cancellationToken);
-                _loadedModules.AddRange(modules);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load module. module='{File}'", file);
-            }
-        }
+        var tasks = moduleFiles.Select(file => LoadModuleFromArchiveAsync(file, ct));
+        var results = await Task.WhenAll(tasks);
+
+        var allModules = results.SelectMany(r => r).ToList();
+        _loadedModules.AddRange(allModules);
 
         _logger.LogInformation("Loaded chat modules. count={Count}", _loadedModules.Count);
         return _loadedModules.AsReadOnly();
@@ -83,7 +78,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         var modules = new List<IChatModule>();
 
         // Create a temporary directory
-        var tempDir = Path.Combine(Path.GetTempPath(), $"ButterBror_Module_{Guid.NewGuid()}");
+        var tempDir = Path.Combine(Path.GetTempPath(), "ButterBror", $"ChatModule_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);
         _tempDirectories.Add(tempDir);
 
@@ -277,7 +272,6 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     try
                     {
                         Directory.Delete(tempDirToDelete, recursive: true);
-                        _tempDirectories.Remove(tempDirToDelete);
                         _logger.LogDebug("Deleted temp directory. path='{TempDir}'", tempDirToDelete);
                     }
                     catch (Exception ex)
