@@ -7,11 +7,13 @@ using ButterBror.CommandModule.Commands;
 using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
+using ButterBror.Data;
 using ButterBror.Domain.Chat;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.Registry;
+using System.Collections.Concurrent;
 using TwitchLib.Api.Helix;
 using TwitchLib.Client.Events;
 
@@ -20,21 +22,27 @@ namespace ButterBror.ChatModules.Twitch;
 public class TwitchModule : IChatModule
 {
     public string ModuleId => "sillyapps:twitch";
-    public Version Version => new(1, 0, 0);
+    public Version Version => new(1, 0, 1);
     private Func<ICommand> _joinCommandFactory = null!;
     private Func<ICommand> _partCommandFactory = null!;
+    private Func<ICommand> _setPrefixCommandFactory = null!;
 
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => new List<ModuleCommandExport>
     {
         new ModuleCommandExport("join", _joinCommandFactory, new JoinChannelCommandMetadata()),
-        new ModuleCommandExport("part", _partCommandFactory, new PartChannelCommandMetadata())
+        new ModuleCommandExport("part", _partCommandFactory, new PartChannelCommandMetadata()),
+        new ModuleCommandExport("setprefix", _setPrefixCommandFactory, new SetPrefixCommandMetadata())
     };
 
     private ITwitchClient _twitchClient = null!;
     private IBotCore _botCore = null!;
     private ILogger<TwitchModule> _logger = null!;
     private TwitchConfiguration _config = null!;
+    private ICustomDataRepository _db = null!;
     private IDashboardBridge? _dashboardBridge;
+
+    private readonly ConcurrentDictionary<string, string> _prefixCache
+        = new(StringComparer.Ordinal);
 
     public void InitializeWithServices(IServiceProvider serviceProvider)
     {
@@ -44,6 +52,7 @@ public class TwitchModule : IChatModule
         var options = Options.Create(config);
         _config = options.Value;
 
+        _db = serviceProvider.GetRequiredService<ICustomDataRepository>();
         _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
         _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
 
@@ -56,6 +65,7 @@ public class TwitchModule : IChatModule
         // Updating factories
         _joinCommandFactory = () => new JoinChannelCommand(_twitchClient);
         _partCommandFactory = () => new PartChannelCommand(_twitchClient);
+        _setPrefixCommandFactory = () => new SetPrefixCommand(this);
     }
 
     public async Task InitializeAsync(IBotCore core)
@@ -133,34 +143,36 @@ public class TwitchModule : IChatModule
     {
         // Notify dashboard
         _dashboardBridge?.IncrementMessageCount();
+        var chatMessage = e.ChatMessage;
 
         var extra = System.Text.Json.JsonSerializer.Serialize(new
         {
-            e.ChatMessage.IsModerator,
-            e.ChatMessage.IsBroadcaster,
-            e.ChatMessage.IsSubscriber,
-            e.ChatMessage.IsVIP,
-            e.ChatMessage.Color,
-            e.ChatMessage.Channel,
-            e.ChatMessage.ChannelId,
-            e.ChatMessage.Badges
+            chatMessage.IsModerator,
+            chatMessage.IsBroadcaster,
+            chatMessage.IsSubscriber,
+            chatMessage.IsVIP,
+            chatMessage.Color,
+            chatMessage.Channel,
+            chatMessage.ChannelId,
+            chatMessage.Badges
         });
 
         await _botCore.RaiseMessageReceivedAsync(
             ModuleId,
             new IncomingChatMessage(
-                Text: e.ChatMessage.Message,
+                Text: chatMessage.Message,
                 ExtraData: extra,
                 ReceivedAt: DateTime.UtcNow,
-                PlatformUserId: e.ChatMessage.UserId,
-                PlatformUserName: e.ChatMessage.Username,
-                PlatformChatId: e.ChatMessage.ChannelId,
-                PlatformChatName: e.ChatMessage.Channel
+                PlatformUserId: chatMessage.UserId,
+                PlatformUserName: chatMessage.Username,
+                PlatformChatId: chatMessage.ChannelId,
+                PlatformChatName: chatMessage.Channel
             ),
             platform: ModuleId
         );
 
-        if (TryParseCommand(e.ChatMessage.Message, out var commandName, out var arguments))
+        var prefix = await GetChannelPrefixAsync(chatMessage.ChannelId);
+        if (TryParseCommand(e.ChatMessage.Message, prefix, out var commandName, out var arguments))
         {
             var context = CreateCommandContext(e.ChatMessage, commandName, arguments);
             var result = await _botCore.ProcessCommandAsync(context).ConfigureAwait(false);
@@ -185,27 +197,56 @@ public class TwitchModule : IChatModule
         }
     }
 
-    private bool TryParseCommand(string message, out string commandName, out string[] arguments)
+    private bool TryParseCommand(string message, string prefix, out string commandName, out string[] arguments)
     {
         commandName = string.Empty;
         arguments = Array.Empty<string>();
 
-        if (string.IsNullOrWhiteSpace(message) || !message.StartsWith('!'))
+        if (string.IsNullOrWhiteSpace(message) || !message.StartsWith(prefix))
         {
             return false;
         }
 
-        var parts = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string cleanMessage = message.Substring(prefix.Length).TrimStart();
+
+        var parts = cleanMessage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)
         {
             return false;
         }
 
-        commandName = parts[0].TrimStart('!');
+        commandName = parts[0];
         arguments = parts.Skip(1).ToArray();
 
         return !string.IsNullOrWhiteSpace(commandName);
     }
+
+    private async Task<string> GetChannelPrefixAsync(string channelId)
+    {
+        if (_prefixCache.TryGetValue(channelId, out var cached))
+            return cached;
+
+        try
+        {
+            var stored = await _db.GetDataAsync(SetPrefixCommand.GetPrefixKey(channelId));
+            var prefix = !string.IsNullOrWhiteSpace(stored)
+                ? stored
+                : _config.CommandPrefix;
+
+            _prefixCache[channelId] = prefix;
+            return prefix;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[TW] Failed to load prefix from Redis for #{ChannelId}, using default '{Default}'",
+                channelId, _config.CommandPrefix);
+            return _config.CommandPrefix;
+        }
+    }
+
+    public void InvalidatePrefixCache(string channelId)
+        => _prefixCache.TryRemove(channelId, out _);
 
     private async void OnNewSubscriber(object? sender, Events.OnNewSubscriberArgs e)
     {

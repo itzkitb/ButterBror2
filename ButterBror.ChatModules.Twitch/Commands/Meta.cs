@@ -28,3 +28,16 @@ internal class PartChannelCommandMetadata : ICommandMetadata
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
     public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch" };
 }
+
+// Metadata for setprefix command
+internal class SetPrefixCommandMetadata : ICommandMetadata
+{
+    public string Name => "setprefix";
+    public List<string> Aliases => new List<string> { "prefix", "sp" };
+    public int CooldownSeconds => 10;
+    public List<string> RequiredPermissions => new List<string> { "su:twitch:prefix" };
+    public string ArgumentsHelpText => "<prefix>";
+    public string Id => "sillyapps:twitch:setprefix";
+    public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
+    public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch" };
+}

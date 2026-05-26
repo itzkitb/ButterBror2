@@ -7,4 +7,5 @@ public class TwitchConfiguration
     public string Channel { get; set; } = string.Empty;
     public string ClientId { get; set; } = string.Empty;
     public bool IsEnabled { get; set; } = true;
+    public string CommandPrefix { get; set; } = "!";
 }
