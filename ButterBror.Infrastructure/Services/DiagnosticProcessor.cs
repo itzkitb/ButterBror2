@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
@@ -21,27 +21,6 @@ public interface IDiagnosticTextProcessor
     void ProcessText(string input);
 }
 // thx chatgpf
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /*
  *                     -*-                          

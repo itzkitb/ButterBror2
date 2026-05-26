@@ -676,9 +676,9 @@ internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader, IDisp
                     
                     foreach (var sensor in hardware.Sensors)
                     {
-                        if (sensor.SensorType == 
+                        if ((sensor.SensorType == 
                             SensorType.Temperature &&
-                            sensor.Name.Contains("Core") || 
+                            sensor.Name.Contains("Core")) || 
                             sensor.Name.Contains("Package") ||
                             sensor.Name.Contains("Tdie"))
                         {
