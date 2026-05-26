@@ -64,14 +64,14 @@ ASSEMBLY_EXTENSIONS = {".dll", ".pdb"}
 DEFAULT_TARGET_FRAMEWORK = "net10.0"
 
 APP_DATA_VENDOR = "SillyApps"
-APP_DATA_APP    = "ButterBror2"
+APP_DATA_APP = "ButterBror2"
 
 # ---------------------------------------------------------------------------
 # Module type descriptor
 # ---------------------------------------------------------------------------
 
 class ModuleType(Enum):
-    CHAT    = "chat"
+    CHAT = "chat"
     COMMAND = "command"
 
 
@@ -96,7 +96,7 @@ COMMAND_TYPE = ModuleTypeConfig(
 )
 
 MODULE_TYPES: dict = {
-    ModuleType.CHAT.value:    CHAT_TYPE,
+    ModuleType.CHAT.value: CHAT_TYPE,
     ModuleType.COMMAND.value: COMMAND_TYPE,
 }
 
@@ -140,24 +140,24 @@ class Colors:
         (sys.stdout.isatty() and platform.system() != "Windows")
         or os.environ.get("FORCE_COLOR")
     )
-    RESET  = "\033[0m"  if _enabled else ""
-    BOLD   = "\033[1m"  if _enabled else ""
-    GREEN  = "\033[32m" if _enabled else ""
+    RESET = "\033[0m" if _enabled else ""
+    BOLD = "\033[1m" if _enabled else ""
+    GREEN = "\033[32m" if _enabled else ""
     YELLOW = "\033[33m" if _enabled else ""
-    RED    = "\033[31m" if _enabled else ""
-    CYAN   = "\033[36m" if _enabled else ""
-    DIM    = "\033[2m"  if _enabled else ""
+    RED = "\033[31m" if _enabled else ""
+    CYAN = "\033[36m" if _enabled else ""
+    DIM = "\033[2m" if _enabled else ""
 
 
 def log(msg: str, color: str = "") -> None:
     print(f"{color}{msg}{Colors.RESET}")
 
 def info(msg: str) -> None: log(f"  {msg}", Colors.CYAN)
-def ok(msg: str)   -> None: log(f"  \u2713 {msg}", Colors.GREEN)
+def ok(msg: str) -> None: log(f"  \u2713 {msg}", Colors.GREEN)
 def warn(msg: str) -> None: log(f"  \u26a0 {msg}", Colors.YELLOW)
-def err(msg: str)  -> None: log(f"  \u2717 {msg}", Colors.RED)
+def err(msg: str) -> None: log(f"  \u2717 {msg}", Colors.RED)
 def step(msg: str) -> None: log(f"\n{Colors.BOLD}{msg}{Colors.RESET}")
-def dim(msg: str)  -> None: log(f"    {msg}", Colors.DIM)
+def dim(msg: str) -> None: log(f"    {msg}", Colors.DIM)
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ def find_project_root(start: Path) -> Path:
 def is_core_assembly(filename: str) -> bool:
     """Returns True if `filename` is a core host assembly that must NOT be bundled"""
     stem = Path(filename).stem
-    ext  = Path(filename).suffix.lower()
+    ext = Path(filename).suffix.lower()
 
     if ext not in ASSEMBLY_EXTENSIONS:
         return False
@@ -300,12 +300,12 @@ def run_dotnet_build(
 def create_manifest(module_config: ModuleConfig) -> dict:
     """Builds the manifest dict."""
     return {
-        "mainDll":     module_config.main_dll,
-        "name":        module_config.project_name,
-        "version":     module_config.version,
+        "mainDll": module_config.main_dll,
+        "name": module_config.project_name,
+        "version": module_config.version,
         "description": module_config.description
                        or f"{module_config.name} {module_config.type_cfg.label.lower()} module for ButterBror2",
-        "author":      module_config.author,
+        "author": module_config.author,
     }
 
 
@@ -419,7 +419,7 @@ def build_and_package_module(
         step(f"5/5  Installing to AppData/{type_cfg.appdata_subdir}")
         try:
             install_path = get_install_path(type_cfg)
-            install_pag  = install_path / f"{module_config.project_name}.pag"
+            install_pag = install_path / f"{module_config.project_name}.pag"
             info(f"Install target: {install_pag}")
 
             if dry_run:
@@ -554,7 +554,7 @@ def main() -> int:
     )
 
     output_dir = Path(args.output).resolve() if args.output else None
-    install    = not args.no_install
+    install = not args.no_install
 
     # Process
     try:
