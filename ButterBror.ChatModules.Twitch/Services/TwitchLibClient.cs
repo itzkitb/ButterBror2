@@ -53,7 +53,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         SetupClient();
         SetupSubscribes();
 
-        _logger.LogInformation("Hello, Twitch! <3");
+        _logger.LogInformation("[TWC] Hello, world!");
     }
 
     private void SetupClient()
@@ -87,7 +87,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
         try
         {
-            _logger.LogInformation("Attempting to connect to Twitch channel: {Channel}", channel);
+            _logger.LogInformation("[TWC] JOIN #{Channel}", channel);
 
             // Config check
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(oauthToken) || string.IsNullOrWhiteSpace(clientId))
@@ -116,14 +116,14 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
             await connectTask;
 
-            _logger.LogInformation("Successfully connected to Twitch channel: {Channel}", channel);
+            _logger.LogInformation("[TWC] JOINED #{Channel}", channel);
 
             _ = InitializeAPI(clientId, oauthToken);
             _ = InitializeEventSub();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to connect to Twitch channel: {Channel}", channel);
+            _logger.LogError(ex, "[TWC] Failed to connect to channel #{Channel}", channel);
             throw;
         }
     }
@@ -137,7 +137,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         _id = await _twitchPipeline.ExecuteAsync(async ct =>
             (await _clientAPI.Helix.Users.GetUsersAsync(logins: [_username])).Users[0].Id
         );
-        _logger.LogInformation("Twitch API initialized");
+        _logger.LogInformation("[TWC] API initialized");
     }
 
     private async Task InitializeEventSub()
@@ -167,7 +167,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
         // Connect to the EventSub
         await _eventSubClient.ConnectAsync();
-        _logger.LogInformation("Twitch EventSub initialized");
+        _logger.LogInformation("[TWC] EventSub initialized");
     }
 
     public async Task DisconnectAsync()
@@ -179,12 +179,12 @@ public class TwitchLibClient : ITwitchClient, IDisposable
             if (_client.IsConnected)
             {
                 await _client.DisconnectAsync();
-                _logger.LogInformation("Bye bye Twitch peepoSad");
+                _logger.LogInformation("[TWC] Bye bye");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during Twitch disconnection");
+            _logger.LogError(ex, "[TWC] Error during disconnection");
         }
     }
 
@@ -199,11 +199,11 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         try
         {
             await _client.JoinChannelAsync(channel);
-            _logger.LogInformation("Joining channel: {Channel}", channel);
+            _logger.LogInformation("[TWC] Joining #{Channel}", channel);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to join channel {Channel}", channel);
+            _logger.LogError(ex, "[TWC] Failed to join #{Channel}", channel);
             throw;
         }
     }
@@ -219,11 +219,11 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         try
         {
             await _client.LeaveChannelAsync(channel);
-            _logger.LogInformation("Leaving channel: {Channel}", channel);
+            _logger.LogInformation("[TWC] Leaving #{Channel}", channel);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to leave channel {Channel}", channel);
+            _logger.LogError(ex, "[TWC] Failed to leave #{Channel}", channel);
             throw;
         }
     }
@@ -248,11 +248,11 @@ public class TwitchLibClient : ITwitchClient, IDisposable
             }
 
             await _client.SendMessageAsync(channel, sanitizedMessage);
-            _logger.LogDebug("Sent message to channel {Channel}: {Message}", channel, sanitizedMessage);
+            _logger.LogDebug("[TWC] Sent message to #{Channel}: \"{Message}\"", channel, sanitizedMessage);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send message to channel {Channel}", channel);
+            _logger.LogError(ex, "[TWC] Failed to send message to #{Channel}", channel);
             throw;
         }
     }
@@ -272,11 +272,11 @@ public class TwitchLibClient : ITwitchClient, IDisposable
             await _twitchPipeline.ExecuteAsync(async ct =>
                 await _clientAPI.Helix.Whispers.SendWhisperAsync(_id, recipientUserId, message, true)
             );
-            _logger.LogDebug("Sent whisper to {Recipient}: {Message}", recipientUserId, sanitizedMessage);
+            _logger.LogDebug("[TWC] Sent whisper to {Recipient}: \"{Message}\"", recipientUserId, sanitizedMessage);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send whisper to {Recipient}", recipientUserId);
+            _logger.LogError(ex, "[TWC] Failed to send whisper to {Recipient}", recipientUserId);
             throw;
         }
     }
@@ -307,7 +307,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling Twitch message received event");
+            _logger.LogError(ex, "[TWC] Error handling Twitch message");
         }
     }
 
@@ -315,33 +315,33 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         try
         {
-            _logger.LogInformation("Connected to Twitch IRC server");
+            _logger.LogInformation("[TWC] Connected to IRC");
             OnConnected?.Invoke(this, e);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling Twitch connected event");
+            _logger.LogError(ex, "[TWC] Error handling IRC");
         }
     }
 
     private async Task OnTwitchDisconnected(object? sender, OnDisconnectedArgs e)
     {
-        _logger.LogWarning("Disconnected from Twitch");
+        _logger.LogWarning("[TWC] Disconnected");
     }
 
     private async Task OnTwitchConnectionError(object? sender, OnConnectionErrorArgs e)
     {
-        _logger.LogError("Twitch connection error: {Error}", e.Error);
+        _logger.LogError("[TWC] Connection error: {Error}", e.Error);
     }
 
     private async Task OnTwitchJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
-        _logger.LogInformation("Joined channel: {Channel}", e.Channel);
+        _logger.LogInformation("[TWC] Joined #{Channel}", e.Channel);
     }
 
     private async Task OnTwitchLeftChannel(object? sender, OnLeftChannelArgs e)
     {
-        _logger.LogInformation("Left channel: {Channel}", e.Channel);
+        _logger.LogInformation("[TWC] Parted #{Channel}", e.Channel);
     }
 
     private async Task OnTwitchNewSubscriber(object? sender, TwitchLib.Client.Events.OnNewSubscriberArgs e)
@@ -359,7 +359,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling new subscriber event");
+            _logger.LogError(ex, "[TWC] Error handling new subscriber event");
         }
     }
 
@@ -378,7 +378,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling gifted subscription event");
+            _logger.LogError(ex, "[TWC] Error handling gifted subscription event");
         }
     }
 
@@ -396,7 +396,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling raid notification event");
+            _logger.LogError(ex, "[TWC] Error handling raid notification event");
         }
     }
 
@@ -415,7 +415,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling bits received event");
+            _logger.LogError(ex, "[TWC] Error handling bits received event");
         }
     }
 
@@ -459,11 +459,11 @@ public class TwitchLibClient : ITwitchClient, IDisposable
                 _client.OnRaidNotification -= OnTwitchRaidNotification;
                 _client.OnBitsBadgeTier -= OnTwitchBitsReceived;
 
-                _logger.LogInformation("TwitchLib client disposed successfully");
+                _logger.LogInformation("[TWC] Client disposed successfully");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during Twitch client disposal");
+                _logger.LogError(ex, "[TWC] Error during client disposal");
             }
         }
 

@@ -79,7 +79,7 @@ public class TwitchModule : IChatModule
         {
             if (string.IsNullOrWhiteSpace(_config.OauthToken))
             {
-                _logger.LogError("Twitch OAuth token is missing. Module will not start.");
+                _logger.LogError("[TW] OAuth token is missing. Module will not start!");
                 return;
             }
 
@@ -89,27 +89,27 @@ public class TwitchModule : IChatModule
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize Twitch module");
+                _logger.LogError(ex, "[TW] Failed to initialize module");
                 throw;
             }
         }
         else
         {
-            _logger.LogWarning("Twitch module is disabled in configuration");
+            _logger.LogWarning("[TW] Module is disabled in configuration");
         }
     }
 
     private async void OnConnected(object? sender, OnConnectedEventArgs e)
     {
         _ = SafeHandleConnectAsync(e).ContinueWith(
-            t => _logger.LogError(t.Exception, "Unhandled exception in connect handler"),
+            t => _logger.LogError(t.Exception, "[TW] Unhandled exception in connect handler"),
             TaskContinuationOptions.OnlyOnFaulted
         );
     }
 
     private async Task SafeHandleConnectAsync(OnConnectedEventArgs e)
     {
-        _logger.LogInformation("Connected to Twitch: {Username}", e.BotUsername);
+        _logger.LogInformation("[TW] Connected! My name is {Username}", e.BotUsername);
         if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
         {
             await libClient.SendMessageAsync(_config.Channel, $"Bot connected successfully!");
@@ -118,13 +118,13 @@ public class TwitchModule : IChatModule
 
     private async void OnDisconnected(object? sender, OnDisconnectedArgs e)
     {
-        _logger.LogWarning("Disconnected from Twitch");
+        _logger.LogWarning("[TW] Disconnected");
     }
 
     private void OnMessageReceived(object? sender, Events.OnMessageReceivedArgs e)
     {
         _ = SafeHandleMessageAsync(e).ContinueWith(
-            t => _logger.LogError(t.Exception, "Unhandled exception in message handler"),
+            t => _logger.LogError(t.Exception, "[TW] Unhandled exception in message handler"),
             TaskContinuationOptions.OnlyOnFaulted
         );
     }
@@ -167,7 +167,7 @@ public class TwitchModule : IChatModule
 
             if (!result.SendResult)
             {
-                _logger.LogInformation("The command has requested not to send the result: {result}", result.Message ?? "[]");
+                _logger.LogInformation("[TW] Not sent due to reply flag: {result}", result.Message ?? "[]");
                 return;
             }
 
@@ -179,7 +179,7 @@ public class TwitchModule : IChatModule
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to send command result back to channel {Channel}", e.ChatMessage.Channel);
+                    _logger.LogError(ex, "[TW] Failed to send command result back to #{Channel}", e.ChatMessage.Channel);
                 }
             }
         }
@@ -217,7 +217,7 @@ public class TwitchModule : IChatModule
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send subscriber message");
+                _logger.LogError(ex, "[TW] Failed to send subscriber message");
             }
         }
     }
@@ -232,7 +232,7 @@ public class TwitchModule : IChatModule
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send gifted subscription message");
+                _logger.LogError(ex, "[TW] Failed to send gifted subscription message");
             }
         }
     }
@@ -247,7 +247,7 @@ public class TwitchModule : IChatModule
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send raid notification message");
+                _logger.LogError(ex, "[TW] Failed to send raid notification message");
             }
         }
     }
@@ -262,7 +262,7 @@ public class TwitchModule : IChatModule
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send bits message");
+                _logger.LogError(ex, "[TW] Failed to send bits message");
             }
         }
     }
@@ -298,6 +298,6 @@ public class TwitchModule : IChatModule
         }
 
         await _twitchClient.DisconnectAsync();
-        _logger.LogInformation("Twitch module shutdown complete");
+        _logger.LogInformation("[TW] Module shutdown complete");
     }
 }

@@ -1,6 +1,6 @@
 using ButterBror.Domain;
 
-namespace ButterBror.ChatModules.Twitch.Services;
+namespace ButterBror.ChatModules.Twitch.Models;
 
 public class TwitchChannel : IPlatformChannel
 {

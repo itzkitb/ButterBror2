@@ -1,4 +1,4 @@
-namespace ButterBror.ChatModules.Twitch.Services;
+namespace ButterBror.ChatModules.Twitch.Models;
 
 public class TwitchConfiguration
 {
