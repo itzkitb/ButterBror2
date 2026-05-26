@@ -1,7 +1,5 @@
-﻿namespace ButterBror.Scripting
-{
-    public class Class1
-    {
+﻿namespace ButterBror.Scripting;
 
-    }
+public class Class1
+{
 }

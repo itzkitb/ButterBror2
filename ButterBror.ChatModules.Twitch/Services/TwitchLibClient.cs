@@ -84,8 +84,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
     public async Task ConnectAsync(string username, string oauthToken, string clientId, string channel)
     {
-        if (_isDisposed)
-            throw new ObjectDisposedException(nameof(TwitchLibClient));
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         try
         {
@@ -192,8 +191,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
     public async Task JoinChannelAsync(string channel)
     {
-        if (_isDisposed)
-            throw new ObjectDisposedException(nameof(TwitchLibClient));
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_client.IsConnected)
             throw new InvalidOperationException("Not connected to Twitch");
@@ -212,8 +210,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
     public async Task LeaveChannelAsync(string channel)
     {
-        if (_isDisposed)
-            throw new ObjectDisposedException(nameof(TwitchLibClient));
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_client.IsConnected)
             throw new InvalidOperationException("Not connected to Twitch");
@@ -232,8 +229,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
     public async Task SendMessageAsync(string channel, string message)
     {
-        if (_isDisposed)
-            throw new ObjectDisposedException(nameof(TwitchLibClient));
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_client.IsConnected)
             throw new InvalidOperationException("Not connected to Twitch");
@@ -261,8 +257,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
     public async Task SendReplyAsync(string channel, string replyToMessageId, string message)
     {
-        if (_isDisposed)
-            throw new ObjectDisposedException(nameof(TwitchLibClient));
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_client.IsConnected)
             throw new InvalidOperationException("Not connected to Twitch");
@@ -296,8 +291,7 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
     public async Task SendWhisperAsync(string recipientUserId, string message)
     {
-        if (_isDisposed)
-            throw new ObjectDisposedException(nameof(TwitchLibClient));
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         if (!_client.IsConnected)
             throw new InvalidOperationException("Not connected to Twitch");

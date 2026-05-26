@@ -1,7 +1,5 @@
-﻿namespace ButterBror.Platforms.Discord
-{
-    public class Class1
-    {
+﻿namespace ButterBror.Platforms.Discord;
 
-    }
+public class Class1
+{
 }

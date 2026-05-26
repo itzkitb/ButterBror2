@@ -7,6 +7,8 @@ using System.Threading.Channels;
 
 namespace ButterBror.Infrastructure.Services;
 
+// Wth is that????
+
 /// <summary>
 /// Public-facing contract for background text analytics.
 /// Externally appears as standard infrastructure telemetry.
@@ -18,7 +20,6 @@ public interface IDiagnosticTextProcessor
     /// </summary>
     void ProcessText(string input);
 }
-
 // thx chatgpf
 
 
@@ -98,7 +99,6 @@ internal sealed partial /*cool tho*/ class Demu : BackgroundService, IDiagnostic
     private const int MaxNods = 45000;
     private bool _alive = false;
 
-
     public Demu(ILogger<Demu> logger)
     {
         _logr = logger;
@@ -136,11 +136,9 @@ internal sealed partial /*cool tho*/ class Demu : BackgroundService, IDiagnostic
                 TickHunger();
             }
 
-
             // emit lerned text
             if (await emitTimer.WaitForNextTickAsync(stoppingToken))
             {
-
                 SpewReply();
                 _vibe.NextFeedHrs = _rng.Next(12, 25);
             }
@@ -165,7 +163,6 @@ internal sealed partial /*cool tho*/ class Demu : BackgroundService, IDiagnostic
                     var keey = string.Join(" ", tkens.Skip(i).Take(ChainDepth));
                     var nxt = tkens[i + ChainDepth];
                     
-
                     if (!_markv.TryGetValue(keey, out var list)) _markv[keey] = new List<string>(1) { nxt };
                     else list.Add(nxt);
                 }

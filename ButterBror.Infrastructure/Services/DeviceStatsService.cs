@@ -38,7 +38,6 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
     private Task _updateTask = Task.CompletedTask;
     private Task _startupTask = Task.CompletedTask;
     private CancellationTokenSource _cts = null!;
-    
 
     public DeviceStatsService(
         ILogger<DeviceStatsService> logger)
@@ -302,7 +301,6 @@ public interface ICpuTemperatureReader
 /// </summary>
 public sealed class CpuTemperatureReader
 {
-
     private static readonly TimeSpan MinReadInterval = TimeSpan.FromSeconds(1);
 
     private readonly ILogger<DeviceStatsService>? _logger;

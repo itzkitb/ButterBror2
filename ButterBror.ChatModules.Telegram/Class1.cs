@@ -1,7 +1,5 @@
-﻿namespace ButterBror.Platforms.Telegram
-{
-    public class Class1
-    {
+﻿namespace ButterBror.Platforms.Telegram;
 
-    }
+public class Class1
+{
 }
