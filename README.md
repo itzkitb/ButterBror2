@@ -9,6 +9,7 @@
 ![GitHub top language](https://img.shields.io/github/languages/top/itzkitb/butterbror2)
 ![CodeQL](https://github.com/itzkitb/ButterBror2/actions/workflows/github-code-scanning/codeql/badge.svg)
 ![GitHub Repo stars](https://img.shields.io/github/stars/itzkitb/butterbror2)
+[![CodeFactor](https://www.codefactor.io/repository/github/itzkitb/butterbror2/badge)](https://www.codefactor.io/repository/github/itzkitb/butterbror2)
 
 
 ButterBror2 is a modular, multi-platform chatbot framework built on .NET 10. It is designed around a plugin architecture - chat integrations (Twitch, Discord, Telegram) and commands are distributed as self-contained `.pag` packages and loaded at runtime without recompiling the host application
