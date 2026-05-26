@@ -8,4 +8,5 @@ public class TwitchConfiguration
     public string ClientId { get; set; } = string.Empty;
     public bool IsEnabled { get; set; } = true;
     public string CommandPrefix { get; set; } = "!";
+    public TwitchReplyMode ReplyMode { get; set; } = TwitchReplyMode.Mention;
 }

@@ -1,6 +1,7 @@
-using System.Text.Json;
 using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.Core.Interfaces;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ButterBror.ChatModules.Twitch.Services;
 
@@ -29,7 +30,8 @@ public class TwitchConfigurationService
         var json = File.ReadAllText(configPath);
         var options = new JsonSerializerOptions
         {
-            PropertyNameCaseInsensitive = true
+            PropertyNameCaseInsensitive = true,
+            Converters = { new JsonStringEnumConverter() }
         };
 
         var config = JsonSerializer.Deserialize<TwitchConfiguration>(json, options) 

@@ -40,6 +40,8 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     public event EventHandler<Events.OnRaidNotificationArgs>? OnRaidNotification;
     public event EventHandler<OnBitsReceivedArgs>? OnBitsReceived;
 
+    public bool IsConnected => _client.IsConnected;
+
     public TwitchLibClient(
         IOptions<TwitchConfiguration> config,
         ResiliencePipelineProvider<string> pipelineProvider,
@@ -257,6 +259,41 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
     }
 
+    public async Task SendReplyAsync(string channel, string replyToMessageId, string message)
+    {
+        if (_isDisposed)
+            throw new ObjectDisposedException(nameof(TwitchLibClient));
+
+        if (!_client.IsConnected)
+            throw new InvalidOperationException("Not connected to Twitch");
+
+        if (string.IsNullOrWhiteSpace(replyToMessageId))
+        {
+            _logger.LogWarning("[TWC] SendReplyAsync called with empty messageId, falling back to SendMessageAsync");
+            await SendMessageAsync(channel, message);
+            return;
+        }
+
+        try
+        {
+            var sanitizedMessage = SanitizeMessage(message);
+
+            if (sanitizedMessage.Length > 500)
+            {
+                sanitizedMessage = sanitizedMessage[..497] + "...";
+            }
+
+            await _client.SendReplyAsync(channel, replyToMessageId, sanitizedMessage);
+            _logger.LogDebug("[TWC] Sent reply to #{Channel} (parent={MsgId}): \"{Message}\"",
+                channel, replyToMessageId, sanitizedMessage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TWC] Failed to send reply to #{Channel} (parent={MsgId})", channel, replyToMessageId);
+            throw;
+        }
+    }
+
     public async Task SendWhisperAsync(string recipientUserId, string message)
     {
         if (_isDisposed)
@@ -281,8 +318,6 @@ public class TwitchLibClient : ITwitchClient, IDisposable
         }
     }
 
-    public bool IsConnected => _client.IsConnected;
-
     private async Task OnTwitchMessageReceived(object? sender, TwitchLib.Client.Events.OnMessageReceivedArgs e)
     {
         try
@@ -300,7 +335,8 @@ public class TwitchLibClient : ITwitchClient, IDisposable
                 IsSubscriber = e.ChatMessage.UserDetail.IsSubscriber,
                 IsVIP = e.ChatMessage.UserDetail.IsVip,
                 Badges = e.ChatMessage.BadgeInfo,
-                Color = e.ChatMessage.HexColor
+                Color = e.ChatMessage.HexColor,
+                MessageId = e.ChatMessage.Id
             };
 
             OnMessageReceived?.Invoke(this, new Events.OnMessageReceivedArgs { ChatMessage = chatMessage });

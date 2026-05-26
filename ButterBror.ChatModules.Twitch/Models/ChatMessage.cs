@@ -4,6 +4,7 @@ public class ChatMessage
 {
     public string Username { get; set; } = string.Empty;
     public string UserId { get; set; } = string.Empty;
+    public string MessageId { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string Channel { get; set; } = string.Empty;
     public string ChannelId { get; set; } = string.Empty;

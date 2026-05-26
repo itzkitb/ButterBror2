@@ -187,13 +187,33 @@ public class TwitchModule : IChatModule
             {
                 try
                 {
-                    await libClient.SendMessageAsync(e.ChatMessage.Channel, result.Message ?? "Command executed");
+                    await SendResponseAsync(libClient, e.ChatMessage, result.Message ?? "Command executed");
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "[TW] Failed to send command result back to #{Channel}", e.ChatMessage.Channel);
                 }
             }
+        }
+    }
+
+    private async Task SendResponseAsync(TwitchLibClient client, ChatMessage triggeringMessage, string responseText)
+    {
+        switch (_config.ReplyMode)
+        {
+            case TwitchReplyMode.Reply:
+                await client.SendReplyAsync(
+                    triggeringMessage.Channel,
+                    triggeringMessage.MessageId,
+                    responseText
+                );
+                break;
+
+            case TwitchReplyMode.Mention:
+            default:
+                var mentionText = $"@{triggeringMessage.Username}, {responseText}";
+                await client.SendMessageAsync(triggeringMessage.Channel, mentionText);
+                break;
         }
     }
 
