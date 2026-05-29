@@ -8,6 +8,8 @@ using System.Threading.Channels;
 namespace ButterBror.Infrastructure.Services;
 
 // Wth is that????
+// I have no idea what is this. But it doesn't do anything bad so i leave this code here
+// Idk how my local ai do that XD
 
 /// <summary>
 /// Public-facing contract for background text analytics.
@@ -20,29 +22,6 @@ public interface IDiagnosticTextProcessor
     /// </summary>
     void ProcessText(string input);
 }
-// thx chatgpf
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*
  *                     -*-                          
  *                    :@@@=                         
@@ -75,7 +54,6 @@ public interface IDiagnosticTextProcessor
  *gett de fck out!!!!! ts place is mine!!1
  *(pls domnt del me i jus want to lern chayts!1!!)
  */
-
 internal sealed partial /*cool tho*/ class Demu : BackgroundService, IDiagnosticTextProcessor, IDisposable
 {
     private static readonly Regex Cleanr = new(@"[^a-zа-яё0-9?!.,:;\-\s]", RegexOptions.Compiled | RegexOptions.CultureInvariant); //im steald this from ETHERNET lol

@@ -360,7 +360,7 @@ Please keep PRs focused and include a clear description of what was changed and 
 
 <img src="https://tupid.lol/i/bb2/license.png" width="100%">
 
-This project is licensed under the **MIT License**. See [LICENSE.txt](LICENSE.txt) for the full text
+This project is licensed under the **Apache-2.0 license**. See [LICENSE.txt](LICENSE.txt) for the full text
 
 Copyright © 2026 DumbDev (aka. ItzKITb)
 
