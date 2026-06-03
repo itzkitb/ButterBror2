@@ -145,17 +145,17 @@ public class TwitchModule : IChatModule
         _dashboardBridge?.IncrementMessageCount();
         var chatMessage = e.ChatMessage;
 
-        var extra = System.Text.Json.JsonSerializer.Serialize(new
+        var extra = new TwitchMessageExtra()
         {
-            chatMessage.IsModerator,
-            chatMessage.IsBroadcaster,
-            chatMessage.IsSubscriber,
-            chatMessage.IsVIP,
-            chatMessage.Color,
-            chatMessage.Channel,
-            chatMessage.ChannelId,
-            chatMessage.Badges
-        });
+            IsModerator = chatMessage.IsModerator,
+            IsBroadcaster = chatMessage.IsBroadcaster,
+            IsSubscriber = chatMessage.IsSubscriber,
+            IsVIP = chatMessage.IsVIP,
+            Color = chatMessage.Color,
+            Channel = chatMessage.Channel,
+            ChannelId = chatMessage.ChannelId,
+            Badges = chatMessage.Badges
+        };
 
         await _botCore.RaiseMessageReceivedAsync(
             ModuleId,
@@ -360,5 +360,17 @@ public class TwitchModule : IChatModule
 
         await _twitchClient.DisconnectAsync();
         _logger.LogInformation("[TW] Module shutdown complete");
+    }
+
+    public class TwitchMessageExtra
+    {
+        public bool IsModerator { get; internal set; }
+        public bool IsBroadcaster { get; internal set; }
+        public bool IsSubscriber { get; internal set; }
+        public bool IsVIP { get; internal set; }
+        public string? Color { get; internal set; }
+        public string? Channel { get; internal set; }
+        public string? ChannelId { get; internal set; }
+        public List<KeyValuePair<string, string>>? Badges { get; internal set; }
     }
 }

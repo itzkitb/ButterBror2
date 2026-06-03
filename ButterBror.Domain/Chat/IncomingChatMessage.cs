@@ -10,5 +10,5 @@ public record IncomingChatMessage(
     string PlatformUserName,
     string PlatformChatId,
     string PlatformChatName,
-    string ExtraData
+    object ExtraData
 );
