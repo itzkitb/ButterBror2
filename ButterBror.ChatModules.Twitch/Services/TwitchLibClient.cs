@@ -1,34 +1,24 @@
-using System.Text.RegularExpressions;
 using ButterBror.ChatModules.Twitch.Events;
 using ButterBror.ChatModules.Twitch.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Registry;
-using TwitchLib.Api;
-using TwitchLib.Client;
 using TwitchLib.Client.Events;
-using TwitchLib.Client.Models;
-using TwitchLib.Communication.Clients;
-using TwitchLib.Communication.Models;
-using TwitchLib.EventSub.Websockets;
 
 namespace ButterBror.ChatModules.Twitch.Services;
 
-public class TwitchLibClient : ITwitchClient, IDisposable
+public class TwitchLibClient : ITwitchWhisperClient, IDisposable
 {
-    private TwitchClient _client = null!;
-    private TwitchAPI _clientAPI = null!;
-    private EventSubWebsocketClient _eventSubClient = null!;
+    private ITwitchClient _ircClient;
+    private ITwitchWhisperClient _botClient;
+
     private readonly TwitchConfiguration _config;
 
     private readonly ResiliencePipeline _twitchPipeline;
     private readonly ResiliencePipeline _apiPipeline;
     private readonly ILogger<TwitchLibClient> _logger;
     private bool _isDisposed;
-
-    private string _username = string.Empty;
-    private string _id = string.Empty;
 
     public event EventHandler<Events.OnMessageReceivedArgs>? OnMessageReceived;
     public event EventHandler<OnConnectedEventArgs>? OnConnected;
@@ -40,55 +30,41 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     public event EventHandler<Events.OnRaidNotificationArgs>? OnRaidNotification;
     public event EventHandler<OnBitsReceivedArgs>? OnBitsReceived;
 
-    public bool IsConnected => _client.IsConnected;
+    public bool IsConnected => _ircClient.IsConnected;
+
+    public HashSet<string> ConnectedChannels => _ircClient.ConnectedChannels.Concat(_botClient.ConnectedChannels).ToHashSet();
+
+    private bool _eventSubConnected = false;
+
+    public bool IsJoined(string channel) => _ircClient.IsJoined(channel) || _botClient.IsJoined(channel);
 
     public TwitchLibClient(
         IOptions<TwitchConfiguration> config,
         ResiliencePipelineProvider<string> pipelineProvider,
-        ILogger<TwitchLibClient> logger)
+        ILogger<TwitchLibClient> logger,
+        IEnumerable<string> IrcChannels,
+        IEnumerable<string> eventSubChannels)
     {
         _config = config.Value;
         _logger = logger;
         _twitchPipeline = pipelineProvider.GetPipeline("platform");
         _apiPipeline = pipelineProvider.GetPipeline("api");
 
-        SetupClient();
-        SetupSubscribes();
+        _ircClient = new TwitchIrcClient(IrcChannels?.ToList() ?? new List<string>(), logger);
+        _botClient = new TwitchBotClient(
+            eventSubChannels?.ToList() ?? new List<string>(),
+            logger, _twitchPipeline, _apiPipeline, _ircClient);
 
-        _logger.LogInformation("[TWC] Hello, world!");
+        _logger.LogInformation("[TWL] Hello, world!");
     }
 
-    private void SetupClient()
-    {
-        var clientOptions = new ClientOptions();
-
-        var websocketClient = new WebSocketClient(clientOptions);
-        _client = new TwitchClient(websocketClient);
-        _clientAPI = new TwitchAPI();
-        _eventSubClient = new EventSubWebsocketClient();
-    }
-
-    private void SetupSubscribes()
-    {
-        _client.OnMessageReceived += OnTwitchMessageReceived;
-        _client.OnConnected += OnTwitchConnected;
-        _client.OnDisconnected += OnTwitchDisconnected;
-        _client.OnConnectionError += OnTwitchConnectionError;
-        _client.OnJoinedChannel += OnTwitchJoinedChannel;
-        _client.OnLeftChannel += OnTwitchLeftChannel;
-        _client.OnNewSubscriber += OnTwitchNewSubscriber;
-        _client.OnGiftedSubscription += OnTwitchGiftedSubscription;
-        _client.OnRaidNotification += OnTwitchRaidNotification;
-        _client.OnBitsBadgeTier += OnTwitchBitsReceived;
-    }
-
-    public async Task ConnectAsync(string username, string oauthToken, string clientId, string channel)
+    public async Task ConnectAsync(string username, string oauthToken, string clientId)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
         try
         {
-            _logger.LogInformation("[TWC] JOIN #{Channel}", channel);
+            _logger.LogInformation("[TWL] Connecting to twitch.tv...");
 
             // Config check
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(oauthToken) || string.IsNullOrWhiteSpace(clientId))
@@ -96,79 +72,50 @@ public class TwitchLibClient : ITwitchClient, IDisposable
                 throw new InvalidOperationException("Twitch username and OAuth token/ClientId are required");
             }
 
-            // Setup credentials
-            var credentials = new ConnectionCredentials(
-                twitchUsername: username,
-                twitchOAuth: oauthToken,
-                disableUsernameCheck: true
-            );
+            SetupListeners();
 
-            _client.Initialize(credentials, channel);
+            await _ircClient.ConnectAsync(username, oauthToken, clientId);
+            await _botClient.ConnectAsync(username, oauthToken, clientId);
 
-            // Connecting
-            var connectTask = _client.ConnectAsync();
-            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
-
-            if (await Task.WhenAny(connectTask, timeoutTask) == timeoutTask)
+            if (_config.Channel != null)
             {
-                await _client.DisconnectAsync();
-                throw new TimeoutException("Connection to Twitch timed out after 30 seconds");
+                await JoinChannelAsync(_config.Channel);
             }
-
-            await connectTask;
-
-            _logger.LogInformation("[TWC] JOINED #{Channel}", channel);
-
-            _ = InitializeAPI(clientId, oauthToken);
-            _ = InitializeEventSub();
+            else
+            {
+                await _botClient.JoinChannelAsync(username);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TWC] Failed to connect to channel #{Channel}", channel);
+            _logger.LogError(ex, "[TWL] Failed to connect to twitch.tv!");
             throw;
         }
     }
 
-    private async Task InitializeAPI(string clientId, string oauthToken)
+    private void SetupListeners()
     {
-        _clientAPI.Settings.ClientId = clientId;
-        _clientAPI.Settings.AccessToken = oauthToken.Substring("oauth:".Length);
+        // IRC
+        _ircClient.OnDisconnected += OnDisconnected;
+        _ircClient.OnUserLeft += OnUserLeft;
+        _ircClient.OnConnected += OnConnected;
+        _ircClient.OnBitsReceived += OnBitsReceived;
+        _ircClient.OnGiftedSubscription += OnGiftedSubscription;
+        _ircClient.OnMessageReceived += OnMessageReceived;
+        _ircClient.OnNewSubscriber += OnNewSubscriber;
+        _ircClient.OnRaidNotification += OnRaidNotification;
+        _ircClient.OnUserJoined += OnUserJoined;
 
-        _username = _client.TwitchUsername;
-        _id = await _twitchPipeline.ExecuteAsync(async ct =>
-            (await _clientAPI.Helix.Users.GetUsersAsync(logins: [_username])).Users[0].Id
-        );
-        _logger.LogInformation("[TWC] API initialized");
-    }
-
-    private async Task InitializeEventSub()
-    {
-        _eventSubClient.WebsocketConnected += async (s, e) =>
-        {
-            // Subscribe to whispers
-            await _apiPipeline.ExecuteAsync(async ct =>
-                await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
-                    "user.whisper.message", "1",
-                    new Dictionary<string, string> { { "user_id", _id } },
-                    TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
-                    _eventSubClient.SessionId
-                )
-            );
-        };
-
-        // Hook whisper event
-        _eventSubClient.UserWhisperMessage += async (s, e) =>
-        {
-            var msg = e.Payload.Event;
-            _logger.LogDebug($"Whisper from {msg.FromUserName}: {msg.Whisper.Text}");
-            _ = SendWhisperAsync(msg.FromUserId, "Hi!");
-
-            await Task.CompletedTask;
-        };
-
-        // Connect to the EventSub
-        await _eventSubClient.ConnectAsync();
-        _logger.LogInformation("[TWC] EventSub initialized");
+        // EventSub
+        _botClient.OnDisconnected += OnDisconnected;
+        _botClient.OnUserLeft += OnUserLeft;
+        _botClient.OnConnected += OnConnected;
+        _botClient.OnBitsReceived += OnBitsReceived;
+        _botClient.OnGiftedSubscription += OnGiftedSubscription;
+        _botClient.OnMessageReceived += OnMessageReceived;
+        _botClient.OnNewSubscriber += OnNewSubscriber;
+        _botClient.OnRaidNotification += OnRaidNotification;
+        _botClient.OnUserJoined += OnUserJoined;
     }
 
     public async Task DisconnectAsync()
@@ -177,15 +124,19 @@ public class TwitchLibClient : ITwitchClient, IDisposable
 
         try
         {
-            if (_client.IsConnected)
+            if (_ircClient.IsConnected)
             {
-                await _client.DisconnectAsync();
-                _logger.LogInformation("[TWC] Bye bye");
+                await _ircClient.DisconnectAsync();
+            }
+
+            if (_eventSubConnected)
+            {
+                await _botClient.DisconnectAsync();
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TWC] Error during disconnection");
+            _logger.LogError(ex, "[TWL] Error during disconnection");
         }
     }
 
@@ -193,17 +144,13 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        if (!_client.IsConnected)
-            throw new InvalidOperationException("Not connected to Twitch");
-
         try
         {
-            await _client.JoinChannelAsync(channel);
-            _logger.LogInformation("[TWC] Joining #{Channel}", channel);
+            await _botClient.JoinChannelAsync(channel);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TWC] Failed to join #{Channel}", channel);
+            _logger.LogError(ex, "[TWL] Failed to join #{Channel}", channel);
             throw;
         }
     }
@@ -212,17 +159,20 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        if (!_client.IsConnected)
-            throw new InvalidOperationException("Not connected to Twitch");
-
         try
         {
-            await _client.LeaveChannelAsync(channel);
-            _logger.LogInformation("[TWC] Leaving #{Channel}", channel);
+            if (_botClient.ConnectedChannels.Contains(channel, StringComparer.OrdinalIgnoreCase))
+            {
+                await _botClient.LeaveChannelAsync(channel);
+            }
+            else
+            {
+                await _ircClient.LeaveChannelAsync(channel);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TWC] Failed to leave #{Channel}", channel);
+            _logger.LogError(ex, "[TWL] Failed to leave #{Channel}", channel);
             throw;
         }
     }
@@ -231,27 +181,23 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        if (!_client.IsConnected)
-            throw new InvalidOperationException("Not connected to Twitch");
-
-        try
+        if (_botClient.ConnectedChannels.Contains(channel, StringComparer.OrdinalIgnoreCase))
         {
-            // Clearing a message of prohibited characters
-            var sanitizedMessage = SanitizeMessage(message);
-
-            // Checking the length of the message
-            if (sanitizedMessage.Length > 500)
+            if (!_botClient.IsJoined(channel))
             {
-                sanitizedMessage = sanitizedMessage[..497] + "...";
+                await _botClient.JoinChannelAsync(channel);
             }
 
-            await _client.SendMessageAsync(channel, sanitizedMessage);
-            _logger.LogDebug("[TWC] Sent message to #{Channel}: \"{Message}\"", channel, sanitizedMessage);
+            await _botClient.SendMessageAsync(channel, message);
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogError(ex, "[TWC] Failed to send message to #{Channel}", channel);
-            throw;
+            if (!_ircClient.IsJoined(channel))
+            {
+                await _ircClient.JoinChannelAsync(channel);
+            }
+
+            await _ircClient.SendMessageAsync(channel, message);
         }
     }
 
@@ -259,33 +205,23 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        if (!_client.IsConnected)
-            throw new InvalidOperationException("Not connected to Twitch");
-
-        if (string.IsNullOrWhiteSpace(replyToMessageId))
+        if (_botClient.ConnectedChannels.Contains(channel, StringComparer.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("[TWC] SendReplyAsync called with empty messageId, falling back to SendMessageAsync");
-            await SendMessageAsync(channel, message);
-            return;
-        }
-
-        try
-        {
-            var sanitizedMessage = SanitizeMessage(message);
-
-            if (sanitizedMessage.Length > 500)
+            if (!_botClient.IsJoined(channel))
             {
-                sanitizedMessage = sanitizedMessage[..497] + "...";
+                await _botClient.JoinChannelAsync(channel);
             }
 
-            await _client.SendReplyAsync(channel, replyToMessageId, sanitizedMessage);
-            _logger.LogDebug("[TWC] Sent reply to #{Channel} (parent={MsgId}): \"{Message}\"",
-                channel, replyToMessageId, sanitizedMessage);
+            await _botClient.SendReplyAsync(channel, replyToMessageId, message);
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogError(ex, "[TWC] Failed to send reply to #{Channel} (parent={MsgId})", channel, replyToMessageId);
-            throw;
+            if (!_ircClient.IsJoined(channel))
+            {
+                await _ircClient.JoinChannelAsync(channel);
+            }
+
+            await _ircClient.SendReplyAsync(channel, replyToMessageId, message);
         }
     }
 
@@ -293,169 +229,18 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
-        if (!_client.IsConnected)
-            throw new InvalidOperationException("Not connected to Twitch");
-
         try
         {
-            var sanitizedMessage = SanitizeMessage(message);
-
-            await _twitchPipeline.ExecuteAsync(async ct =>
-                await _clientAPI.Helix.Whispers.SendWhisperAsync(_id, recipientUserId, message, true)
-            );
-            _logger.LogDebug("[TWC] Sent whisper to {Recipient}: \"{Message}\"", recipientUserId, sanitizedMessage);
+            await _botClient.SendWhisperAsync(recipientUserId, message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TWC] Failed to send whisper to {Recipient}", recipientUserId);
+            _logger.LogError(ex, "[TWL] [EventSub] Failed to send whisper to @{Channel}", recipientUserId);
             throw;
         }
     }
 
-    private async Task OnTwitchMessageReceived(object? sender, TwitchLib.Client.Events.OnMessageReceivedArgs e)
-    {
-        try
-        {
-            // Convert twitchlib shit
-            var chatMessage = new Models.ChatMessage
-            {
-                Username = e.ChatMessage.Username,
-                UserId = e.ChatMessage.UserId,
-                Message = e.ChatMessage.Message,
-                Channel = e.ChatMessage.Channel,
-                ChannelId = e.ChatMessage.RoomId,
-                IsModerator = e.ChatMessage.UserDetail.IsModerator,
-                IsBroadcaster = e.ChatMessage.IsBroadcaster,
-                IsSubscriber = e.ChatMessage.UserDetail.IsSubscriber,
-                IsVIP = e.ChatMessage.UserDetail.IsVip,
-                Badges = e.ChatMessage.BadgeInfo,
-                Color = e.ChatMessage.HexColor,
-                MessageId = e.ChatMessage.Id
-            };
-
-            OnMessageReceived?.Invoke(this, new Events.OnMessageReceivedArgs { ChatMessage = chatMessage });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[TWC] Error handling Twitch message");
-        }
-    }
-
-    private async Task OnTwitchConnected(object? sender, OnConnectedEventArgs e)
-    {
-        try
-        {
-            _logger.LogInformation("[TWC] Connected to IRC");
-            OnConnected?.Invoke(this, e);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[TWC] Error handling IRC");
-        }
-    }
-
-    private async Task OnTwitchDisconnected(object? sender, OnDisconnectedArgs e)
-    {
-        _logger.LogWarning("[TWC] Disconnected");
-    }
-
-    private async Task OnTwitchConnectionError(object? sender, OnConnectionErrorArgs e)
-    {
-        _logger.LogError("[TWC] Connection error: {Error}", e.Error);
-    }
-
-    private async Task OnTwitchJoinedChannel(object? sender, OnJoinedChannelArgs e)
-    {
-        _logger.LogInformation("[TWC] Joined #{Channel}", e.Channel);
-    }
-
-    private async Task OnTwitchLeftChannel(object? sender, OnLeftChannelArgs e)
-    {
-        _logger.LogInformation("[TWC] Parted #{Channel}", e.Channel);
-    }
-
-    private async Task OnTwitchNewSubscriber(object? sender, TwitchLib.Client.Events.OnNewSubscriberArgs e)
-    {
-        try
-        {
-            var args = new Events.OnNewSubscriberArgs
-            {
-                Channel = e.Channel,
-                Username = e.Subscriber.Login,
-                SubscriptionPlan = e.Subscriber.MsgParamSubPlanName,
-                Months = e.Subscriber.MsgParamCumulativeMonths
-            };
-            OnNewSubscriber?.Invoke(this, args);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[TWC] Error handling new subscriber event");
-        }
-    }
-
-    private async Task OnTwitchGiftedSubscription(object? sender, TwitchLib.Client.Events.OnGiftedSubscriptionArgs e)
-    {
-        try
-        {
-            var args = new Events.OnGiftedSubscriptionArgs
-            {
-                Channel = e.Channel,
-                GifterUsername = e.GiftedSubscription.Login,
-                RecipientUsername = e.GiftedSubscription.MsgParamRecipientUserName,
-                SubscriptionPlan = e.GiftedSubscription.MsgParamSubPlanName
-            };
-            OnGiftedSubscription?.Invoke(this, args);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[TWC] Error handling gifted subscription event");
-        }
-    }
-
-    private async Task OnTwitchRaidNotification(object? sender, TwitchLib.Client.Events.OnRaidNotificationArgs e)
-    {
-        try
-        {
-            var args = new Events.OnRaidNotificationArgs
-            {
-                Channel = e.Channel,
-                RaiderUsername = e.RaidNotification.Login,
-                ViewerCount = Int32.Parse(e.RaidNotification.MsgParamViewerCount)
-            };
-            OnRaidNotification?.Invoke(this, args);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[TWC] Error handling raid notification event");
-        }
-    }
-
-    private async Task OnTwitchBitsReceived(object? sender, OnBitsBadgeTierArgs e)
-    {
-        try
-        {
-            var args = new OnBitsReceivedArgs
-            {
-                Channel = e.Channel,
-                Username = e.BitsBadgeTier.Login,
-                Bits = e.BitsBadgeTier.MsgParamThreshold, // wth with this lib
-                Message = e.BitsBadgeTier.SystemMsg
-            };
-            OnBitsReceived?.Invoke(this, args);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[TWC] Error handling bits received event");
-        }
-    }
-
-    private string SanitizeMessage(string message)
-    {
-        return Regex.Replace(message, @"\s+", " ")
-            .Replace("\r", "")
-            .Replace("\n", " ")
-            .Trim();
-    }
+    #region Dispose
 
     public void Dispose()
     {
@@ -473,27 +258,16 @@ public class TwitchLibClient : ITwitchClient, IDisposable
             {
                 _isDisposed = true;
 
-                if (_client.IsConnected)
+                if (_ircClient.IsConnected)
                 {
-                    _client.DisconnectAsync();
+                    _ = _ircClient.DisconnectAsync();
                 }
 
-                _client.OnMessageReceived -= OnTwitchMessageReceived;
-                _client.OnConnected -= OnTwitchConnected;
-                _client.OnDisconnected -= OnTwitchDisconnected;
-                _client.OnConnectionError -= OnTwitchConnectionError;
-                _client.OnJoinedChannel -= OnTwitchJoinedChannel;
-                _client.OnLeftChannel -= OnTwitchLeftChannel;
-                _client.OnNewSubscriber -= OnTwitchNewSubscriber;
-                _client.OnGiftedSubscription -= OnTwitchGiftedSubscription;
-                _client.OnRaidNotification -= OnTwitchRaidNotification;
-                _client.OnBitsBadgeTier -= OnTwitchBitsReceived;
-
-                _logger.LogInformation("[TWC] Client disposed successfully");
+                _logger.LogInformation("[TWL] Client disposed successfully");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[TWC] Error during client disposal");
+                _logger.LogError(ex, "[TWL] Error during client disposal");
             }
         }
 
@@ -504,4 +278,5 @@ public class TwitchLibClient : ITwitchClient, IDisposable
     {
         Dispose(false);
     }
+    #endregion Dispose
 }

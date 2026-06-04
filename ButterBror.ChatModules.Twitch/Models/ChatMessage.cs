@@ -11,7 +11,7 @@ public class ChatMessage
     public bool IsModerator { get; internal set; }
     public bool IsBroadcaster { get; internal set; }
     public bool IsSubscriber { get; internal set; }
-    public bool IsVIP { get; internal set; }
+    public bool IsVip { get; internal set; }
     public List<KeyValuePair<string, string>> Badges { get; internal set; } = new();
     public string Color { get; internal set; } = string.Empty;
 }

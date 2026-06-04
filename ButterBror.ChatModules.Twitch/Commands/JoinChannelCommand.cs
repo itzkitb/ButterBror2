@@ -53,14 +53,8 @@ public class JoinChannelCommand : CommandBase
                 return CommandResult.Failure("You don't have permission to join channels. Required: su:twitch:join");
             }
 
-            // S3: Check that the client supports join
-            if (_twitchClient is not TwitchLibClient libClient)
-            {
-                return CommandResult.Failure("Current Twitch client doesn't support joining channels.");
-            }
-
-            // S4: Trying to connect to the channel
-            await libClient.JoinChannelAsync(channelName);
+            // S3: Trying to connect to the channel
+            await _twitchClient.JoinChannelAsync(channelName);
 
             logger.LogInformation("Joined channel '{Channel}' by user '{User}'",
                 channelName, context.User.DisplayName);

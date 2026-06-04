@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.Registry;
 using System.Collections.Concurrent;
+using System.Text.Json;
 using TwitchLib.Api.Helix;
 using TwitchLib.Client.Events;
 
@@ -55,11 +56,19 @@ public class TwitchModule : IChatModule
         _db = serviceProvider.GetRequiredService<ICustomDataRepository>();
         _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
         _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
+        var redisRepo = serviceProvider.GetService<ICustomDataRepository>();
+
+        string irsChannelsString = redisRepo?.GetDataAsync("twitch:irc_channels").Result ?? "[]";
+        List<string> ircChannels = JsonSerializer.Deserialize<List<string>>(irsChannelsString) ?? new List<string>();
+        string eventSubChannelsString = redisRepo?.GetDataAsync("twitch:eventsub_channels").Result ?? "[]";
+        List<string> eventSubChannels = JsonSerializer.Deserialize<List<string>>(eventSubChannelsString) ?? new List<string>();
 
         _twitchClient = new TwitchLibClient(
             options,
             serviceProvider.GetRequiredService<ResiliencePipelineProvider<string>>(),
-            serviceProvider.GetRequiredService<ILogger<TwitchLibClient>>()
+            serviceProvider.GetRequiredService<ILogger<TwitchLibClient>>(),
+            ircChannels,
+            eventSubChannels
         );
 
         // Updating factories
@@ -95,7 +104,7 @@ public class TwitchModule : IChatModule
 
             try
             {
-                await _twitchClient.ConnectAsync(_config.BotUsername, _config.OauthToken, _config.ClientId, _config.Channel);
+                await _twitchClient.ConnectAsync(_config.BotUsername, _config.OauthToken, _config.ClientId);
             }
             catch (Exception ex)
             {
@@ -150,7 +159,7 @@ public class TwitchModule : IChatModule
             IsModerator = chatMessage.IsModerator,
             IsBroadcaster = chatMessage.IsBroadcaster,
             IsSubscriber = chatMessage.IsSubscriber,
-            IsVIP = chatMessage.IsVIP,
+            IsVIP = chatMessage.IsVip,
             Color = chatMessage.Color,
             Channel = chatMessage.Channel,
             ChannelId = chatMessage.ChannelId,
