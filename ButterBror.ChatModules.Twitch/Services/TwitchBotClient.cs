@@ -78,7 +78,7 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
         _client.UserWhisperMessage += OnEventSubWhisper;
     }
 
-    public async Task ConnectAsync(string clientId, string oauthToken, string username)
+    public async Task ConnectAsync(string username, string oauthToken, string clientId)
     {
         try
         {
