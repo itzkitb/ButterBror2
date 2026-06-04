@@ -84,8 +84,8 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
 
             _botId = await _twitchPipeline.ExecuteAsync(async ct =>
                 (await _clientAPI.Helix.Users.GetUsersAsync(logins: [username])).Users[0].Id
-            );
-            _logger.LogInformation("[TWBOT] [API] Initialized");
+            ) ?? "FAIL";
+            _logger.LogInformation("[TWBOT] [API] Initialized. botId={Id}, name={Name}", _botId, username);
 
             await _client.ConnectAsync();
             foreach (var channelName in Channels)
