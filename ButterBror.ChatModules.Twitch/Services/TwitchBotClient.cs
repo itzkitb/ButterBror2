@@ -54,6 +54,9 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
     {
         _logger = logger;
         _ircClient = ircClient;
+        _twitchPipeline = twitchPipeline;
+        _apiPipeline = apiPipeline;
+
         _client = new EventSubWebsocketClient();
         _clientAPI = new TwitchAPI();
 
