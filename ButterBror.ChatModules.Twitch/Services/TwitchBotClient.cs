@@ -91,10 +91,6 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
             _logger.LogInformation("[TWBOT] [API] Initialized. botId={Id}, name={Name}", _botId, username);
 
             await _client.ConnectAsync();
-            foreach (var channelName in Channels)
-            {
-                await JoinChannelAsync(channelName);
-            }
             _logger.LogInformation("[TWBOT] [EventSub] Initialized");
         }
         catch (Exception ex)
@@ -183,37 +179,56 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
             )
         );
 
-        // Subscribe to subscriptions
-        await _apiPipeline.ExecuteAsync(async ct =>
-            await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
-                "channel.subscribe", "1",
-                new Dictionary<string, string> { { "broadcaster_user_id", channelId } },
-                TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
-                _client.SessionId
-            )
-        );
+        try
+        {
+            // Subscribe to subscriptions
+            await _apiPipeline.ExecuteAsync(async ct =>
+                await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
+                    "channel.subscribe", "1",
+                    new Dictionary<string, string> { { "broadcaster_user_id", channelId } },
+                    TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
+                    _client.SessionId
+                )
+            );
 
-        // Subscribe to gift subscriptions
-        await _apiPipeline.ExecuteAsync(async ct =>
-            await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
-                "channel.subscription.gift", "1",
-                new Dictionary<string, string> { { "broadcaster_user_id", channelId } },
-                TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
-                _client.SessionId
-            )
-        );
+            // Subscribe to gift subscriptions
+            await _apiPipeline.ExecuteAsync(async ct =>
+                await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
+                    "channel.subscription.gift", "1",
+                    new Dictionary<string, string> { { "broadcaster_user_id", channelId } },
+                    TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
+                    _client.SessionId
+                )
+            );
 
-        // Subscribe to cheers
-        await _apiPipeline.ExecuteAsync(async ct =>
-            await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
-                "channel.cheer", "1",
-                new Dictionary<string, string> { { "broadcaster_user_id", channelId } },
-                TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
-                _client.SessionId
-            )
-        );
+            // Subscribe to cheers
+            await _apiPipeline.ExecuteAsync(async ct =>
+                await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
+                    "channel.cheer", "1",
+                    new Dictionary<string, string> { { "broadcaster_user_id", channelId } },
+                    TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
+                    _client.SessionId
+                )
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TWBOT] No broadcaster permissions for #{Channel}", channel);
+        }
 
         _logger.LogDebug("[TWBOT] Subscribed to EventSub events for #{Channel}", channel);
+    }
+
+    private async Task SubscribeToWhispersAsync()
+    {
+        await _apiPipeline.ExecuteAsync(async ct =>
+            await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
+                "user.whisper.message", "1",
+                new Dictionary<string, string> { { "user_id", _botId } },
+                TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
+                _client.SessionId
+            )
+        );
     }
 
     public async Task SendWhisperAsync(string recipientUserId, string message)
@@ -274,12 +289,6 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
 
         try
         {
-            // Отписка от EventSub (в Websockets Twitch автоматически удаляет подписки при закрытии сессии, 
-            // но если нужно удалить конкретный канал во время работы — используется удаление подписок через API)
-            // Примечание: Для полноценного удаления подписок "на лету" обычно требуется хранить SubscriptionId, 
-            // выданные Twitch при вызове CreateEventSubSubscriptionAsync. 
-            // Если это не критично, достаточно просто удалить из локального хэшсета:
-
             _сonnectedChannels.Remove(normalizedChannel);
             _logger.LogInformation("[TWBOT] Left channel #{Channel}", channel);
         }
@@ -377,6 +386,20 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
     {
         _connected = true;
         _logger.LogInformation("[TWBOT] [EventSub] Reconnected!");
+
+        await SubscribeToWhispersAsync();
+
+        foreach (var channel in _сonnectedChannels.ToList())
+        {
+            try
+            {
+                await ConnectEventSubChannelAsync(channel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[TWBOT] Failed to re-subscribe to #{Channel} after reconnect", channel);
+            }
+        }
     }
 
     private async Task OnEventSubDisconnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketDisconnectedArgs e)
@@ -387,17 +410,22 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
 
     private async Task OnEventSubConnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketConnectedArgs e)
     {
-        await _apiPipeline.ExecuteAsync(async ct =>
-                await _clientAPI.Helix.EventSub.CreateEventSubSubscriptionAsync(
-                    "user.whisper.message", "1",
-                    new Dictionary<string, string> { { "user_id", _botId } },
-                    TwitchLib.Api.Core.Enums.EventSubTransportMethod.Websocket,
-                    _client.SessionId
-                )
-            );
-
         _connected = true;
         _logger.LogInformation("[TWBOT] [EventSub] Connected!");
+
+        await SubscribeToWhispersAsync();
+
+        foreach (var channel in _сonnectedChannels.ToList())
+        {
+            try
+            {
+                await ConnectEventSubChannelAsync(channel);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[TWBOT] Failed to re-subscribe to #{Channel} after reconnect", channel);
+            }
+        }
     }
 
     private async Task OnEventSubError(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.ErrorOccuredArgs e)
