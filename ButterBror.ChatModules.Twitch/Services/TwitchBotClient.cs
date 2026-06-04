@@ -83,7 +83,7 @@ public class TwitchBotClient : ITwitchWhisperClient, IDisposable
         try
         {
             _clientAPI.Settings.ClientId = clientId;
-            _clientAPI.Settings.AccessToken = oauthToken[6..]; // Removing "oauth:" in start
+            _clientAPI.Settings.AccessToken = oauthToken;
 
             _botId = await _twitchPipeline.ExecuteAsync(async ct =>
                 (await _clientAPI.Helix.Users.GetUsersAsync(logins: [username])).Users[0].Id
