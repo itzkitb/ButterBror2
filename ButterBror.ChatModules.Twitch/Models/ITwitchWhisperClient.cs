@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace ButterBror.ChatModules.Twitch.Models;
+﻿namespace ButterBror.ChatModules.Twitch.Models;
 
 public interface ITwitchWhisperClient : ITwitchClient
 {

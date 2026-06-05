@@ -41,3 +41,29 @@ internal class SetPrefixCommandMetadata : ICommandMetadata
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
     public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch" };
 }
+
+// Metadata for auth command
+internal class AuthCommandMetadata : ICommandMetadata
+{
+    public string Name => "auth";
+    public List<string> Aliases => new List<string> { "oauth", "login" };
+    public int CooldownSeconds => 10;
+    public List<string> RequiredPermissions => new List<string>();
+    public string ArgumentsHelpText => "";
+    public string Id => "sillyapps:twitch:auth";
+    public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
+    public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch" };
+}
+
+// Metadata for addchannel command
+internal class AddChannelCommandMetadata : ICommandMetadata
+{
+    public string Name => "addchannel";
+    public List<string> Aliases => new List<string> { "ac" };
+    public int CooldownSeconds => 5;
+    public List<string> RequiredPermissions => new List<string> { "su:twitch:join" };
+    public string ArgumentsHelpText => "<channel>";
+    public string Id => "sillyapps:twitch:addchannel";
+    public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
+    public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch" };
+}

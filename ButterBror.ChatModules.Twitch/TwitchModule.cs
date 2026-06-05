@@ -6,7 +6,6 @@ using ButterBror.ChatModules.Twitch.Services;
 using ButterBror.CommandModule.Commands;
 using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
-using ButterBror.Core.Models;
 using ButterBror.Data;
 using ButterBror.Domain.Chat;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,7 +14,6 @@ using Microsoft.Extensions.Options;
 using Polly.Registry;
 using System.Collections.Concurrent;
 using System.Text.Json;
-using TwitchLib.Api.Helix;
 using TwitchLib.Client.Events;
 
 namespace ButterBror.ChatModules.Twitch;
@@ -23,16 +21,21 @@ namespace ButterBror.ChatModules.Twitch;
 public class TwitchModule : IChatModule
 {
     public string ModuleId => "sillyapps:twitch";
-    public Version Version => new(1, 0, 1);
+    public Version Version => new(1, 0, 2);
+
     private Func<ICommand> _joinCommandFactory = null!;
     private Func<ICommand> _partCommandFactory = null!;
     private Func<ICommand> _setPrefixCommandFactory = null!;
+    private Func<ICommand> _authCommandFactory = null!;
+    private Func<ICommand> _addChannelCommandFactory = null!;
 
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => new List<ModuleCommandExport>
     {
         new ModuleCommandExport("join", _joinCommandFactory, new JoinChannelCommandMetadata()),
         new ModuleCommandExport("part", _partCommandFactory, new PartChannelCommandMetadata()),
-        new ModuleCommandExport("setprefix", _setPrefixCommandFactory, new SetPrefixCommandMetadata())
+        new ModuleCommandExport("setprefix", _setPrefixCommandFactory, new SetPrefixCommandMetadata()),
+        new ModuleCommandExport("auth", _authCommandFactory, new AuthCommandMetadata()),
+        new ModuleCommandExport("addchannel", _addChannelCommandFactory, new AddChannelCommandMetadata())
     };
 
     private ITwitchClient _twitchClient = null!;
@@ -41,9 +44,7 @@ public class TwitchModule : IChatModule
     private TwitchConfiguration _config = null!;
     private ICustomDataRepository _db = null!;
     private IDashboardBridge? _dashboardBridge;
-
-    private readonly ConcurrentDictionary<string, string> _prefixCache
-        = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
 
     public void InitializeWithServices(IServiceProvider serviceProvider)
     {
@@ -52,72 +53,85 @@ public class TwitchModule : IChatModule
         var config = configService.LoadConfiguration();
         var options = Options.Create(config);
         _config = options.Value;
-
         _db = serviceProvider.GetRequiredService<ICustomDataRepository>();
         _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
         _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
-        var redisRepo = serviceProvider.GetService<ICustomDataRepository>();
 
-        string irsChannelsString = redisRepo?.GetDataAsync("twitch:irc_channels").Result ?? "[]";
-        List<string> ircChannels = JsonSerializer.Deserialize<List<string>>(irsChannelsString) ?? new List<string>();
-        string eventSubChannelsString = redisRepo?.GetDataAsync("twitch:eventsub_channels").Result ?? "[]";
-        List<string> eventSubChannels = JsonSerializer.Deserialize<List<string>>(eventSubChannelsString) ?? new List<string>();
+        string ircChannelsString = _db.GetDataAsync("twitch:irc_channels").GetAwaiter().GetResult() ?? "[]";
+        List<string> ircChannels = JsonSerializer.Deserialize<List<string>>(ircChannelsString) ?? new();
 
-        _twitchClient = new TwitchLibClient(
+        _twitchClient = new TwitchClient(
             options,
             serviceProvider.GetRequiredService<ResiliencePipelineProvider<string>>(),
-            serviceProvider.GetRequiredService<ILogger<TwitchLibClient>>(),
-            ircChannels,
-            eventSubChannels
+            serviceProvider.GetRequiredService<ILogger<TwitchClient>>(),
+            ircChannels
         );
 
         // Updating factories
         _joinCommandFactory = () => new JoinChannelCommand(_twitchClient);
         _partCommandFactory = () => new PartChannelCommand(_twitchClient);
         _setPrefixCommandFactory = () => new SetPrefixCommand(this);
+        _authCommandFactory = () => new AuthCommand(options);
+        _addChannelCommandFactory = () => new AddChannelCommand(_twitchClient);
     }
 
     public async Task InitializeAsync(IBotCore core)
     {
         _botCore = core;
+
         // S0: Main events
         _twitchClient.OnMessageReceived += OnMessageReceived;
         _twitchClient.OnConnected += OnConnected;
         _twitchClient.OnDisconnected += OnDisconnected;
+        _twitchClient.OnBroadcasterAuthReceived += OnBroadcasterAuthReceived;
 
-        // S1: Subscribing to additional features
-        if (_twitchClient is TwitchLibClient libClient)
-        {
-            libClient.OnNewSubscriber += OnNewSubscriber;
-            libClient.OnGiftedSubscription += OnGiftedSubscription;
-            libClient.OnRaidNotification += OnRaidNotification;
-            libClient.OnBitsReceived += OnBitsReceived;
-        }
+        // S1: Subscribing to additional features (simplified logging)
+        _twitchClient.OnNewSubscriber += (s, e) => _logger.LogInformation("[TW] New sub in #{Channel}: {User} ({Plan})", e.Channel, e.Username, e.SubscriptionPlan);
+        _twitchClient.OnGiftedSubscription += (s, e) => _logger.LogInformation("[TW] Gifted sub in #{Channel}: {Gifter} -> {Recipient}", e.Channel, e.GifterUsername, e.RecipientUsername);
+        _twitchClient.OnRaidNotification += (s, e) => _logger.LogInformation("[TW] Raid in #{Channel}: {Raider} ({Viewers} viewers)", e.Channel, e.RaiderUsername, e.ViewerCount);
+        _twitchClient.OnBitsReceived += (s, e) => _logger.LogInformation("[TW] Bits in #{Channel}: {User} ({Bits} bits)", e.Channel, e.Username, e.Bits);
 
-        if (_config.IsEnabled)
-        {
-            if (string.IsNullOrWhiteSpace(_config.OauthToken))
-            {
-                _logger.LogError("[TW] OAuth token is missing. Module will not start!");
-                return;
-            }
-
-            try
-            {
-                await _twitchClient.ConnectAsync(_config.BotUsername, _config.OauthToken, _config.ClientId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[TW] Failed to initialize module");
-                throw;
-            }
-        }
-        else
+        if (!_config.IsEnabled)
         {
             _logger.LogWarning("[TW] Module is disabled in configuration");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_config.OauthToken))
+        {
+            _logger.LogError("[TW] OAuth token is missing. Module will not start!");
+            return;
+        }
+
+        try
+        {
+            // S2: Connect to Twitch (WebSocket + IRC), but DON'T join channels yet
+            await _twitchClient.ConnectAsync(_config.BotUsername, _config.OauthToken, _config.ClientId);
+
+            // S3: Shit
+            await LoadBroadcasterTokensAsync();
+
+            // S4: Now join all configured channels
+            await JoinConfiguredChannelsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TW] Failed to initialize module");
+            throw;
         }
     }
 
+    private async Task JoinConfiguredChannelsAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_config.Channel))
+        {
+            await _twitchClient.JoinChannelAsync(_config.Channel);
+        }
+        else
+        {
+            await _twitchClient.JoinChannelAsync(_config.BotUsername);
+        }
+    }
     private async void OnConnected(object? sender, OnConnectedEventArgs e)
     {
         _ = SafeHandleConnectAsync(e).ContinueWith(
@@ -129,9 +143,9 @@ public class TwitchModule : IChatModule
     private async Task SafeHandleConnectAsync(OnConnectedEventArgs e)
     {
         _logger.LogInformation("[TW] Connected! My name is {Username}", e.BotUsername);
-        if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
+        if (_twitchClient.IsConnected && !string.IsNullOrWhiteSpace(_config.Channel))
         {
-            await libClient.SendMessageAsync(_config.Channel, $"Bot connected successfully!");
+            await _twitchClient.SendMessageAsync(_config.Channel, "Bot connected successfully!");
         }
     }
 
@@ -150,9 +164,19 @@ public class TwitchModule : IChatModule
 
     private async Task SafeHandleMessageAsync(Events.OnMessageReceivedArgs e)
     {
-        // Notify dashboard
         _dashboardBridge?.IncrementMessageCount();
         var chatMessage = e.ChatMessage;
+
+        // Example: Prevent the bot from processing its own messages to avoid infinite loops
+        bool isSelf = chatMessage.UserId.Equals(_config.BotUserId, StringComparison.OrdinalIgnoreCase) ||
+                      chatMessage.Username.Equals(_config.BotUsername, StringComparison.OrdinalIgnoreCase);
+
+        if (isSelf)
+        {
+            chatMessage.IsBot = true;
+            _logger.LogDebug("[TW] Ignoring self-message from bot in #{Channel}", chatMessage.Channel);
+            return;
+        }
 
         var extra = new TwitchMessageExtra()
         {
@@ -181,9 +205,9 @@ public class TwitchModule : IChatModule
         );
 
         var prefix = await GetChannelPrefixAsync(chatMessage.ChannelId);
-        if (TryParseCommand(e.ChatMessage.Message, prefix, out var commandName, out var arguments))
+        if (TryParseCommand(chatMessage.Message, prefix, out var commandName, out var arguments))
         {
-            var context = CreateCommandContext(e.ChatMessage, commandName, arguments);
+            var context = CreateCommandContext(chatMessage, commandName, arguments);
             var result = await _botCore.ProcessCommandAsync(context).ConfigureAwait(false);
 
             if (!result.SendResult)
@@ -192,36 +216,31 @@ public class TwitchModule : IChatModule
                 return;
             }
 
-            if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
+            if (_twitchClient.IsConnected)
             {
                 try
                 {
-                    await SendResponseAsync(libClient, e.ChatMessage, result.Message ?? "Command executed");
+                    await SendResponseAsync(chatMessage, result.Message ?? "Command executed");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "[TW] Failed to send command result back to #{Channel}", e.ChatMessage.Channel);
+                    _logger.LogError(ex, "[TW] Failed to send command result back to #{Channel}", chatMessage.Channel);
                 }
             }
         }
     }
 
-    private async Task SendResponseAsync(TwitchLibClient client, ChatMessage triggeringMessage, string responseText)
+    private async Task SendResponseAsync(ChatMessage triggeringMessage, string responseText)
     {
         switch (_config.ReplyMode)
         {
             case TwitchReplyMode.Reply:
-                await client.SendReplyAsync(
-                    triggeringMessage.Channel,
-                    triggeringMessage.MessageId,
-                    responseText
-                );
+                await _twitchClient.SendReplyAsync(triggeringMessage.Channel, triggeringMessage.MessageId, responseText);
                 break;
-
             case TwitchReplyMode.Mention:
             default:
                 var mentionText = $"@{triggeringMessage.Username}, {responseText}";
-                await client.SendMessageAsync(triggeringMessage.Channel, mentionText);
+                await _twitchClient.SendMessageAsync(triggeringMessage.Channel, mentionText);
                 break;
         }
     }
@@ -231,123 +250,44 @@ public class TwitchModule : IChatModule
         commandName = string.Empty;
         arguments = Array.Empty<string>();
 
-        if (string.IsNullOrWhiteSpace(message) || !message.StartsWith(prefix))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(message) || !message.StartsWith(prefix)) return false;
 
-        string cleanMessage = message.Substring(prefix.Length).TrimStart();
-
+        string cleanMessage = message[prefix.Length..].TrimStart();
         var parts = cleanMessage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0)
-        {
-            return false;
-        }
+
+        if (parts.Length == 0) return false;
 
         commandName = parts[0];
         arguments = parts.Skip(1).ToArray();
-
         return !string.IsNullOrWhiteSpace(commandName);
     }
 
     private async Task<string> GetChannelPrefixAsync(string channelId)
     {
-        if (_prefixCache.TryGetValue(channelId, out var cached))
-            return cached;
+        if (_prefixCache.TryGetValue(channelId, out var cached)) return cached;
 
         try
         {
             var stored = await _db.GetDataAsync(SetPrefixCommand.GetPrefixKey(channelId));
-            var prefix = !string.IsNullOrWhiteSpace(stored)
-                ? stored
-                : _config.CommandPrefix;
-
+            var prefix = !string.IsNullOrWhiteSpace(stored) ? stored : _config.CommandPrefix;
             _prefixCache[channelId] = prefix;
             return prefix;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
-                "[TW] Failed to load prefix from Redis for #{ChannelId}, using default '{Default}'",
-                channelId, _config.CommandPrefix);
+            _logger.LogWarning(ex, "[TW] Failed to load prefix from Redis for #{ChannelId}, using default '{Default}'", channelId, _config.CommandPrefix);
             return _config.CommandPrefix;
         }
     }
 
-    public void InvalidatePrefixCache(string channelId)
-        => _prefixCache.TryRemove(channelId, out _);
-
-    private async void OnNewSubscriber(object? sender, Events.OnNewSubscriberArgs e)
-    {
-        if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
-        {
-            try
-            {
-                // TODO: Add something here idk
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[TW] Failed to send subscriber message");
-            }
-        }
-    }
-
-    private async void OnGiftedSubscription(object? sender, Events.OnGiftedSubscriptionArgs e)
-    {
-        if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
-        {
-            try
-            {
-                // TODO: Add something here idk
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[TW] Failed to send gifted subscription message");
-            }
-        }
-    }
-
-    private async void OnRaidNotification(object? sender, Events.OnRaidNotificationArgs e)
-    {
-        if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
-        {
-            try
-            {
-                // TODO: Add something here idk
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[TW] Failed to send raid notification message");
-            }
-        }
-    }
-
-    private async void OnBitsReceived(object? sender, OnBitsReceivedArgs e)
-    {
-        if (_twitchClient is TwitchLibClient libClient && libClient.IsConnected)
-        {
-            try
-            {
-                // TODO: Add something here idk
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[TW] Failed to send bits message");
-            }
-        }
-    }
+    public void InvalidatePrefixCache(string channelId) => _prefixCache.TryRemove(channelId, out _);
 
     private ICommandContext CreateCommandContext(ChatMessage chatMessage, string commandName, string[] arguments)
     {
         return new TwitchCommandContext(
             commandName,
             arguments,
-            new TwitchUser(
-                chatMessage.Username,
-                chatMessage.UserId,
-                chatMessage.IsModerator,
-                chatMessage.IsBroadcaster
-            ),
+            new TwitchUser(chatMessage.Username, chatMessage.UserId, chatMessage.IsModerator, chatMessage.IsBroadcaster, chatMessage.IsBot),
             new TwitchChannel(chatMessage.Channel, chatMessage.ChannelId),
             DateTime.UtcNow
         );
@@ -358,28 +298,89 @@ public class TwitchModule : IChatModule
         _twitchClient.OnMessageReceived -= OnMessageReceived;
         _twitchClient.OnConnected -= OnConnected;
         _twitchClient.OnDisconnected -= OnDisconnected;
-
-        if (_twitchClient is TwitchLibClient libClient)
-        {
-            libClient.OnNewSubscriber -= OnNewSubscriber;
-            libClient.OnGiftedSubscription -= OnGiftedSubscription;
-            libClient.OnRaidNotification -= OnRaidNotification;
-            libClient.OnBitsReceived -= OnBitsReceived;
-        }
-
+        _twitchClient.OnBroadcasterAuthReceived -= OnBroadcasterAuthReceived;
         await _twitchClient.DisconnectAsync();
         _logger.LogInformation("[TW] Module shutdown complete");
     }
 
-    public class TwitchMessageExtra
+    private async Task LoadBroadcasterTokensAsync()
     {
-        public bool IsModerator { get; internal set; }
-        public bool IsBroadcaster { get; internal set; }
-        public bool IsSubscriber { get; internal set; }
-        public bool IsVIP { get; internal set; }
-        public string? Color { get; internal set; }
-        public string? Channel { get; internal set; }
-        public string? ChannelId { get; internal set; }
-        public List<KeyValuePair<string, string>>? Badges { get; internal set; }
+        try
+        {
+            var allChannels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(_config.Channel)) allChannels.Add(_config.Channel);
+
+            var ircJson = await _db.GetDataAsync("twitch:irc_channels") ?? "[]";
+            var ircChannels = JsonSerializer.Deserialize<List<string>>(ircJson) ?? new();
+            foreach (var ch in ircChannels) allChannels.Add(ch);
+
+            foreach (var channel in allChannels)
+            {
+                try
+                {
+                    var channelId = await _twitchClient.GetChannelIdAsync(channel);
+                    if (string.IsNullOrWhiteSpace(channelId)) continue;
+
+                    var tokenKey = $"twitch:broadcaster_token:{channelId}";
+                    var token = await _db.GetDataAsync(tokenKey);
+
+                    if (!string.IsNullOrWhiteSpace(token))
+                    {
+                        _twitchClient.SetBroadcasterToken(channelId, token);
+                        _logger.LogInformation("[TW] Loaded broadcaster token for #{Channel} ({ChannelId})", channel, channelId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[TW] Failed to load broadcaster token for #{Channel}", channel);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TW] Failed to load broadcaster tokens from Redis");
+        }
+    }
+
+    private async void OnBroadcasterAuthReceived(object? sender, BroadcasterAuthReceivedArgs e)
+    {
+        _ = SafeHandleBroadcasterAuthAsync(e).ContinueWith(
+            t => _logger.LogError(t.Exception, "[TW] Unhandled exception in broadcaster auth handler"),
+            TaskContinuationOptions.OnlyOnFaulted
+        );
+    }
+
+    private async Task SafeHandleBroadcasterAuthAsync(BroadcasterAuthReceivedArgs e)
+    {
+        try
+        {
+            _logger.LogInformation("[TW] Received broadcaster auth from {User} ({UserId}) for #{Channel}", e.Username, e.UserId, e.Channel);
+
+            var channelId = await _twitchClient.GetChannelIdAsync(e.Channel);
+            if (string.IsNullOrWhiteSpace(channelId))
+            {
+                _logger.LogWarning("[TW] Channel {Channel} not found", e.Channel);
+                return;
+            }
+
+            var isValid = await _twitchClient.ValidateBroadcasterTokenAsync(e.Token);
+            if (!isValid)
+            {
+                _logger.LogWarning("[TW] Invalid broadcaster token from {User} for #{Channel}", e.Username, e.Channel);
+                await _twitchClient.SendMessageAsync(e.Channel, "❌ | Failed to authorize. The token is invalid or expired");
+                return;
+            }
+
+            var tokenKey = $"twitch:broadcaster_token:{channelId}";
+            await _db.SetDataAsync(tokenKey, e.Token);
+            _twitchClient.SetBroadcasterToken(channelId, e.Token);
+            await _twitchClient.SendMessageAsync(e.Channel, "✅ | Successfully authorized, hi!");
+
+            _logger.LogInformation("[TW] Successfully authorized #{Channel}", e.Channel);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TW] Error processing broadcaster auth from {User}", e.Username);
+        }
     }
 }

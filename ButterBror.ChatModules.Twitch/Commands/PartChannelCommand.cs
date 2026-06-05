@@ -53,14 +53,8 @@ public class PartChannelCommand : CommandBase
                 return CommandResult.Failure("You don't have permission to part channels. Required: su:twitch:part");
             }
 
-            // S3: Check that the client supports part
-            if (_twitchClient is not TwitchLibClient libClient)
-            {
-                return CommandResult.Failure("Current Twitch client doesn't support parting channels.");
-            }
-
-            // S4: Trying to disconnect from the channel
-            await libClient.LeaveChannelAsync(channelName);
+            // S3: Trying to disconnect from the channel
+            await _twitchClient.LeaveChannelAsync(channelName);
 
             logger.LogInformation("Parted channel '{Channel}' by user '{User}'",
                 channelName, context.User.DisplayName);

@@ -16,7 +16,6 @@
     <PackageReference Include="TwitchLib.Client" Version="4.0.1" />
     <PackageReference Include="TwitchLib.Client.Models" Version="4.0.1" />
     <PackageReference Include="TwitchLib.Communication" Version="2.0.1" />
-    <PackageReference Include="TwitchLib.EventSub.Websockets" Version="0.8.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -27,45 +27,45 @@ public class JoinChannelCommand : CommandBase
             var permissionManager = GetService<IPermissionManager>(serviceProvider);
             var userRepository = GetService<IUserRepository>(serviceProvider);
 
-            // S0: Checking for the presence of an argument
+            // S0: Validate arguments
             if (context.Arguments.Count == 0)
             {
-                return CommandResult.Failure("Usage: !join <channel>. Specify the channel name to join.");
+                return CommandResult.Failure("Usage: !join <channel>.");
             }
 
-            var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
+            string channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
-            // S1: Get the user profile to obtain the unifiedUserId
+            // S1: Resolve user
             var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
             if (user == null)
             {
                 return CommandResult.Failure("User profile not found.");
             }
 
-            // S2: Checking user rights
+            // S2: Check permissions
             var hasPermission = await permissionManager.HasPermissionAsync(
                 user.UnifiedUserId,
-                "su:twitch:join"
-            );
+                "su:twitch:join");
 
             if (!hasPermission)
             {
                 return CommandResult.Failure("You don't have permission to join channels. Required: su:twitch:join");
             }
 
-            // S3: Trying to connect to the channel
+            // S3: Join
             await _twitchClient.JoinChannelAsync(channelName);
 
-            logger.LogInformation("Joined channel '{Channel}' by user '{User}'",
+            logger.LogInformation(
+                "Joined channel '{Channel}' by user '{User}'",
                 channelName, context.User.DisplayName);
 
-            return CommandResult.Successfully($"Successfully joined channel '#{channelName}'.");
+            return CommandResult.Successfully(
+                $"Successfully joined channel #{channelName}.");
         }
         catch (Exception ex)
         {
             var logger = GetService<ILogger<JoinChannelCommand>>(serviceProvider);
-            logger.LogError(ex, "Error joining channel '{Channel}'",
-                context.Arguments.Count > 0 ? context.Arguments[0] : "unknown");
+            logger.LogError(ex, "Error joining channel");
             return CommandResult.Failure($"Error joining channel: {ex.Message}");
         }
     }

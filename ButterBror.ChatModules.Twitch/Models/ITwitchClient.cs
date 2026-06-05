@@ -14,9 +14,9 @@ public interface ITwitchClient
     event EventHandler<Events.OnGiftedSubscriptionArgs>? OnGiftedSubscription;
     event EventHandler<Events.OnRaidNotificationArgs>? OnRaidNotification;
     event EventHandler<OnBitsReceivedArgs>? OnBitsReceived;
+    event EventHandler<BroadcasterAuthReceivedArgs>? OnBroadcasterAuthReceived;
 
     HashSet<string> ConnectedChannels { get; }
-
     bool IsConnected { get; }
 
     /// <summary>
@@ -35,7 +35,7 @@ public interface ITwitchClient
     Task DisconnectAsync();
 
     /// <summary>
-    /// Join the specified channel
+    /// Join the specified channel using the specified transport
     /// </summary>
     Task JoinChannelAsync(string channel);
 
@@ -53,4 +53,9 @@ public interface ITwitchClient
     /// Reply to a message in a specific channel
     /// </summary>
     Task SendReplyAsync(string channel, string replyToMessageId, string message);
+
+    void SetBroadcasterToken(string channelId, string token);
+    string? GetBroadcasterToken(string channelId);
+    Task<string?> GetChannelIdAsync(string channelName);
+    Task<bool> ValidateBroadcasterTokenAsync(string token);
 }
