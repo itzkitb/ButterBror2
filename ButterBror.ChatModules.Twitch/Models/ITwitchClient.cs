@@ -25,6 +25,16 @@ public interface ITwitchClient
     bool IsJoined(string channel);
 
     /// <summary>
+    /// Try deleting the channel from the list
+    /// </summary>
+    Task<bool> TryRemoveChannelAsync(string channel);
+
+    /// <summary>
+    /// Add channel to list
+    /// </summary>
+    Task AddChannelAsync(string channel);
+
+    /// <summary>
     /// Connect a client
     /// </summary>
     Task ConnectAsync(string username, string oauthToken, string clientId);

@@ -13,6 +13,6 @@ public class ChatMessage
     public bool IsSubscriber { get; internal set; }
     public bool IsVip { get; internal set; }
     public bool IsBot { get; internal set; }
-    public List<KeyValuePair<string, string>> Badges { get; internal set; } = new();
+    public List<KeyValuePair<string, string>> Badges { get; internal set; } = [];
     public string Color { get; internal set; } = string.Empty;
 }

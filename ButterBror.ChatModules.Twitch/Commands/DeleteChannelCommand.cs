@@ -11,11 +11,11 @@ namespace ButterBror.ChatModules.Twitch.Commands;
 /// <summary>
 /// Adds a channel to the IRC or EventSub list and connects to it on the fly
 /// </summary>
-public class AddChannelCommand : CommandBase
+public class DeleteChannelCommand : CommandBase
 {
     private readonly ITwitchClient _twitchClient;
 
-    public AddChannelCommand(ITwitchClient twitchClient)
+    public DeleteChannelCommand(ITwitchClient twitchClient)
     {
         _twitchClient = twitchClient;
     }
@@ -34,7 +34,7 @@ public class AddChannelCommand : CommandBase
             // S0: Validate arguments
             if (context.Arguments.Count < 1)
             {
-                return CommandResult.Failure("Usage: !addchannel <channel>. Example: !addchannel pajlada");
+                return CommandResult.Failure("Usage: !delchannel <channel>. Example: !delchannel hasanabi");
             }
             var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
@@ -47,11 +47,11 @@ public class AddChannelCommand : CommandBase
 
             var hasPermission = await permissionManager.HasPermissionAsync(
                 user.UnifiedUserId,
-                "su:twitch:addchannel");
+                "su:twitch:deletechannel");
 
             if (!hasPermission)
             {
-                return CommandResult.Failure("You don't have permission to add channels");
+                return CommandResult.Failure("You don't have permission to delete channels");
             }
 
             // S3: Persist to Redis
@@ -59,18 +59,18 @@ public class AddChannelCommand : CommandBase
             var currentJson = await customData.GetDataAsync(redisKey) ?? "[]";
             var channels = JsonSerializer.Deserialize<List<string>>(currentJson) ?? new List<string>();
 
-            if (channels.Contains(channelName, StringComparer.OrdinalIgnoreCase))
+            if (!channels.Contains(channelName, StringComparer.OrdinalIgnoreCase))
             {
-                return CommandResult.Failure($"Channel #{channelName} is already in the list");
+                return CommandResult.Failure($"Channel #{channelName} not found in the list");
             }
 
-            channels.Add(channelName);
+            channels.Remove(channelName);
             await customData.SetDataAsync(redisKey, JsonSerializer.Serialize(channels));
 
             // S4: Connect on the fly
             await _twitchClient.AddChannelAsync(channelName);
 
-            return CommandResult.Successfully($"Channel #{channelName} added to list and connected.");
+            return CommandResult.Successfully($"Channel #{channelName} added to list and connected");
         }
         catch (Exception ex)
         {

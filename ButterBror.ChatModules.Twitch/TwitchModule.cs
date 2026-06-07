@@ -28,6 +28,7 @@ public class TwitchModule : IChatModule
     private Func<ICommand> _setPrefixCommandFactory = null!;
     private Func<ICommand> _authCommandFactory = null!;
     private Func<ICommand> _addChannelCommandFactory = null!;
+    private Func<ICommand> _deleteChannelCommandFactory = null!;
 
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => new List<ModuleCommandExport>
     {
@@ -35,7 +36,8 @@ public class TwitchModule : IChatModule
         new ModuleCommandExport("part", _partCommandFactory, new PartChannelCommandMetadata()),
         new ModuleCommandExport("setprefix", _setPrefixCommandFactory, new SetPrefixCommandMetadata()),
         new ModuleCommandExport("auth", _authCommandFactory, new AuthCommandMetadata()),
-        new ModuleCommandExport("addchannel", _addChannelCommandFactory, new AddChannelCommandMetadata())
+        new ModuleCommandExport("addchannel", _addChannelCommandFactory, new AddChannelCommandMetadata()),
+        new ModuleCommandExport("deletechannel", _deleteChannelCommandFactory, new DeleteChannelCommandMetadata())
     };
 
     private ITwitchClient _twitchClient = null!;
@@ -57,7 +59,7 @@ public class TwitchModule : IChatModule
         _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
         _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
 
-        string ircChannelsString = _db.GetDataAsync("twitch:irc_channels").GetAwaiter().GetResult() ?? "[]";
+        string ircChannelsString = _db.GetDataAsync("twitch:channels").GetAwaiter().GetResult() ?? "[]";
         List<string> ircChannels = JsonSerializer.Deserialize<List<string>>(ircChannelsString) ?? new();
 
         _twitchClient = new TwitchClient(
@@ -73,6 +75,7 @@ public class TwitchModule : IChatModule
         _setPrefixCommandFactory = () => new SetPrefixCommand(this);
         _authCommandFactory = () => new AuthCommand(options);
         _addChannelCommandFactory = () => new AddChannelCommand(_twitchClient);
+        _deleteChannelCommandFactory = () => new DeleteChannelCommand(_twitchClient);
     }
 
     public async Task InitializeAsync(IBotCore core)
@@ -374,6 +377,7 @@ public class TwitchModule : IChatModule
             var tokenKey = $"twitch:broadcaster_token:{channelId}";
             await _db.SetDataAsync(tokenKey, e.Token);
             _twitchClient.SetBroadcasterToken(channelId, e.Token);
+            await _twitchClient.AddChannelAsync(e.Channel);
             await _twitchClient.SendMessageAsync(e.Channel, "✅ | Successfully authorized, hi!");
 
             _logger.LogInformation("[TW] Successfully authorized #{Channel}", e.Channel);

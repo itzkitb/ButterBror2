@@ -10,11 +10,9 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using TwitchLib.Api;
 using TwitchLib.Api.Helix.Models.Channels.SendChatMessage;
-using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
 using TwitchLib.Communication.Clients;
-using TwitchLib.Communication.Interfaces;
 using TwitchLib.Communication.Models;
 using TwitchLib.EventSub.Websockets;
 
@@ -36,6 +34,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
 
     private readonly ConcurrentDictionary<string, string> _channelIdCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _broadcasterTokens = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _initialChannels;
 
     private sealed record AppAccessTokenEntry(string Token, DateTime ExpiresAt);
     private readonly ConcurrentDictionary<string, AppAccessTokenEntry> _appTokenCache = new(StringComparer.Ordinal);
@@ -57,20 +56,19 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
 
     public bool IsConnected => _ircClient.IsConnected;
 
-    public HashSet<string> ConnectedChannels => _ircClient.JoinedChannels
-        .Select(c => c.Channel.ToLowerInvariant())
-        .ToHashSet();
+    public HashSet<string> ConnectedChannels => [.. _ircClient.JoinedChannels.Select(c => c.Channel.ToLowerInvariant())];
 
     public TwitchClient(
         IOptions<TwitchConfiguration> config,
         ResiliencePipelineProvider<string> pipelineProvider,
         ILogger<TwitchClient> logger,
-        IEnumerable<string>Channels)
+        IEnumerable<string> channels)
     {
         _config = config.Value;
         _logger = logger;
         _twitchPipeline = pipelineProvider.GetPipeline("platform");
         _apiPipeline = pipelineProvider.GetPipeline("api");
+        _initialChannels = [.. channels];
 
         var clientOptions = new ClientOptions(new ReconnectionPolicy(1000));
         var websocketClient = new WebSocketClient(clientOptions);
@@ -96,16 +94,16 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         {
             _logger.LogInformation("[TW] Connecting to Twitch...");
 
-            // 1. Initialize API with bot credentials
+            // S0. Initialize API with bot credentials
             _api.Settings.ClientId = clientId;
             _api.Settings.AccessToken = oauthToken;
 
-            // 2. Retrieve and cache Bot ID
+            // S1. Retrieve and cache Bot ID
             _botId = await GetChannelIdAsync(username) ?? throw new InvalidOperationException("Failed to retrieve bot user ID");
 
             _logger.LogInformation("[TW] API initialized. BotId={Id}, Name={Name}", _botId, username);
 
-            // 3. Initialize and connect for real-time message receiving
+            // S2. Initialize and connect for real-time message receiving
             var credentials = new ConnectionCredentials(
                 twitchUsername: username,
                 twitchOAuth: oauthToken,
@@ -125,7 +123,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
             await connectTask;
             _logger.LogInformation("[TW] Connected successfully");
 
-            // 4. Connect EventSub for Whispers
+            // S3. Connect EventSub for Whispers
             if (_eventSubClient != null)
             {
                 await _eventSubClient.ConnectAsync();
@@ -267,6 +265,46 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         }
     }
 
+    private async Task<List<string>> ReconnectToChannelsAsync()
+    {
+        List<string> missingChannels = [.. _initialChannels
+            .Where(channel => !_ircClient.JoinedChannels.Any(jc => jc.Channel == channel))];
+
+        foreach (var c in missingChannels)
+        {
+            await _ircClient.JoinChannelAsync(c, true);
+        }
+
+        return missingChannels;
+    }
+
+    public async Task AddChannelAsync(string channel)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        
+        var normalizedChannel = channel.ToLowerInvariant();
+        if (_initialChannels.Contains(normalizedChannel)) 
+            return;
+
+        _initialChannels.Add(normalizedChannel);
+        if (_ircClient.IsConnected)
+            await ReconnectToChannelsAsync();
+    }
+
+    public async Task<bool> TryRemoveChannelAsync(string channel)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+        var normalizedChannel = channel.ToLowerInvariant();
+        if (!_initialChannels.Contains(normalizedChannel))
+            return true;
+
+        if (_ircClient.IsConnected && IsJoined(channel))
+            await _ircClient.LeaveChannelAsync(channel);
+        
+        return _initialChannels.Remove(channel);
+    }
+
     public async Task<string?> GetChannelIdAsync(string channelName)
     {
         try
@@ -400,6 +438,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         _ircClient.OnMessageReceived += OnClientMessageReceived;
         _ircClient.OnConnected += OnClientConnected;
         _ircClient.OnDisconnected += OnClientDisconnected;
+        _ircClient.OnReconnected += OnClientReconnected;
         _ircClient.OnConnectionError += OnClientConnectionError;
         _ircClient.OnJoinedChannel += OnClientJoinedChannel;
         _ircClient.OnLeftChannel += OnClientPartChannel;
@@ -407,6 +446,19 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         _ircClient.OnGiftedSubscription += OnClientGiftedSubscription;
         _ircClient.OnRaidNotification += OnClientRaidNotification;
         _ircClient.OnBitsBadgeTier += OnClientBitsReceived;
+    }
+
+    private async Task OnClientReconnected(object? sender, OnConnectedEventArgs e)
+    {
+        try
+        {
+            _logger.LogInformation("[TW] Reconnected");
+            await ReconnectToChannelsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TW] Error handling reconnect");
+        }
     }
 
     private async Task OnClientMessageReceived(object? sender, TwitchLib.Client.Events.OnMessageReceivedArgs e)
@@ -444,6 +496,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         {
             _logger.LogInformation("[TW] Connected");
             OnConnected?.Invoke(this, e);
+            await ReconnectToChannelsAsync();
         }
         catch (Exception ex)
         {
