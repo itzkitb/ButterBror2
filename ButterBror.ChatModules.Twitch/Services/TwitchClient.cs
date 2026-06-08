@@ -184,6 +184,9 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
     public async Task LeaveChannelAsync(string channel)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
+        if (!IsJoined(channel))
+            return;
+        
         await _ircClient.LeaveChannelAsync(channel);
         _logger.LogInformation("[TW] Left #{Channel}", channel);
     }
@@ -283,10 +286,9 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         ObjectDisposedException.ThrowIf(_isDisposed, this);
         
         var normalizedChannel = channel.ToLowerInvariant();
-        if (_initialChannels.Contains(normalizedChannel)) 
+        if (!_initialChannels.Add(normalizedChannel)) 
             return;
 
-        _initialChannels.Add(normalizedChannel);
         if (_ircClient.IsConnected)
             await ReconnectToChannelsAsync();
     }
@@ -461,7 +463,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         }
     }
 
-    private async Task OnClientMessageReceived(object? sender, TwitchLib.Client.Events.OnMessageReceivedArgs e)
+    private Task OnClientMessageReceived(object? sender, TwitchLib.Client.Events.OnMessageReceivedArgs e)
     {
         try
         {
@@ -488,6 +490,8 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         {
             _logger.LogError(ex, "[TW] Error handling Twitch message");
         }
+
+        return Task.CompletedTask;
     }
 
     private async Task OnClientConnected(object? sender, OnConnectedEventArgs e)
@@ -504,13 +508,12 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         }
     }
 
-    private async Task OnWhisperMessage(object? sender, TwitchLib.EventSub.Core.EventArgs.User.UserWhisperMessageArgs e)
+    private Task OnWhisperMessage(object? sender, TwitchLib.EventSub.Core.EventArgs.User.UserWhisperMessageArgs e)
     {
         try
         {
             var data = e.Payload.Event;
             var message = data.Whisper.Text.Trim();
-            _logger.LogDebug("[TW] Received whisper from {User}: {Message}", data.FromUserName, message);
 
             // S0: Try to decode Base64 JSON from the website
             string json;
@@ -522,7 +525,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
             catch (FormatException)
             {
                 _logger.LogDebug("[TW] Whisper message is not a valid Base64 string, ignoring");
-                return;
+                return Task.CompletedTask;
             }
 
             // S1: Parse JSON to extract channel and token
@@ -530,7 +533,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
             if (authData == null || string.IsNullOrWhiteSpace(authData.Channel) || string.IsNullOrWhiteSpace(authData.Token))
             {
                 _logger.LogWarning("[TW] Invalid auth payload format in whisper from {User}", data.FromUserName);
-                return;
+                return Task.CompletedTask;
             }
 
             // S2: Trigger the auth event
@@ -548,31 +551,40 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         {
             _logger.LogError(ex, "[TW] Error handling whisper");
         }
+
+        return Task.CompletedTask;
     }
 
-    private async Task OnClientDisconnected(object? sender, OnDisconnectedArgs e)
+    private Task OnClientDisconnected(object? sender, OnDisconnectedArgs e)
     {
         _logger.LogWarning("[TW] Disconnected");
+        return Task.CompletedTask;
     }
 
-    private async Task OnClientConnectionError(object? sender, OnConnectionErrorArgs e)
+    private Task OnClientConnectionError(object? sender, OnConnectionErrorArgs e)
     {
         _logger.LogError("[TW] Connection error: {Error}", e.Error);
+        
+        return Task.CompletedTask;
     }
 
-    private async Task OnClientJoinedChannel(object? sender, OnJoinedChannelArgs e)
+    private Task OnClientJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
         var channel = e.Channel.ToLowerInvariant();
-        _logger.LogInformation("[TW] Joined #{Channel}", channel);
+        _logger.LogDebug("[TW] Joined #{Channel}", channel);
+        
+        return Task.CompletedTask;
     }
 
-    private async Task OnClientPartChannel(object? sender, OnLeftChannelArgs e)
+    private Task OnClientPartChannel(object? sender, OnLeftChannelArgs e)
     {
         var channel = e.Channel.ToLowerInvariant();
-        _logger.LogInformation("[TW] Parted #{Channel}", channel);
+        _logger.LogDebug("[TW] Parted #{Channel}", channel);
+        
+        return Task.CompletedTask;
     }
 
-    private async Task OnClientNewSubscriber(object? sender, TwitchLib.Client.Events.OnNewSubscriberArgs e)
+    private Task OnClientNewSubscriber(object? sender, TwitchLib.Client.Events.OnNewSubscriberArgs e)
     {
         try
         {
@@ -589,9 +601,11 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         {
             _logger.LogError(ex, "[TW] Error handling new subscriber event");
         }
+        
+        return Task.CompletedTask;
     }
 
-    private async Task OnClientGiftedSubscription(object? sender, TwitchLib.Client.Events.OnGiftedSubscriptionArgs e)
+    private Task OnClientGiftedSubscription(object? sender, TwitchLib.Client.Events.OnGiftedSubscriptionArgs e)
     {
         try
         {
@@ -608,9 +622,11 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         {
             _logger.LogError(ex, "[TW] Error handling gifted subscription event");
         }
+        
+        return Task.CompletedTask;
     }
 
-    private async Task OnClientRaidNotification(object? sender, TwitchLib.Client.Events.OnRaidNotificationArgs e)
+    private Task OnClientRaidNotification(object? sender, TwitchLib.Client.Events.OnRaidNotificationArgs e)
     {
         try
         {
@@ -626,9 +642,11 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         {
             _logger.LogError(ex, "[TW] Error handling raid notification event");
         }
+        
+        return Task.CompletedTask;
     }
 
-    private async Task OnClientBitsReceived(object? sender, OnBitsBadgeTierArgs e)
+    private Task OnClientBitsReceived(object? sender, OnBitsBadgeTierArgs e)
     {
         try
         {
@@ -645,18 +663,20 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         {
             _logger.LogError(ex, "[TW] Error handling bits received event");
         }
+        
+        return Task.CompletedTask;
     }
 
     private async Task OnEventSubReconnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketReconnectedArgs e)
     {
-        _logger.LogInformation("[TWBOT] [EventSub] Reconnected!");
+        _logger.LogInformation("[TW] [EventSub] Reconnected!");
 
         await SubscribeToWhispersAsync();
     }
 
     private async Task OnEventSubConnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketConnectedArgs e)
     {
-        _logger.LogInformation("[TWBOT] [EventSub] Connected!");
+        _logger.LogInformation("[TW] [EventSub] Connected!");
 
         await SubscribeToWhispersAsync();
     }

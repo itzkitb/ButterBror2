@@ -54,20 +54,7 @@ public class PlatformModuleManager : IPlatformModuleManager
     public async Task InitializeAsync(IBotCore core, CancellationToken ct = default)
     {
         _core = core;
-
-        // Initialize built-in modules from DI container
-        var builtInModules = _serviceProvider.GetServices<IChatModule>().ToList();
-        var builtInTasks = builtInModules.Select(async module =>
-        {
-            try { await InitializeModuleAsync(module, core); }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to initialize built-in module. name='{Id}'", module.ModuleId);
-            }
-        });
-        await Task.WhenAll(builtInTasks);
-
-        // 2. Загрузка chat и command модулей параллельно
+        
         await Task.WhenAll(
             LoadAndInitializeChatModulesAsync(core, ct),
             LoadAndInitializeCommandModulesAsync(ct)
@@ -116,7 +103,16 @@ public class PlatformModuleManager : IPlatformModuleManager
         {
             try
             {
-                await InitializeModuleAsync(module, core);
+                foreach (var exportedCommand in module.ExportedCommands)
+                {
+                    _commandRegistry.RegisterModuleCommand(
+                        exportedCommand.CommandName,
+                        module.ModuleId,
+                        exportedCommand.Factory,
+                        exportedCommand.Metadata
+                    );
+                }
+                
                 _loadedChatModules.Add(module);
                 _logger.LogInformation(
                     "Initialized chat module. id='{ModuleId}', version={Version}, commands={CommandCount}",
@@ -130,23 +126,6 @@ public class PlatformModuleManager : IPlatformModuleManager
                 _logger.LogError(ex, "Failed to initialize chat module: {PlatformName}", module.ModuleId);
             }
         }
-    }
-
-    private async Task InitializeModuleAsync(IChatModule module, IBotCore core)
-    {
-        // Register exported commands from module
-        foreach (var exportedCommand in module.ExportedCommands)
-        {
-            _commandRegistry.RegisterModuleCommand(
-                exportedCommand.CommandName,
-                module.ModuleId,
-                exportedCommand.Factory,
-                exportedCommand.Metadata
-            );
-        }
-
-        await module.InitializeAsync(core);
-        _moduleRegistry.RegisterModule(module);
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken = default)
@@ -249,10 +228,25 @@ public class PlatformModuleManager : IPlatformModuleManager
             // Initialize new modules
             foreach (var module in newModules)
             {
-                await InitializeModuleAsync(module, _core);
-                _loadedChatModules.Add(module);
-            }
+                foreach (var exportedCommand in module.ExportedCommands)
+                {
+                    _commandRegistry.RegisterModuleCommand(
+                        exportedCommand.CommandName,
+                        module.ModuleId,
+                        exportedCommand.Factory,
+                        exportedCommand.Metadata
+                    );
+                }
 
+                _loadedChatModules.Add(module);
+                _logger.LogInformation(
+                    "Reloaded chat module. id='{ModuleId}', version={Version}, commands_count={CommandCount}",
+                    module.ModuleId,
+                    module.Version,
+                    module.ExportedCommands.Count
+                );
+            }
+            
             var result = $"Reloaded chat module. id='{moduleId}'";
             _logger.LogInformation(result);
             return result;
@@ -316,7 +310,7 @@ public class PlatformModuleManager : IPlatformModuleManager
                 );
             }
 
-            var result = $"Reloaded command module '{moduleId}'";
+            var result = $"Reloaded command module. id='{moduleId}'";
             _logger.LogInformation(result);
             return result;
         }

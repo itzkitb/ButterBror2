@@ -29,7 +29,7 @@ public interface ICommandModule
     /// <summary>
     /// Module initialization
     /// </summary>
-    void InitializeWithServices(IServiceProvider serviceProvider);
+    Task InitializeAsync(IServiceProvider serviceProvider);
 
     /// <summary>
     /// Module shutdown

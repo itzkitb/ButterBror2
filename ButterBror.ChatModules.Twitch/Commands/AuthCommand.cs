@@ -31,10 +31,7 @@ public class AuthCommand : CommandBase
                 return Task.FromResult(CommandResult.Failure("ClientId is not configured."));
             }
 
-            var botAuthUrl =
-                _config.RedirectUri +
-                $"?client_id={_config.ClientId}" +
-                $"&bot_username={_config.BotUsername}";
+            var botAuthUrl = $"{_config.RedirectUri}?client_id={_config.ClientId}&bot_username={_config.BotUsername}";
 
             logger.LogInformation("[TW] Auth URL generated. url={Url}", botAuthUrl);
 

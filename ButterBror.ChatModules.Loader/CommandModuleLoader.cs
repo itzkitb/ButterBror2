@@ -150,7 +150,7 @@ public class CommandModuleLoader : IDisposable, ICommandModuleLoader
                     var module = Activator.CreateInstance(moduleType);
                     if (module is ICommandModule commandModule)
                     {
-                        commandModule.InitializeWithServices(_serviceProvider);
+                        await commandModule.InitializeAsync(_serviceProvider);
                         modules.Add(commandModule);
                         // Store mapping from module ID to archive path
                         _moduleIdToArchivePath[commandModule.ModuleId] = path;

@@ -15,6 +15,7 @@ namespace ButterBror.Modules.Loader;
 public class ChatModuleLoader : IChatModuleLoader, IDisposable
 {
     private readonly IAppDataPathProvider _pathProvider;
+    private readonly IBotCore _core;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ChatModuleLoader> _logger;
     private readonly ILocalizationService _localizationService;
@@ -31,8 +32,10 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         IAppDataPathProvider pathProvider,
         IServiceProvider serviceProvider,
         ILogger<ChatModuleLoader> logger,
-        ILocalizationService localizationService)
+        ILocalizationService localizationService,
+        IBotCore core)
     {
+        _core = core;
         _pathProvider = pathProvider;
         _serviceProvider = serviceProvider;
         _logger = logger;
@@ -144,7 +147,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                     var module = Activator.CreateInstance(moduleType);
                     if (module is IChatModule chatModule)
                     {
-                        chatModule.InitializeWithServices(_serviceProvider);
+                        await chatModule.InitializeAsync(_core, _serviceProvider);
                         modules.Add(chatModule);
                         // Store mapping from module platform name to archive path
                         _moduleToArchivePath[chatModule.ModuleId] = path;

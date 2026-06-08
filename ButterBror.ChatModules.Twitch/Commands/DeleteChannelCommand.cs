@@ -68,15 +68,15 @@ public class DeleteChannelCommand : CommandBase
             await customData.SetDataAsync(redisKey, JsonSerializer.Serialize(channels));
 
             // S4: Connect on the fly
-            await _twitchClient.AddChannelAsync(channelName);
+            await _twitchClient.LeaveChannelAsync(channelName);
 
-            return CommandResult.Successfully($"Channel #{channelName} added to list and connected");
+            return CommandResult.Successfully($"Channel #{channelName} deleted from list and parted");
         }
         catch (Exception ex)
         {
             var logger = GetService<ILogger<AddChannelCommand>>(serviceProvider);
-            logger.LogError(ex, "[TW] Error adding channel");
-            return CommandResult.Failure($"Error adding channel: {ex.Message}");
+            logger.LogError(ex, "[TW] Error delete channel");
+            throw;
         }
     }
 }

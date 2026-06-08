@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.Registry;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using TwitchLib.Client.Events;
 
@@ -30,17 +31,10 @@ public class TwitchModule : IChatModule
     private Func<ICommand> _addChannelCommandFactory = null!;
     private Func<ICommand> _deleteChannelCommandFactory = null!;
 
-    public IReadOnlyList<ModuleCommandExport> ExportedCommands => new List<ModuleCommandExport>
-    {
-        new ModuleCommandExport("join", _joinCommandFactory, new JoinChannelCommandMetadata()),
-        new ModuleCommandExport("part", _partCommandFactory, new PartChannelCommandMetadata()),
-        new ModuleCommandExport("setprefix", _setPrefixCommandFactory, new SetPrefixCommandMetadata()),
-        new ModuleCommandExport("auth", _authCommandFactory, new AuthCommandMetadata()),
-        new ModuleCommandExport("addchannel", _addChannelCommandFactory, new AddChannelCommandMetadata()),
-        new ModuleCommandExport("deletechannel", _deleteChannelCommandFactory, new DeleteChannelCommandMetadata())
-    };
+    private List<ModuleCommandExport> _commands = null!;
+    public IReadOnlyList<ModuleCommandExport> ExportedCommands => _commands;
 
-    private ITwitchClient _twitchClient = null!;
+    private TwitchClient? _twitchClient = null!;
     private IBotCore _botCore = null!;
     private ILogger<TwitchModule> _logger = null!;
     private TwitchConfiguration _config = null!;
@@ -48,7 +42,7 @@ public class TwitchModule : IChatModule
     private IDashboardBridge? _dashboardBridge;
     private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
 
-    public void InitializeWithServices(IServiceProvider serviceProvider)
+    public async Task InitializeAsync(IBotCore core, IServiceProvider serviceProvider)
     {
         var appDataPathProvider = serviceProvider.GetRequiredService<IAppDataPathProvider>();
         var configService = new TwitchConfigurationService(appDataPathProvider);
@@ -58,9 +52,10 @@ public class TwitchModule : IChatModule
         _db = serviceProvider.GetRequiredService<ICustomDataRepository>();
         _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
         _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
-
-        string ircChannelsString = _db.GetDataAsync("twitch:channels").GetAwaiter().GetResult() ?? "[]";
-        List<string> ircChannels = JsonSerializer.Deserialize<List<string>>(ircChannelsString) ?? new();
+        _botCore = core;
+        
+        var ircChannelsString = _db.GetDataAsync("twitch:channels").GetAwaiter().GetResult() ?? "[]";
+        var ircChannels = JsonSerializer.Deserialize<List<string>>(ircChannelsString) ?? [];
 
         _twitchClient = new TwitchClient(
             options,
@@ -69,26 +64,31 @@ public class TwitchModule : IChatModule
             ircChannels
         );
 
-        // Updating factories
+        // S0: Updating factories
         _joinCommandFactory = () => new JoinChannelCommand(_twitchClient);
         _partCommandFactory = () => new PartChannelCommand(_twitchClient);
         _setPrefixCommandFactory = () => new SetPrefixCommand(this);
         _authCommandFactory = () => new AuthCommand(options);
         _addChannelCommandFactory = () => new AddChannelCommand(_twitchClient);
         _deleteChannelCommandFactory = () => new DeleteChannelCommand(_twitchClient);
-    }
-
-    public async Task InitializeAsync(IBotCore core)
-    {
-        _botCore = core;
-
-        // S0: Main events
+        
+        _commands = new List<ModuleCommandExport>
+        {
+            new("join", _joinCommandFactory, new JoinChannelCommandMetadata()),
+            new("part", _partCommandFactory, new PartChannelCommandMetadata()),
+            new("setprefix", _setPrefixCommandFactory, new SetPrefixCommandMetadata()),
+            new("auth", _authCommandFactory, new AuthCommandMetadata()),
+            new("addchannel", _addChannelCommandFactory, new AddChannelCommandMetadata()),
+            new("deletechannel", _deleteChannelCommandFactory, new DeleteChannelCommandMetadata())
+        };
+        
+        // S1: Main events
         _twitchClient.OnMessageReceived += OnMessageReceived;
         _twitchClient.OnConnected += OnConnected;
         _twitchClient.OnDisconnected += OnDisconnected;
         _twitchClient.OnBroadcasterAuthReceived += OnBroadcasterAuthReceived;
 
-        // S1: Subscribing to additional features (simplified logging)
+        // S2: Subscribing to additional features (simplified logging)
         _twitchClient.OnNewSubscriber += (s, e) => _logger.LogInformation("[TW] New sub in #{Channel}: {User} ({Plan})", e.Channel, e.Username, e.SubscriptionPlan);
         _twitchClient.OnGiftedSubscription += (s, e) => _logger.LogInformation("[TW] Gifted sub in #{Channel}: {Gifter} -> {Recipient}", e.Channel, e.GifterUsername, e.RecipientUsername);
         _twitchClient.OnRaidNotification += (s, e) => _logger.LogInformation("[TW] Raid in #{Channel}: {Raider} ({Viewers} viewers)", e.Channel, e.RaiderUsername, e.ViewerCount);
@@ -108,13 +108,13 @@ public class TwitchModule : IChatModule
 
         try
         {
-            // S2: Connect to Twitch (WebSocket + IRC), but DON'T join channels yet
+            // S3: Connect to Twitch (WebSocket + IRC), but DON'T join channels yet
             await _twitchClient.ConnectAsync(_config.BotUsername, _config.OauthToken, _config.ClientId);
 
-            // S3: Shit
+            // S4: Shit
             await LoadBroadcasterTokensAsync();
 
-            // S4: Now join all configured channels
+            // S5: Now join all configured channels
             await JoinConfiguredChannelsAsync();
         }
         catch (Exception ex)
@@ -126,6 +126,9 @@ public class TwitchModule : IChatModule
 
     private async Task JoinConfiguredChannelsAsync()
     {
+        if (_twitchClient == null)
+            throw new Exception("Twitch client not initialized");
+        
         if (!string.IsNullOrWhiteSpace(_config.Channel))
         {
             await _twitchClient.JoinChannelAsync(_config.Channel);
@@ -135,7 +138,7 @@ public class TwitchModule : IChatModule
             await _twitchClient.JoinChannelAsync(_config.BotUsername);
         }
     }
-    private async void OnConnected(object? sender, OnConnectedEventArgs e)
+    private void OnConnected(object? sender, OnConnectedEventArgs e)
     {
         _ = SafeHandleConnectAsync(e).ContinueWith(
             t => _logger.LogError(t.Exception, "[TW] Unhandled exception in connect handler"),
@@ -145,7 +148,9 @@ public class TwitchModule : IChatModule
 
     private async Task SafeHandleConnectAsync(OnConnectedEventArgs e)
     {
-        _logger.LogInformation("[TW] Connected! My name is {Username}", e.BotUsername);
+        if (_twitchClient == null)
+            throw new Exception("Twitch client not initialized");
+        
         if (_twitchClient.IsConnected && !string.IsNullOrWhiteSpace(_config.Channel))
         {
             await _twitchClient.SendMessageAsync(_config.Channel, "Bot connected successfully!");
@@ -167,11 +172,12 @@ public class TwitchModule : IChatModule
 
     private async Task SafeHandleMessageAsync(Events.OnMessageReceivedArgs e)
     {
+        if (_twitchClient == null)
+            throw new Exception("Twitch client not initialized");
+        
         _dashboardBridge?.IncrementMessageCount();
         var chatMessage = e.ChatMessage;
-
-        // Example: Prevent the bot from processing its own messages to avoid infinite loops
-        bool isSelf = chatMessage.UserId.Equals(_config.BotUserId, StringComparison.OrdinalIgnoreCase) ||
+        var isSelf = chatMessage.UserId.Equals(_config.BotUserId, StringComparison.OrdinalIgnoreCase) ||
                       chatMessage.Username.Equals(_config.BotUsername, StringComparison.OrdinalIgnoreCase);
 
         if (isSelf)
@@ -235,6 +241,9 @@ public class TwitchModule : IChatModule
 
     private async Task SendResponseAsync(ChatMessage triggeringMessage, string responseText)
     {
+        if (_twitchClient == null)
+            throw new Exception("Twitch client not initialized");
+        
         switch (_config.ReplyMode)
         {
             case TwitchReplyMode.Reply:
@@ -255,17 +264,24 @@ public class TwitchModule : IChatModule
 
         if (string.IsNullOrWhiteSpace(message) || !message.StartsWith(prefix)) return false;
 
-        string cleanMessage = message[prefix.Length..].TrimStart();
-        var parts = cleanMessage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var messageSpan = message.AsSpan(prefix.Length).TrimStart();
+        var spaceIndex = messageSpan.IndexOf(' ');
 
-        if (parts.Length == 0) return false;
-
-        commandName = parts[0];
-        arguments = parts.Skip(1).ToArray();
+        if (spaceIndex == -1)
+        {
+            commandName = messageSpan.ToString();
+            arguments = Array.Empty<string>();
+        }
+        else
+        {
+            commandName = messageSpan[..spaceIndex].ToString();
+            var argsString = messageSpan[(spaceIndex + 1)..].TrimStart().ToString();
+            arguments = argsString.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        }
         return !string.IsNullOrWhiteSpace(commandName);
     }
 
-    private async Task<string> GetChannelPrefixAsync(string channelId)
+    private async ValueTask<string> GetChannelPrefixAsync(string channelId)
     {
         if (_prefixCache.TryGetValue(channelId, out var cached)) return cached;
 
@@ -298,6 +314,9 @@ public class TwitchModule : IChatModule
 
     public async Task ShutdownAsync()
     {
+        if (_twitchClient == null)
+            return;
+        
         _twitchClient.OnMessageReceived -= OnMessageReceived;
         _twitchClient.OnConnected -= OnConnected;
         _twitchClient.OnDisconnected -= OnDisconnected;
@@ -310,19 +329,28 @@ public class TwitchModule : IChatModule
     {
         try
         {
+            if (_twitchClient == null)
+                throw new Exception("Twitch client not initialized");
+            
+            Stopwatch timer = Stopwatch.StartNew();
             var allChannels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(_config.Channel)) allChannels.Add(_config.Channel);
 
             var ircJson = await _db.GetDataAsync("twitch:irc_channels") ?? "[]";
             var ircChannels = JsonSerializer.Deserialize<List<string>>(ircJson) ?? new();
             foreach (var ch in ircChannels) allChannels.Add(ch);
+        
+            var parallelOptions = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = 10 
+            };
 
-            foreach (var channel in allChannels)
+            await Parallel.ForEachAsync(allChannels, parallelOptions, async (channel, cancellationToken) =>
             {
                 try
                 {
                     var channelId = await _twitchClient.GetChannelIdAsync(channel);
-                    if (string.IsNullOrWhiteSpace(channelId)) continue;
+                    if (string.IsNullOrWhiteSpace(channelId)) return;
 
                     var tokenKey = $"twitch:broadcaster_token:{channelId}";
                     var token = await _db.GetDataAsync(tokenKey);
@@ -330,14 +358,16 @@ public class TwitchModule : IChatModule
                     if (!string.IsNullOrWhiteSpace(token))
                     {
                         _twitchClient.SetBroadcasterToken(channelId, token);
-                        _logger.LogInformation("[TW] Loaded broadcaster token for #{Channel} ({ChannelId})", channel, channelId);
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "[TW] Failed to load broadcaster token for #{Channel}", channel);
                 }
-            }
+            });
+            
+            timer.Stop();
+            _logger.LogInformation("[TW] Loaded broadcaster token for {Channels} channels in {Time} ms", allChannels.Count, timer.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -345,7 +375,7 @@ public class TwitchModule : IChatModule
         }
     }
 
-    private async void OnBroadcasterAuthReceived(object? sender, BroadcasterAuthReceivedArgs e)
+    private void OnBroadcasterAuthReceived(object? sender, BroadcasterAuthReceivedArgs e)
     {
         _ = SafeHandleBroadcasterAuthAsync(e).ContinueWith(
             t => _logger.LogError(t.Exception, "[TW] Unhandled exception in broadcaster auth handler"),
@@ -357,8 +387,9 @@ public class TwitchModule : IChatModule
     {
         try
         {
-            _logger.LogInformation("[TW] Received broadcaster auth from {User} ({UserId}) for #{Channel}", e.Username, e.UserId, e.Channel);
-
+            if (_twitchClient == null)
+                throw new Exception("Twitch client not initialized");
+            
             var channelId = await _twitchClient.GetChannelIdAsync(e.Channel);
             if (string.IsNullOrWhiteSpace(channelId))
             {
