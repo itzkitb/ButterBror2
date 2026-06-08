@@ -27,8 +27,7 @@ public interface IChatModule
     /// <summary>
     /// Module initialization
     /// </summary>
-    /// <param name="core"></param>
     /// <param name="serviceProvider"></param>
-    Task InitializeAsync(IBotCore core, IServiceProvider serviceProvider);
+    Task InitializeAsync(IServiceProvider serviceProvider);
     Task ShutdownAsync();
 }

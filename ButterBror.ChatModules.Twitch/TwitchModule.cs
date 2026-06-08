@@ -35,14 +35,14 @@ public class TwitchModule : IChatModule
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => _commands;
 
     private TwitchClient? _twitchClient = null!;
-    private IBotCore _botCore = null!;
+    private IBotCore? _botCore = null!;
     private ILogger<TwitchModule> _logger = null!;
     private TwitchConfiguration _config = null!;
     private ICustomDataRepository _db = null!;
     private IDashboardBridge? _dashboardBridge;
     private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
 
-    public async Task InitializeAsync(IBotCore core, IServiceProvider serviceProvider)
+    public async Task InitializeAsync(IServiceProvider serviceProvider)
     {
         var appDataPathProvider = serviceProvider.GetRequiredService<IAppDataPathProvider>();
         var configService = new TwitchConfigurationService(appDataPathProvider);
@@ -52,7 +52,7 @@ public class TwitchModule : IChatModule
         _db = serviceProvider.GetRequiredService<ICustomDataRepository>();
         _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
         _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
-        _botCore = core;
+        _botCore = serviceProvider.GetService<IBotCore>();
         
         var ircChannelsString = _db.GetDataAsync("twitch:channels").GetAwaiter().GetResult() ?? "[]";
         var ircChannels = JsonSerializer.Deserialize<List<string>>(ircChannelsString) ?? [];
