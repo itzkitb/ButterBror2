@@ -264,7 +264,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
             if (IsIrcFallbackActive(channelId))
             {
                 _logger.LogDebug("[TW] #{Channel} is in IRC fallback mode, using IRC", channel);
-                SendIrcMessage(channel, sanitizedMessage);
+                await SendIrcMessage(channel, sanitizedMessage, replyToMessageId);
                 return;
             }
 
@@ -290,7 +290,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
 
             try
             {
-                await SendIrcMessage(channel, sanitizedMessage);
+                await SendIrcMessage(channel, sanitizedMessage, replyToMessageId);
             }
             catch (Exception ircEx)
             {
@@ -337,7 +337,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         }
     }
     
-    private async Task SendIrcMessage(string channel, string message)
+    private async Task SendIrcMessage(string channel, string message, string? replyToMessageId)
     {
         var normalizedChannel = channel.ToLowerInvariant();
 
@@ -349,7 +349,14 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
             return;
         }
 
-        await _ircClient.SendMessageAsync(normalizedChannel, message);
+        if (replyToMessageId != null)
+        {
+            await _ircClient.SendReplyAsync(normalizedChannel, replyToMessageId, message);
+        }
+        else
+        {
+            await _ircClient.SendMessageAsync(normalizedChannel, message);
+        }
     }
 
     public async Task SendWhisperAsync(string recipientUserId, string message)
