@@ -8,6 +8,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using ButterBror.Data;
 using TwitchLib.Api;
 using TwitchLib.Api.Helix.Models.Channels.SendChatMessage;
 using TwitchLib.Client.Events;
@@ -24,6 +25,7 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
     private readonly ILogger<TwitchClient> _logger;
     private readonly ResiliencePipeline _twitchPipeline;
     private readonly ResiliencePipeline _apiPipeline;
+    private ICustomDataRepository _db = null!;
 
     private readonly TwitchLib.Client.TwitchClient _ircClient;
     private readonly EventSubWebsocketClient? _eventSubClient;
@@ -35,6 +37,9 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
     private readonly ConcurrentDictionary<string, string> _channelIdCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _broadcasterTokens = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _initialChannels;
+    private readonly ConcurrentDictionary<string, TwitchChannelSettings> _settingsCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, StreamStatusInfo> _streamStatusCache = new(StringComparer.Ordinal);
+    private readonly TimeSpan _statusCacheDuration = TimeSpan.FromMinutes(2);
 
     private sealed record AppAccessTokenEntry(string Token, DateTime ExpiresAt);
     private readonly ConcurrentDictionary<string, AppAccessTokenEntry> _appTokenCache = new(StringComparer.Ordinal);
@@ -62,13 +67,15 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         IOptions<TwitchConfiguration> config,
         ResiliencePipelineProvider<string> pipelineProvider,
         ILogger<TwitchClient> logger,
-        IEnumerable<string> channels)
+        IEnumerable<string> channels,
+        ICustomDataRepository db)
     {
         _config = config.Value;
         _logger = logger;
         _twitchPipeline = pipelineProvider.GetPipeline("platform");
         _apiPipeline = pipelineProvider.GetPipeline("api");
         _initialChannels = [.. channels];
+        _db = db;
 
         var clientOptions = new ClientOptions(new ReconnectionPolicy(1000));
         var websocketClient = new WebSocketClient(clientOptions);
@@ -221,6 +228,24 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         try
         {
             var channelId = await GetChannelIdInternalAsync(channel);
+            var settings = await GetChannelSettingsAsync(channelId);
+            if (!settings.AllowOffline || !settings.AllowOnline)
+            {
+                bool isOnline = await IsChannelOnlineAsync(channel, channelId);
+
+                if (isOnline && !settings.AllowOnline)
+                {
+                    _logger.LogDebug("[TW] Bot is disabled during ONLINE for #{Channel}. Message ignored", channel);
+                    return;
+                }
+
+                if (!isOnline && !settings.AllowOffline)
+                {
+                    _logger.LogDebug("[TW] Bot is disabled during OFFLINE for #{Channel}. Message ignored", channel);
+                    return;
+                }
+            }
+
             var sanitizedMessage = SanitizeMessage(message);
 
             if (sanitizedMessage.Length > 500)
@@ -355,6 +380,58 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         return channelUser.Id;
     }
 
+    private async ValueTask<TwitchChannelSettings> GetChannelSettingsAsync(string channelId)
+    {
+        if (_settingsCache.TryGetValue(channelId, out var cached)) return cached;
+
+        try
+        {
+            var json = await _db.GetDataAsync($"twitch:settings:{channelId}");
+            var settings = !string.IsNullOrWhiteSpace(json) 
+                ? JsonSerializer.Deserialize<TwitchChannelSettings>(json) 
+                : new TwitchChannelSettings();
+            
+            _settingsCache[channelId] = settings!;
+            return settings!;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[TW] Failed to load settings from Redis for channel {ChannelId}", channelId);
+            return new TwitchChannelSettings();
+        }
+    }
+    
+    private async Task<bool> IsChannelOnlineAsync(string channelLogin, string channelId)
+    {
+        if (_streamStatusCache.TryGetValue(channelId, out var cached) &&
+            DateTime.UtcNow - cached.LastChecked < _statusCacheDuration)
+        {
+            return cached.IsOnline;
+        }
+
+        try
+        {
+            var res = await _twitchPipeline.ExecuteAsync(async ct =>
+                (await _api.Helix.Streams.GetStreamsAsync(userIds: new List<string> { channelId })));
+            bool isOnline = res.Streams != null && res.Streams.Length > 0;
+
+            _streamStatusCache[channelId] = new StreamStatusInfo
+            {
+                IsOnline = isOnline,
+                LastChecked = DateTime.UtcNow
+            };
+
+            return isOnline;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TW] Error checking stream status for {Channel}", channelLogin);
+            return false;
+        }
+    }
+    
+    public void InvalidateChannelSettingsCache(string channelId) => _settingsCache.TryRemove(channelId, out _);
+    
     private async Task<string?> GetAppAccessTokenAsync(CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_config.ClientSecret) || string.IsNullOrWhiteSpace(_config.ClientId))

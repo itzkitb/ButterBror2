@@ -80,3 +80,16 @@ internal class DeleteChannelCommandMetadata : ICommandMetadata
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
+
+// Metadata for channel settings command
+internal class ChannelSettingsCommandMetadata : ICommandMetadata
+{
+    public string Name => "twitchset";
+    public List<string> Aliases => ["ts"];
+    public int CooldownSeconds => 1;
+    public List<string> RequiredPermissions => ["su:twitch:settings"];
+    public string ArgumentsHelpText => "<online|offline> <true|false>";
+    public string Id => "sillyapps:twitch:settings";
+    public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
+    public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
+}

@@ -64,6 +64,7 @@ public interface ITwitchClient
     /// </summary>
     Task SendReplyAsync(string channel, string replyToMessageId, string message);
 
+    public void InvalidateChannelSettingsCache(string channelId);
     void SetBroadcasterToken(string channelId, string token);
     string? GetBroadcasterToken(string channelId);
     Task<string?> GetChannelIdAsync(string channelName);

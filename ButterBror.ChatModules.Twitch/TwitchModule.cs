@@ -30,6 +30,7 @@ public class TwitchModule : IChatModule
     private Func<ICommand> _authCommandFactory = null!;
     private Func<ICommand> _addChannelCommandFactory = null!;
     private Func<ICommand> _deleteChannelCommandFactory = null!;
+    private Func<ICommand> _channelSettingsCommandFactory = null!;
 
     private List<ModuleCommandExport> _commands = null!;
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => _commands;
@@ -41,7 +42,7 @@ public class TwitchModule : IChatModule
     private ICustomDataRepository _db = null!;
     private IDashboardBridge? _dashboardBridge;
     private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
-
+    
     public async Task InitializeAsync(IServiceProvider serviceProvider)
     {
         var appDataPathProvider = serviceProvider.GetRequiredService<IAppDataPathProvider>();
@@ -61,7 +62,8 @@ public class TwitchModule : IChatModule
             options,
             serviceProvider.GetRequiredService<ResiliencePipelineProvider<string>>(),
             serviceProvider.GetRequiredService<ILogger<TwitchClient>>(),
-            ircChannels
+            ircChannels,
+            _db
         );
 
         // S0: Updating factories
@@ -71,6 +73,7 @@ public class TwitchModule : IChatModule
         _authCommandFactory = () => new AuthCommand(options);
         _addChannelCommandFactory = () => new AddChannelCommand(_twitchClient);
         _deleteChannelCommandFactory = () => new DeleteChannelCommand(_twitchClient);
+        _channelSettingsCommandFactory = () => new ChannelSettingsCommand(_twitchClient);
         
         _commands = new List<ModuleCommandExport>
         {
@@ -79,7 +82,8 @@ public class TwitchModule : IChatModule
             new("setprefix", _setPrefixCommandFactory, new SetPrefixCommandMetadata()),
             new("auth", _authCommandFactory, new AuthCommandMetadata()),
             new("addchannel", _addChannelCommandFactory, new AddChannelCommandMetadata()),
-            new("deletechannel", _deleteChannelCommandFactory, new DeleteChannelCommandMetadata())
+            new("deletechannel", _deleteChannelCommandFactory, new DeleteChannelCommandMetadata()),
+            new("twitchset", _channelSettingsCommandFactory, new ChannelSettingsCommandMetadata())
         };
         
         // S1: Main events
@@ -182,11 +186,10 @@ public class TwitchModule : IChatModule
 
         if (isSelf)
         {
-            chatMessage.IsBot = true;
-            _logger.LogDebug("[TW] Ignoring self-message from bot in #{Channel}", chatMessage.Channel);
+            _logger.LogDebug("[TW] Ignoring self-message in #{Channel}", chatMessage.Channel);
             return;
         }
-
+        
         var extra = new TwitchMessageExtra()
         {
             IsModerator = chatMessage.IsModerator,
