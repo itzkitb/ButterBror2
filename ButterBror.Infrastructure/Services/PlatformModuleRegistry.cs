@@ -26,6 +26,19 @@ public class PlatformModuleRegistry : IChatModuleRegistry
 
     public IEnumerable<IChatModule> GetModules() => _modules.AsReadOnly();
 
+    public IChatModule? GetModuleById(string moduleId)
+    {
+        var module = _modules.FirstOrDefault(
+            m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
+
+        if (module == null)
+        {
+            _logger.LogWarning("Module with id '{PlatformName}' not found", moduleId);
+        }
+
+        return module;
+    }
+    
     public bool UnregisterModule(string platformName)
     {
         var module = _modules.FirstOrDefault(m => m.ModuleId.Equals(platformName, StringComparison.OrdinalIgnoreCase));
