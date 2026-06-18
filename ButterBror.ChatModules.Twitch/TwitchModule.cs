@@ -44,7 +44,7 @@ public class TwitchModule : IChatModule
     private TwitchConfiguration _config = null!;
     private ICustomDataRepository _db = null!;
     private IDashboardBridge? _dashboardBridge;
-    private ILocalizationService _localizarion;
+    private ILocalizationService? _localization;
     private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
     
     public async Task InitializeAsync(IServiceProvider serviceProvider)
@@ -58,6 +58,7 @@ public class TwitchModule : IChatModule
         _logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
         _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
         _botCore = serviceProvider.GetService<IBotCore>();
+        _localization = serviceProvider.GetService<ILocalizationService>();
         
         var ircChannelsString = _db.GetDataAsync("twitch:channels").GetAwaiter().GetResult() ?? "[]";
         var ircChannels = JsonSerializer.Deserialize<List<string>>(ircChannelsString) ?? [];
@@ -167,10 +168,13 @@ public class TwitchModule : IChatModule
         if (_twitchClient == null)
             throw new Exception("Twitch client not initialized");
         
+        if (_localization == null)
+            throw new Exception("Localization not initialized");
+        
         if (_twitchClient.IsConnected && !string.IsNullOrWhiteSpace(_config.Channel))
         {
             await _twitchClient.SendMessageAsync(_config.Channel, 
-                await _localizarion.GetStringAsync("core.bot.connected", "EN_US"));
+                await _localization.GetStringAsync("core.bot.connected", "EN_US"));
         }
     }
 
