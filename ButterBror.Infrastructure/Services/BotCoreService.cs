@@ -1,3 +1,4 @@
+using ButterBror.ChatModule;
 using ButterBror.CommandModule.Commands;
 using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;

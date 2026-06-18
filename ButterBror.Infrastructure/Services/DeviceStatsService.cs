@@ -313,7 +313,7 @@ public sealed class CpuTemperatureReader
     public CpuTemperatureReader(ILogger<DeviceStatsService>? logger = null)
     {
         _logger = logger;
-        _platformReader = CreatePlatformReader(logger);
+        _platformReader = new CpuTemperatureReaderInstance(logger);
         _isInitialized = true;
     }
 
@@ -344,25 +344,17 @@ public sealed class CpuTemperatureReader
             return null;
         }
     }
-
-    private static ICpuTemperatureReader CreatePlatformReader(
-        ILogger<DeviceStatsService>? logger)
-    {
-        return OperatingSystem.IsWindows()
-            ? new WindowsCpuTemperatureReader(logger)
-            : new LinuxCpuTemperatureReader(logger);
-    }
 }
 
-// Linux
-internal sealed class LinuxCpuTemperatureReader : ICpuTemperatureReader
+#if LINUX
+internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
 {
     private static readonly string[] KnownCpuDrivers =
         ["k10temp", "coretemp", "cpu_thermal", "acpitz", "k8temp", "zenpower"];
 
     private readonly ILogger? _logger;
 
-    public LinuxCpuTemperatureReader(ILogger? logger)
+    public CpuTemperatureReaderInstance(ILogger? logger)
     {
         _logger = logger;
     }
@@ -537,16 +529,15 @@ internal sealed class LinuxCpuTemperatureReader : ICpuTemperatureReader
         return null;
     }
 }
-
-// Windows
-internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader, IDisposable
+#elif WINDOWS
+internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDisposable
 {
     private readonly ILogger? _logger;
     private readonly Computer? _lhmComputer;
     private bool _lhmStarted = false;
     private bool _canGetTemp = true;
 
-    public WindowsCpuTemperatureReader(ILogger? logger)
+    public CpuTemperatureReaderInstance(ILogger? logger)
     {
         _logger = logger;
 
@@ -711,3 +702,25 @@ internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader, IDisp
         }
     }
 }
+#else
+internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDisposable
+{
+    public CpuTemperatureReaderInstance(ILogger? logger)
+    {
+        if (logger == null)
+            throw new ArgumentNullException(nameof(logger));
+        
+        logger.LogInformation("Unknown platform, CPU temperature will not be measured");
+    }
+
+    public double? Read()
+    {
+        return 0;
+    }
+
+    public void Dispose()
+    {
+        
+    }
+}
+#endif

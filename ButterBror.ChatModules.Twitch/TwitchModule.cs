@@ -128,7 +128,13 @@ public class TwitchModule : IChatModule
         }
     }
 
-    public async Task SendMessageAsync(string channel, string message) => await _twitchClient.SendMessageAsync(channel, message);
+    public async Task SendMessageAsync(string channel, string message)
+    {
+        if (_twitchClient == null)
+            throw new Exception("Twitch client not initialized");
+        
+        await _twitchClient.SendMessageAsync(channel, message);
+    } 
     
     private async Task JoinConfiguredChannelsAsync()
     {
@@ -180,6 +186,9 @@ public class TwitchModule : IChatModule
     {
         if (_twitchClient == null)
             throw new Exception("Twitch client not initialized");
+        
+        if (_botCore == null)
+            throw new Exception("Bot core not initialized");
         
         _dashboardBridge?.IncrementMessageCount();
         var chatMessage = e.ChatMessage;
