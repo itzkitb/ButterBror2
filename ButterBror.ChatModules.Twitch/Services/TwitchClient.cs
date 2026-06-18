@@ -41,6 +41,12 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
     private readonly ConcurrentDictionary<string, StreamStatusInfo> _streamStatusCache = new(StringComparer.Ordinal);
     private readonly TimeSpan _statusCacheDuration = TimeSpan.FromMinutes(2);
 
+    // IRC fallback: channelId -> UTC expiry time
+    // When Helix API fails, the channel is switched to IRC for IrcFallbackDuration.
+    // The fallback is cleared early if the broadcaster re-authenticates via whisper.
+    private readonly ConcurrentDictionary<string, DateTime> _ircFallbackChannels = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan IrcFallbackDuration = TimeSpan.FromHours(1);
+
     private sealed record AppAccessTokenEntry(string Token, DateTime ExpiresAt);
     private readonly ConcurrentDictionary<string, AppAccessTokenEntry> _appTokenCache = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _appTokenRefreshLock = new(1, 1);
@@ -225,9 +231,17 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
 
     private async Task SendHelixMessageAsync(string channel, string message, string? replyToMessageId)
     {
+        // Sanitize and truncate once — the same result is used for both Helix and IRC paths.
+        var sanitizedMessage = SanitizeMessage(message);
+        if (sanitizedMessage.Length > 500)
+            sanitizedMessage = sanitizedMessage[..497] + "...";
+
+        // channelId is resolved before the API call so the fallback catcher can register it.
+        string? channelId = null;
         try
         {
-            var channelId = await GetChannelIdInternalAsync(channel);
+            channelId = await GetChannelIdInternalAsync(channel);
+
             var settings = await GetChannelSettingsAsync(channelId);
             if (!settings.AllowOffline || !settings.AllowOnline)
             {
@@ -246,11 +260,12 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
                 }
             }
 
-            var sanitizedMessage = SanitizeMessage(message);
-
-            if (sanitizedMessage.Length > 500)
+            // If this channel already has an active IRC fallback, skip the API entirely.
+            if (IsIrcFallbackActive(channelId))
             {
-                sanitizedMessage = sanitizedMessage[..497] + "...";
+                _logger.LogDebug("[TW] #{Channel} is in IRC fallback mode, using IRC", channel);
+                SendIrcMessage(channel, sanitizedMessage);
+                return;
             }
 
             var appToken = await GetAppAccessTokenAsync();
@@ -268,11 +283,73 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
 
             _logger.LogDebug("[TW] Sent message to #{Channel}: \"{Message}\"", channel, sanitizedMessage);
         }
+        catch (Exception ex) when (channelId != null)
+        {
+            // Helix API failed - activate IRC fallback for this channel for 1 hour
+            SetIrcFallback(channelId);
+
+            try
+            {
+                await SendIrcMessage(channel, sanitizedMessage);
+            }
+            catch (Exception ircEx)
+            {
+                _logger.LogError(ircEx, "[TW] IRC fallback also failed for #{Channel}", channel);
+                throw;
+            }
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TW] Failed to send message to #{Channel}", channel);
+            _logger.LogError(ex, "[TW] Failed to resolve channel ID for #{Channel}, cannot send message", channel);
             throw;
         }
+    }
+    
+    private void SetIrcFallback(string channelId)
+    {
+        var expiry = DateTime.UtcNow + IrcFallbackDuration;
+        _ircFallbackChannels[channelId] = expiry;
+        _logger.LogWarning(
+            "[TW] IRC fallback activated for channel {ChannelId}. Will expire at {Expiry:u}",
+            channelId, expiry);
+    }
+    
+    private bool IsIrcFallbackActive(string channelId)
+    {
+        if (!_ircFallbackChannels.TryGetValue(channelId, out var expiry))
+            return false;
+
+        if (DateTime.UtcNow < expiry)
+            return true;
+        
+        _ircFallbackChannels.TryRemove(channelId, out _);
+        _logger.LogInformation("[TW] IRC fallback for channel {ChannelId} expired, removed", channelId);
+        return false;
+    }
+    
+    public void ClearIrcFallback(string channelId)
+    {
+        if (_ircFallbackChannels.TryRemove(channelId, out _))
+        {
+            _logger.LogInformation(
+                "[TW] IRC fallback cleared for channel {ChannelId}",
+                channelId);
+        }
+    }
+    
+    private async Task SendIrcMessage(string channel, string message)
+    {
+        var normalizedChannel = channel.ToLowerInvariant();
+
+        if (!IsJoined(normalizedChannel))
+        {
+            _logger.LogWarning(
+                "[TW] [IRC Fallback] Bot is not joined to #{Channel}, cannot send via IRC",
+                normalizedChannel);
+            return;
+        }
+
+        await _ircClient.SendMessageAsync(normalizedChannel, message);
     }
 
     public async Task SendWhisperAsync(string recipientUserId, string message)

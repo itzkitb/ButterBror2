@@ -69,4 +69,5 @@ public interface ITwitchClient
     string? GetBroadcasterToken(string channelId);
     Task<string?> GetChannelIdAsync(string channelName);
     Task<bool> ValidateBroadcasterTokenAsync(string token);
+    void ClearIrcFallback(string channelId);
 }

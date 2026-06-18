@@ -448,6 +448,8 @@ public class TwitchModule : IChatModule
             var tokenKey = $"twitch:broadcaster_token:{channelId}";
             await _db.SetDataAsync(tokenKey, e.Token);
             _twitchClient.SetBroadcasterToken(channelId, e.Token);
+            _twitchClient.ClearIrcFallback(channelId);
+
             await _twitchClient.AddChannelAsync(e.Channel);
             await _twitchClient.SendMessageAsync(e.Channel, "✅ | Successfully authorized, hi!");
 
