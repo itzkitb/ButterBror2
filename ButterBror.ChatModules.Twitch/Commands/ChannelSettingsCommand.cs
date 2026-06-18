@@ -20,64 +20,85 @@ public class ChannelSettingsCommand : CommandBase
         ICommandExecutionContext context, 
         ICommandServiceProvider serviceProvider)
     {
-        var customData = GetService<ICustomDataRepository>(serviceProvider);
-        var permissionManager = GetService<IPermissionManager>(serviceProvider);
-        var userRepository = GetService<IUserRepository>(serviceProvider);
-
-        // S0: Check permissions
-        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null)
+        try
         {
-            return CommandResult.Failure("User profile not found");
+            var customData = GetService<ICustomDataRepository>(serviceProvider);
+            var permissionManager = GetService<IPermissionManager>(serviceProvider);
+            var userRepository = GetService<IUserRepository>(serviceProvider);
+            var localization = GetService<ILocalizationService>(serviceProvider);
+
+            // S0: Check permissions
+            var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
+            if (user == null)
+            {
+                throw new Exception("User not found");
+            }
+
+            var hasPermission = await permissionManager.HasPermissionAsync(
+                user.UnifiedUserId,
+                "su:twitch:settings");
+
+            if (!hasPermission)
+            {
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.channel_settings.permission", context.Locale));
+            }
+
+            // S1: Check args
+            if (context.Arguments.Count < 2)
+            {
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.channel_settings.usage", context.Locale));
+            }
+
+            string target = context.Arguments[0].ToLowerInvariant();
+            if (!bool.TryParse(context.Arguments[1], out bool value))
+            {
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.channel_settings.value", context.Locale));
+            }
+
+            string channelId = context.Channel.Id;
+
+            // S2: Changing
+            var json = await customData.GetDataAsync($"twitch:settings:{channelId}");
+            var settings = !string.IsNullOrWhiteSpace(json)
+                ? JsonSerializer.Deserialize<TwitchChannelSettings>(json)
+                : new TwitchChannelSettings();
+
+            if (target == "online")
+            {
+                settings!.AllowOnline = value;
+            }
+            else if (target == "offline")
+            {
+                settings!.AllowOffline = value;
+            }
+            else
+            {
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.channel_settings.unknown", context.Locale));
+            }
+
+            await customData.SetDataAsync($"twitch:settings:{channelId}", JsonSerializer.Serialize(settings));
+
+            // S3: Reset cache
+            _client.InvalidateChannelSettingsCache(channelId);
+
+            return CommandResult.Successfully(
+                await localization.GetStringAsync("command.channel_settings.unknown", context.Locale,
+                    target,
+                    value));
         }
-
-        var hasPermission = await permissionManager.HasPermissionAsync(
-            user.UnifiedUserId,
-            "su:twitch:settings");
-
-        if (!hasPermission)
+        catch (Exception ex)
         {
-            return CommandResult.Failure("You don't have permission to add channels");
+            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            return await errorTracking.LogErrorAsync(
+                ex,
+                "Failed to execute ChannelSettings",
+                context.User.Id,
+                context.Channel.Platform,
+                context);
         }
-
-        // S1: Check args
-        if (context.Arguments.Count < 2)
-        {
-            return CommandResult.Failure("Usage: !twitchset <online|offline> <true|false>");
-        }
-
-        string target = context.Arguments[0].ToLowerInvariant();
-        if (!bool.TryParse(context.Arguments[1], out bool value))
-        {
-            return CommandResult.Failure("The value must be true or false");
-        }
-
-        string channelId = context.Channel.Id;
-
-        // S2: Changing
-        var json = await customData.GetDataAsync($"twitch:settings:{channelId}");
-        var settings = !string.IsNullOrWhiteSpace(json)
-            ? JsonSerializer.Deserialize<TwitchChannelSettings>(json)
-            : new TwitchChannelSettings();
-
-        if (target == "online")
-        {
-            settings!.AllowOnline = value;
-        }
-        else if (target == "offline")
-        {
-            settings!.AllowOffline = value;
-        }
-        else
-        {
-            return CommandResult.Failure("Unknown parameter. Available: online, offline");
-        }
-
-        await customData.SetDataAsync($"twitch:settings:{channelId}", JsonSerializer.Serialize(settings));
-        
-        // S3: Reset cache
-        _client.InvalidateChannelSettingsCache(channelId);
-
-        return CommandResult.Successfully($"Parameter '{target}' changed to {value}");
     }
 }

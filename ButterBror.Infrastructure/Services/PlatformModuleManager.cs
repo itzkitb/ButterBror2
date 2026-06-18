@@ -171,14 +171,7 @@ public class PlatformModuleManager : IPlatformModuleManager
         {
             var error = $"Chat module not found in loaded modules. id='{moduleId}'";
             _logger.LogError(error);
-            return error;
-        }
-
-        if (_core == null)
-        {
-            var error = "Bot core is not initialized";
-            _logger.LogError(error);
-            return error;
+            return "error:not_found";
         }
 
         try
@@ -203,9 +196,9 @@ public class PlatformModuleManager : IPlatformModuleManager
 
             if (newModules.Count == 0)
             {
-                var error = $"Module not found. id='{moduleId}'";
+                var error = $"The module was not found in the files. id='{moduleId}'";
                 _logger.LogError(error);
-                return error;
+                return "error:not_found_local";
             }
 
             // Initialize new modules
@@ -232,12 +225,12 @@ public class PlatformModuleManager : IPlatformModuleManager
             
             var result = $"Reloaded chat module. id='{moduleId}'";
             _logger.LogInformation(result);
-            return result;
+            return "success";
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to reload chat module. id='{ModuleId}'", moduleId);
-            return $"Failed to reload chat module '{moduleId}': {ex.Message}";
+            return "error:exception";
         }
     }
 
@@ -249,7 +242,7 @@ public class PlatformModuleManager : IPlatformModuleManager
         {
             var error = $"Command module not found in loaded modules. id='{moduleId}'";
             _logger.LogError(error);
-            return error;
+            return "error:not_found";
         }
 
         try
@@ -266,9 +259,9 @@ public class PlatformModuleManager : IPlatformModuleManager
 
             if (newModules.Count == 0)
             {
-                var error = $"Module not found. id='{moduleId}'";
+                var error = $"The module was not found in the files.. id='{moduleId}'";
                 _logger.LogError(error);
-                return error;
+                return "error:not_found_local";
             }
 
             // Register commands from new modules
@@ -295,12 +288,12 @@ public class PlatformModuleManager : IPlatformModuleManager
 
             var result = $"Reloaded command module. id='{moduleId}'";
             _logger.LogInformation(result);
-            return result;
+            return "success";
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to reload command module. id='{ModuleId}'", moduleId);
-            return $"Failed to reload command module '{moduleId}': {ex.Message}";
+            return "error:exception";
         }
     }
 

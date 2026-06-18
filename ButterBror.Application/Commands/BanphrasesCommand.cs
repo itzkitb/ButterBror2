@@ -16,31 +16,27 @@ public class BanphrasesCommand : CommandBase
             var logger = GetLogger<BanphrasesCommand>(serviceProvider);
             var banphraseService = GetService<IBanphraseService>(serviceProvider);
             var hasteBinService = GetService<IHasteBinService>(serviceProvider);
+            var localization = GetService<ILocalizationService>(serviceProvider);
             
             if (context.Arguments.Count < 2)
             {
                 return CommandResult.Failure(
-                    "Usage: !banphrases <set|get|list|test|delete> <global|channel> [category] [pattern]");
+                    await localization.GetStringAsync("command.banphrases.usage", context.Locale));
             }
             
             var action = context.Arguments[0].ToLowerInvariant();
             var section = context.Arguments[1].ToLowerInvariant();
             
-            switch (action)
+            return action switch
             {
-                case "set":
-                    return await HandleSetAsync(context, banphraseService, hasteBinService, logger);
-                case "get":
-                    return await HandleGetAsync(context, banphraseService, hasteBinService, logger);
-                case "list":
-                    return await HandleListAsync(context, banphraseService, hasteBinService, logger);
-                case "test":
-                    return await HandleTestAsync(context, banphraseService, logger);
-                case "delete":
-                    return await HandleDeleteAsync(context, banphraseService, logger);
-                default:
-                    return CommandResult.Failure($"Unknown action: {action}. Use: set, get, list, test, delete");
-            }
+                "set" => await HandleSetAsync(context, banphraseService, hasteBinService, logger, localization),
+                "get" => await HandleGetAsync(context, banphraseService, hasteBinService, logger, localization),
+                "list" => await HandleListAsync(context, banphraseService, hasteBinService, logger, localization),
+                "test" => await HandleTestAsync(context, banphraseService, logger, localization),
+                "delete" => await HandleDeleteAsync(context, banphraseService, logger, localization),
+                _ => CommandResult.Failure(
+                        await localization.GetStringAsync("command.banphrases.unknown", context.Locale))
+            };
         }
         catch (Exception ex)
         {
@@ -58,11 +54,13 @@ public class BanphrasesCommand : CommandBase
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
         IHasteBinService hasteBinService,
-        ILogger logger)
+        ILogger logger,
+        ILocalizationService localization)
     {
         if (context.Arguments.Count < 4)
         {
-            return CommandResult.Failure("Usage: !banphrases set <global|channel> <category> <pattern|hastebin-url>");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.set.usage", context.Locale));
         }
         
         var section = context.Arguments[1].ToLowerInvariant();
@@ -71,9 +69,9 @@ public class BanphrasesCommand : CommandBase
         
         string regexPattern;
         
-        // Check if it's a Hastebin URL
+        // S0: Check if it's a Hastebin URL
         if (patternOrUrl.StartsWith("https://hastebin.dev/", StringComparison.OrdinalIgnoreCase) ||
-            patternOrUrl.StartsWith("http://hastebin.dev/", StringComparison.OrdinalIgnoreCase))
+            patternOrUrl.StartsWith("hastebin.dev/", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
@@ -83,7 +81,8 @@ public class BanphrasesCommand : CommandBase
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to fetch pattern from Hastebin: {Url}", patternOrUrl);
-                return CommandResult.Failure($"Failed to fetch pattern from Hastebin: {ex.Message}");
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.banphrases.set.fail", context.Locale));
             }
         }
         else
@@ -103,12 +102,16 @@ public class BanphrasesCommand : CommandBase
         
         if (!success)
         {
-            return CommandResult.Failure("Failed to set banphrase category. Check regex pattern syntax.");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.set.regex_fail", context.Locale));
         }
         
         var patternCount = CountRegexAlternatives(regexPattern);
         return CommandResult.Successfully(
-            $"Setted {patternCount} {section} banphrases from your regex in category '{categoryName}'");
+            await localization.GetStringAsync("command.banphrases.set.success", context.Locale,
+                patternCount,
+                section,
+                categoryName));
     }
     
     private static int CountRegexAlternatives(string pattern)
@@ -163,8 +166,7 @@ public class BanphrasesCommand : CommandBase
                 groupDepth--;
                 continue;
             }
-        
-            // Count | only at top level (not inside groups or character classes)
+            
             if (c == '|' && groupDepth == 0)
             {
                 count++;
@@ -178,11 +180,13 @@ public class BanphrasesCommand : CommandBase
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
         IHasteBinService hasteBinService,
-        ILogger logger)
+        ILogger logger,
+        ILocalizationService localization)
     {
         if (context.Arguments.Count < 3)
         {
-            return CommandResult.Failure("Usage: !banphrases get <global|channel> <category>");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.get.usage", context.Locale));
         }
         
         var section = context.Arguments[1].ToLowerInvariant();
@@ -194,19 +198,26 @@ public class BanphrasesCommand : CommandBase
         
         if (string.IsNullOrEmpty(pattern))
         {
-            return CommandResult.Failure($"Category '{categoryName}' not found in section '{section}'");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.get.category_not_found", context.Locale,
+                    categoryName,
+                    section));
         }
         
         try
         {
             var url = await hasteBinService.UploadTextAsync(pattern, context.CancellationToken);
             return CommandResult.Successfully(
-                $"Here's the regex for banned phrases in the '{section}' section of the '{categoryName}' category: {url}");
+                await localization.GetStringAsync("command.banphrases.get.success", context.Locale,
+                    section,
+                    categoryName,
+                    url));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to upload pattern to Hastebin");
-            return CommandResult.Failure("Failed to upload pattern to Hastebin");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.get.fail", context.Locale));
         }
     }
     
@@ -214,7 +225,8 @@ public class BanphrasesCommand : CommandBase
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
         IHasteBinService hasteBinService,
-        ILogger logger)
+        ILogger logger,
+        ILocalizationService localization)
     {
         var section = context.Arguments.Count > 1 ? context.Arguments[1].ToLowerInvariant() : "global";
         var platform = context.Channel.Platform;
@@ -224,12 +236,16 @@ public class BanphrasesCommand : CommandBase
         
         if (categories.Count == 0)
         {
-            return CommandResult.Successfully($"No categories found in section '{section}'");
+            return CommandResult.Successfully(
+                await localization.GetStringAsync("command.banphrases.list.not_found", context.Locale,
+                    section));
         }
         
         // Get patterns for each category
         var listContent = new System.Text.StringBuilder();
-        listContent.AppendLine($"List of categories in the '{section}' section:");
+        listContent.AppendLine(
+            await localization.GetStringAsync("command.banphrases.list.title", context.Locale,
+                section));
         
         foreach (var category in categories)
         {
@@ -245,33 +261,38 @@ public class BanphrasesCommand : CommandBase
         {
             var url = await hasteBinService.UploadTextAsync(listText, context.CancellationToken);
             return CommandResult.Successfully(
-                $"Here are all the categories in the '{section}' section: {url}");
+                await localization.GetStringAsync("command.banphrases.list.success", context.Locale,
+                    section,
+                    url));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to upload list to Hastebin");
-            return CommandResult.Failure("Failed to upload list to Hastebin");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.list.fail", context.Locale));
         }
     }
-    
+
     private async Task<CommandResult> HandleTestAsync(
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
-        ILogger logger)
+        ILogger logger,
+        ILocalizationService localization)
     {
         if (context.Arguments.Count < 3)
         {
-            return CommandResult.Failure("Usage: !banphrases test <global|channel> <message>");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.test.usage", context.Locale));
         }
-        
+
         var section = context.Arguments[1].ToLowerInvariant();
         var message = string.Join(" ", context.Arguments.Skip(2));
         var platform = context.Channel.Platform;
         var channelId = context.Channel.Id;
-        
+
         // For testing, we need to determine which section to check
         string testSection, testPlatform, testChannelId;
-        
+
         if (section == "global")
         {
             testSection = "global";
@@ -284,45 +305,50 @@ public class BanphrasesCommand : CommandBase
             testPlatform = platform;
             testChannelId = channelId;
         }
-        
-        var result = await banphraseService.CheckMessageAsync(testChannelId, testPlatform, message, context.CancellationToken);
-        
+
+        var result =
+            await banphraseService.CheckMessageAsync(testChannelId, testPlatform, message, context.CancellationToken);
+
         if (result.Passed)
         {
-            return CommandResult.Successfully("The message passed the filter!");
+            return CommandResult.Successfully("");
         }
-        else
+
+        var response = await localization.GetStringAsync("command.banphrases.test.fail", context.Locale,
+            result.FailedSection ?? "none",
+            result.FailedCategory ?? "none");
+
+        if (!string.IsNullOrEmpty(result.MatchedPhrase))
         {
-            var response = $"The message didn't pass the filter! Section: '{result.FailedSection}', category: '{result.FailedCategory}'";
-
-            if (!string.IsNullOrEmpty(result.MatchedPhrase))
-            {
-                var displayPhrase = result.MatchedPhrase.Length > 50
-                    ? result.MatchedPhrase[..50] + "..."
-                    : result.MatchedPhrase;
-                response += $", matched: '{displayPhrase}'";
-            }
-
-            if (!string.IsNullOrEmpty(result.MatchedPattern))
-            {
-                var displayPattern = result.MatchedPattern.Length > 50
-                    ? result.MatchedPattern[..50] + "..."
-                    : result.MatchedPattern;
-                response += $", regex: '{displayPattern}'";
-            }
-
-            return CommandResult.Failure(response);
+            var displayPhrase = result.MatchedPhrase.Length > 50
+                ? result.MatchedPhrase[..50] + "..."
+                : result.MatchedPhrase;
+            response += await localization.GetStringAsync("command.banphrases.test.matched", context.Locale,
+                displayPhrase);
         }
+
+        if (!string.IsNullOrEmpty(result.MatchedPattern))
+        {
+            var displayPattern = result.MatchedPattern.Length > 50
+                ? result.MatchedPattern[..50] + "..."
+                : result.MatchedPattern;
+            response += await localization.GetStringAsync("command.banphrases.test.regex", context.Locale,
+                displayPattern);
+        }
+
+        return CommandResult.Failure(response);
     }
-    
+
     private async Task<CommandResult> HandleDeleteAsync(
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
-        ILogger logger)
+        ILogger logger,
+        ILocalizationService localization)
     {
         if (context.Arguments.Count < 3)
         {
-            return CommandResult.Failure("Usage: !banphrases delete <global|channel> <category>");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.delete.usage", context.Locale));
         }
         
         var section = context.Arguments[1].ToLowerInvariant();
@@ -334,9 +360,14 @@ public class BanphrasesCommand : CommandBase
         
         if (!success)
         {
-            return CommandResult.Failure($"Failed to delete category '{categoryName}'");
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.delete.fail", context.Locale,
+                    categoryName));
         }
         
-        return CommandResult.Successfully($"Deleted banphrase category '{categoryName}' from section '{section}'");
+        return CommandResult.Successfully(
+            await localization.GetStringAsync("command.banphrases.delete.success", context.Locale,
+                categoryName,
+                section));
     }
 }

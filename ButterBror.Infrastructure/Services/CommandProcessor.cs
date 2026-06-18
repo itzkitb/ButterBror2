@@ -15,6 +15,7 @@ public class CommandProcessor : ICommandProcessor
     private readonly ILogger<CommandProcessor> _logger;
     private readonly IBanphraseService _banphraseService;
     private readonly IPermissionManager _permissionManager;
+    private readonly ILocalizationService _localization;
 
     public CommandProcessor(
         ICommandDispatcher commandDispatcher,
@@ -22,7 +23,8 @@ public class CommandProcessor : ICommandProcessor
         ICommandRegistry commandRegistry,
         ILogger<CommandProcessor> logger,
         IBanphraseService banphraseService,
-        IPermissionManager permissionManager)
+        IPermissionManager permissionManager,
+        ILocalizationService localization)
     {
         _commandDispatcher = commandDispatcher;
         _userService = userService;
@@ -30,6 +32,7 @@ public class CommandProcessor : ICommandProcessor
         _banphraseService = banphraseService;
         _permissionManager = permissionManager;
         _logger = logger;
+        _localization = localization;
     }
 
     public async Task<CommandResult> ProcessCommandAsync(ICommandContext context)
@@ -93,7 +96,7 @@ public class CommandProcessor : ICommandProcessor
                         banphraseResult.MatchedPhrase
                     );
 
-                    result.Message = "The resulting message violates moderation settings";
+                    result.Message = await _localization.GetStringAsync("core.bot.banphrase", extendedContext.Locale);
                     result.Success = false;
                 }
             }
@@ -141,23 +144,31 @@ public class CommandProcessor : ICommandProcessor
         var commandMetadata = _commandRegistry.GetCommandMetadata(commandName);
         if (commandMetadata == null)
         {
-            return CommandResult.Failure($"Command '{commandName}' not found.", sendResult:false);
+            return CommandResult.Failure(
+                await _localization.GetStringAsync("core.bot.command.not_found", user.PreferredLocale,
+                    commandName),
+                sendResult:false);
         }
 
         // S1: Checking platform compatibility
         var platformId = context.Platform.ToLowerInvariant();
         if (!_commandRegistry.IsCommandCompatibleWithPlatform(commandName, platformId))
         {
-            return CommandResult.Failure($"Command '{commandName}' is not compatible with platform '{context.Platform}'.", sendResult:false);
+            return CommandResult.Failure(
+                await _localization.GetStringAsync("core.bot.command.compatibility", user.PreferredLocale,
+                    commandName,
+                    context.Platform),
+                sendResult:false);
         }
 
         // S2: Validating permissions
         if (!await _commandRegistry.UserHasPermissionForCommandAsync(commandName, user.UnifiedUserId))
         {
-            return CommandResult.Failure($"You don't have permission to execute command '{commandName}'.");
+            return CommandResult.Failure(
+                await _localization.GetStringAsync("core.bot.command.permission", user.PreferredLocale));
         }
 
-        // S3: Cooldown check (per user)
+        // S3: Cooldown check
         var lastUse = await _userService.GetCommandLastUsedAsync(commandMetadata.Id, user.UnifiedUserId);
         var betweenUses = DateTime.UtcNow - lastUse;
         if (betweenUses != null && ((TimeSpan)betweenUses).TotalSeconds < commandMetadata.CooldownSeconds)
@@ -168,12 +179,16 @@ public class CommandProcessor : ICommandProcessor
                 ((TimeSpan)betweenUses).TotalSeconds,
                 commandMetadata.CooldownSeconds
             );
-            return CommandResult.Failure($"Command '{commandName}' is on cooldown. Please, wait {(commandMetadata.CooldownSeconds - ((TimeSpan)betweenUses).TotalSeconds)} seconds", sendResult:false);
+            return CommandResult.Failure(
+                await _localization.GetStringAsync("core.bot.command.cooldown", user.PreferredLocale,
+                    commandName,
+                    commandMetadata.CooldownSeconds - ((TimeSpan)betweenUses).TotalSeconds),
+                sendResult:false);
         }
         _ = _userService.SetCommandLastUseAsync(commandMetadata.Id, user.UnifiedUserId, DateTime.UtcNow);
 
         // Yay
         _logger.LogInformation("Command passed all validations. name='{CommandName}'", commandName);
-        return CommandResult.Successfully($"Command '{commandName}' is valid and ready for execution.");
+        return CommandResult.Successfully("");
     }
 }

@@ -19,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using System.Text;
+using ButterBror.Application;
 
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding  = Encoding.UTF8;
@@ -85,7 +86,7 @@ builder.Services.AddSingleton<IChatModuleLoader, ChatModuleLoader>();
 builder.Services.AddSingleton<ICommandModuleLoader, CommandModuleLoader>();
 
 // Redis
-var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,allowAdmin=true,abortConnect=false";
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(redisConfig));
 
@@ -212,6 +213,7 @@ using (var scope = host.Services.CreateScope())
     {
         await impl.InitializeAsync(CancellationToken.None);
     }
+    localizationService.RegisterModuleTranslations("butterbror:system", Localization.DefaultTranslations);
 }
 
 await host.RunAsync();

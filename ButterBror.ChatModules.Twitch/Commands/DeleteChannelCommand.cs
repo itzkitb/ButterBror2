@@ -30,11 +30,13 @@ public class DeleteChannelCommand : CommandBase
             var customData = GetService<ICustomDataRepository>(serviceProvider);
             var permissionManager = GetService<IPermissionManager>(serviceProvider);
             var userRepository = GetService<IUserRepository>(serviceProvider);
+            var localization = GetService<ILocalizationService>(serviceProvider);
 
             // S0: Validate arguments
             if (context.Arguments.Count < 1)
             {
-                return CommandResult.Failure("Usage: !delchannel <channel>. Example: !delchannel hasanabi");
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.del_channel.usage", context.Locale));
             }
             var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
@@ -42,7 +44,7 @@ public class DeleteChannelCommand : CommandBase
             var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
             if (user == null)
             {
-                return CommandResult.Failure("User profile not found.");
+                throw new Exception("User not found");
             }
 
             var hasPermission = await permissionManager.HasPermissionAsync(
@@ -51,7 +53,8 @@ public class DeleteChannelCommand : CommandBase
 
             if (!hasPermission)
             {
-                return CommandResult.Failure("You don't have permission to delete channels");
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.del_channel.permission", context.Locale));
             }
 
             // S3: Persist to Redis
@@ -61,7 +64,9 @@ public class DeleteChannelCommand : CommandBase
 
             if (!channels.Contains(channelName, StringComparer.OrdinalIgnoreCase))
             {
-                return CommandResult.Failure($"Channel #{channelName} not found in the list");
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.del_channel.not_found", context.Locale,
+                        channelName));
             }
 
             channels.Remove(channelName);
@@ -70,13 +75,19 @@ public class DeleteChannelCommand : CommandBase
             // S4: Connect on the fly
             await _twitchClient.LeaveChannelAsync(channelName);
 
-            return CommandResult.Successfully($"Channel #{channelName} deleted from list and parted");
+            return CommandResult.Successfully(
+                await localization.GetStringAsync("command.del_channel.success", context.Locale,
+                    channelName));
         }
         catch (Exception ex)
         {
-            var logger = GetService<ILogger<AddChannelCommand>>(serviceProvider);
-            logger.LogError(ex, "[TW] Error delete channel");
-            throw;
+            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            return await errorTracking.LogErrorAsync(
+                ex,
+                "Failed to execute DeleteChannel",
+                context.User.Id,
+                context.Channel.Platform,
+                context);
         }
     }
 }

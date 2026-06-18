@@ -26,11 +26,13 @@ public class PartChannelCommand : CommandBase
             var logger = GetLogger<PartChannelCommand>(serviceProvider);
             var permissionManager = GetService<IPermissionManager>(serviceProvider);
             var userRepository = GetService<IUserRepository>(serviceProvider);
+            var localization = GetService<ILocalizationService>(serviceProvider);
 
             // S0: Checking for the presence of an argument
             if (context.Arguments.Count == 0)
             {
-                return CommandResult.Failure("Usage: !part <channel>. Specify the channel name to part.");
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.part.usage", context.Locale));
             }
 
             var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
@@ -39,7 +41,7 @@ public class PartChannelCommand : CommandBase
             var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
             if (user == null)
             {
-                return CommandResult.Failure("User profile not found.");
+                throw new Exception("User not found");
             }
 
             // S2: Checking user permission
@@ -50,7 +52,8 @@ public class PartChannelCommand : CommandBase
 
             if (!hasPermission)
             {
-                return CommandResult.Failure("You don't have permission to part channels. Required: su:twitch:part");
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.part.permission", context.Locale));
             }
 
             // S3: Trying to disconnect from the channel
@@ -59,14 +62,19 @@ public class PartChannelCommand : CommandBase
             logger.LogInformation("Parted channel '{Channel}' by user '{User}'",
                 channelName, context.User.DisplayName);
 
-            return CommandResult.Successfully($"Successfully parted channel '#{channelName}'.");
+            return CommandResult.Successfully(
+                await localization.GetStringAsync("command.part.success", context.Locale,
+                    channelName));
         }
         catch (Exception ex)
         {
-            var logger = GetService<ILogger<PartChannelCommand>>(serviceProvider);
-            logger.LogError(ex, "Error parting channel '{Channel}'",
-                context.Arguments.Count > 0 ? context.Arguments[0] : "unknown");
-            return CommandResult.Failure($"Error parting channel: {ex.Message}");
+            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            return await errorTracking.LogErrorAsync(
+                ex,
+                "Failed to execute PartChannel",
+                context.User.Id,
+                context.Channel.Platform,
+                context);
         }
     }
 }

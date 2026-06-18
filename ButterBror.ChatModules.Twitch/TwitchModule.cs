@@ -35,12 +35,16 @@ public class TwitchModule : IChatModule
     private List<ModuleCommandExport> _commands = null!;
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => _commands;
 
+    public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
+        Services.Localization.DefaultTranslations;
+    
     private TwitchClient? _twitchClient = null!;
     private IBotCore? _botCore = null!;
     private ILogger<TwitchModule> _logger = null!;
     private TwitchConfiguration _config = null!;
     private ICustomDataRepository _db = null!;
     private IDashboardBridge? _dashboardBridge;
+    private ILocalizationService _localizarion;
     private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
     
     public async Task InitializeAsync(IServiceProvider serviceProvider)
@@ -165,7 +169,8 @@ public class TwitchModule : IChatModule
         
         if (_twitchClient.IsConnected && !string.IsNullOrWhiteSpace(_config.Channel))
         {
-            await _twitchClient.SendMessageAsync(_config.Channel, "Bot connected successfully!");
+            await _twitchClient.SendMessageAsync(_config.Channel, 
+                await _localizarion.GetStringAsync("core.bot.connected", "EN_US"));
         }
     }
 
@@ -247,7 +252,8 @@ public class TwitchModule : IChatModule
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "[TW] Failed to send command result back to #{Channel}", chatMessage.Channel);
+                    _logger.LogError(ex, "[TW] Failed to send command result back to #{Channel}",
+                        chatMessage.Channel);
                 }
             }
         }
@@ -261,7 +267,10 @@ public class TwitchModule : IChatModule
         switch (_config.ReplyMode)
         {
             case TwitchReplyMode.Reply:
-                await _twitchClient.SendReplyAsync(triggeringMessage.Channel, triggeringMessage.MessageId, responseText);
+                await _twitchClient.SendReplyAsync(
+                    triggeringMessage.Channel,
+                    triggeringMessage.MessageId, 
+                    responseText);
                 break;
             case TwitchReplyMode.Mention:
             default:
@@ -308,7 +317,10 @@ public class TwitchModule : IChatModule
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[TW] Failed to load prefix from Redis for #{ChannelId}, using default '{Default}'", channelId, _config.CommandPrefix);
+            _logger.LogWarning(ex, 
+                "[TW] Failed to load prefix from Redis for #{ChannelId}, using default '{Default}'",
+                channelId,
+                _config.CommandPrefix);
             return _config.CommandPrefix;
         }
     }
@@ -320,7 +332,12 @@ public class TwitchModule : IChatModule
         return new TwitchCommandContext(
             commandName,
             arguments,
-            new TwitchUser(chatMessage.Username, chatMessage.UserId, chatMessage.IsModerator, chatMessage.IsBroadcaster, chatMessage.IsBot),
+            new TwitchUser(
+                chatMessage.Username,
+                chatMessage.UserId,
+                chatMessage.IsModerator,
+                chatMessage.IsBroadcaster,
+                chatMessage.IsBot),
             new TwitchChannel(chatMessage.Channel, chatMessage.ChannelId),
             DateTime.UtcNow
         );
@@ -381,7 +398,10 @@ public class TwitchModule : IChatModule
             });
             
             timer.Stop();
-            _logger.LogInformation("[TW] Loaded broadcaster token for {Channels} channels in {Time} ms", allChannels.Count, timer.ElapsedMilliseconds);
+            _logger.LogInformation(
+                "[TW] Loaded broadcaster token for {Channels} channels in {Time} ms",
+                allChannels.Count,
+                timer.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -415,7 +435,9 @@ public class TwitchModule : IChatModule
             if (!isValid)
             {
                 _logger.LogWarning("[TW] Invalid broadcaster token from {User} for #{Channel}", e.Username, e.Channel);
-                await _twitchClient.SendMessageAsync(e.Channel, "❌ | Failed to authorize. The token is invalid or expired");
+                await _twitchClient.SendMessageAsync(
+                    e.Channel, 
+                    "❌ | Failed to authorize. The token is invalid or expired");
                 return;
             }
 

@@ -14,14 +14,13 @@ public class ReloadModuleCommand : CommandBase
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider)
     {
-        var localizationService = GetService<ILocalizationService>(serviceProvider);
-        var logger = GetLogger<ReloadModuleCommand>(serviceProvider);
+        var localization = GetService<ILocalizationService>(serviceProvider);
         var moduleManager = GetService<IPlatformModuleManager>(serviceProvider);
 
         if (context.Arguments.Count < 2)
         {
-            string locale = await localizationService.GetStringAsync("command.modulereload.usage", context.Locale);
-            return CommandResult.Failure(locale);
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.module_reload.usage", context.Locale));
         }
 
         string type = context.Arguments[0].ToLowerInvariant();
@@ -29,21 +28,26 @@ public class ReloadModuleCommand : CommandBase
 
         try
         {
-            string result = type switch
+            string? result = type switch
             {
                 "chat" => await moduleManager.ReloadChatModuleAsync(moduleId, context.CancellationToken),
                 "command" => await moduleManager.ReloadCommandModuleAsync(moduleId, context.CancellationToken),
-                _ => null!
+                _ => null
             };
 
-            if (result == null)
+            return result switch
             {
-                string locale = await localizationService.GetStringAsync("command.modulereload.unknown.type", context.Locale, type);
-                return CommandResult.Failure(locale);
-            }
-
-            logger.LogInformation("Module reloaded via command: {Result}", result);
-            return CommandResult.Successfully(result);
+                null => CommandResult.Failure(
+                    await localization.GetStringAsync("command.module_reload.unknown", context.Locale)),
+                "error:not_found" => CommandResult.Failure(
+                    await localization.GetStringAsync("command.module_reload.not_found", context.Locale)),
+                "error:not_found_local" => CommandResult.Failure(
+                    await localization.GetStringAsync("command.module_reload.not_found_local", context.Locale)),
+                "success" => CommandResult.Successfully(
+                    await localization.GetStringAsync("command.module_reload.success", context.Locale)),
+                _ => CommandResult.Failure(
+                    await localization.GetStringAsync("command.module_reload.exception", context.Locale))
+            };
         }
         catch (Exception ex)
         {

@@ -26,11 +26,13 @@ public class JoinChannelCommand : CommandBase
             var logger = GetLogger<JoinChannelCommand>(serviceProvider);
             var permissionManager = GetService<IPermissionManager>(serviceProvider);
             var userRepository = GetService<IUserRepository>(serviceProvider);
+            var localization = GetService<ILocalizationService>(serviceProvider);
 
             // S0: Validate arguments
             if (context.Arguments.Count == 0)
             {
-                return CommandResult.Failure("Usage: !join <channel>.");
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.join.usage", context.Locale));
             }
 
             string channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
@@ -39,7 +41,7 @@ public class JoinChannelCommand : CommandBase
             var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
             if (user == null)
             {
-                return CommandResult.Failure("User profile not found.");
+                throw new Exception("User not found"); 
             }
 
             // S2: Check permissions
@@ -49,24 +51,27 @@ public class JoinChannelCommand : CommandBase
 
             if (!hasPermission)
             {
-                return CommandResult.Failure("You don't have permission to join channels. Required: su:twitch:join");
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.join.permission", context.Locale));
             }
 
             // S3: Join
             await _twitchClient.JoinChannelAsync(channelName);
-
-            logger.LogInformation(
-                "Joined channel '{Channel}' by user '{User}'",
-                channelName, context.User.DisplayName);
+            logger.LogInformation("Joined channel '{Channel}' by user '{User}'", channelName, context.User.DisplayName);
 
             return CommandResult.Successfully(
-                $"Successfully joined channel #{channelName}.");
+                await localization.GetStringAsync("command.join.success", context.Locale,
+                    channelName));
         }
         catch (Exception ex)
         {
-            var logger = GetService<ILogger<JoinChannelCommand>>(serviceProvider);
-            logger.LogError(ex, "Error joining channel");
-            return CommandResult.Failure($"Error joining channel: {ex.Message}");
+            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            return await errorTracking.LogErrorAsync(
+                ex,
+                "Failed to execute JoinChannel",
+                context.User.Id,
+                context.Channel.Platform,
+                context);
         }
     }
 }
