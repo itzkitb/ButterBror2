@@ -128,6 +128,8 @@ public class TwitchModule : IChatModule
         }
     }
 
+    public async Task SendMessageAsync(string channel, string message) => await _twitchClient.SendMessageAsync(channel, message);
+    
     private async Task JoinConfiguredChannelsAsync()
     {
         if (_twitchClient == null)
