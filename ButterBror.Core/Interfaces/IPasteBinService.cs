@@ -3,7 +3,7 @@ namespace ButterBror.Core.Interfaces;
 /// <summary>
 /// Service for interacting with HasteBin.dev API
 /// </summary>
-public interface IHasteBinService
+public interface IPasteBinService
 {
     /// <summary>
     /// Upload text to server

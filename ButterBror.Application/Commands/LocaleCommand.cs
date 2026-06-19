@@ -118,11 +118,11 @@ public class LocaleCommand : CommandBase
 
         var hasteUrl = context.Arguments[2];
 
-        var hasteBinService = GetService<IHasteBinService>(serviceProvider);
+        var pasteBinService = GetService<IPasteBinService>(serviceProvider);
         var fileLoader = GetService<TranslationFileLoader>(serviceProvider);
         var registry = GetService<LocaleRegistryService>(serviceProvider);
 
-        var jsonContent = await hasteBinService.GetTextAsync(hasteUrl, context.CancellationToken);
+        var jsonContent = await pasteBinService.GetTextAsync(hasteUrl, context.CancellationToken);
         var translation = System.Text.Json.JsonSerializer.Deserialize<TranslationFile>(
             jsonContent, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         
@@ -235,7 +235,7 @@ public class LocaleCommand : CommandBase
                     context.Arguments[1]));
 
         var fileLoader = GetService<TranslationFileLoader>(serviceProvider);
-        var hasteBinService = GetService<IHasteBinService>(serviceProvider);
+        var pasteBinService = GetService<IPasteBinService>(serviceProvider);
 
         var fileName = $"{resolved}.json";
         var path = fileLoader.GetTranslationFilePath(fileName);
@@ -246,7 +246,7 @@ public class LocaleCommand : CommandBase
                     fileName));
 
         var content = await File.ReadAllTextAsync(path, context.CancellationToken);
-        var url = await hasteBinService.UploadTextAsync(content, context.CancellationToken);
+        var url = await pasteBinService.UploadTextAsync(content, context.CancellationToken);
         
         logger.LogInformation("Uploaded locale {Locale} to HasteBin: {Url}", resolved, url);
         return CommandResult.Successfully(

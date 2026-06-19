@@ -106,7 +106,7 @@ builder.Services.AddSingleton<IBotCore, BotCoreService>();
 builder.Services.AddHostedService<BotHostedService>();
 
 // HasteBin Service
-builder.Services.AddHttpClient<IHasteBinService, HasteBinService>()
+builder.Services.AddHttpClient<IPasteBinService, PasteBinService>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
         AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate

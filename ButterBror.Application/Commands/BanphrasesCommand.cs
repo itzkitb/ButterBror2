@@ -15,7 +15,7 @@ public class BanphrasesCommand : CommandBase
         {
             var logger = GetLogger<BanphrasesCommand>(serviceProvider);
             var banphraseService = GetService<IBanphraseService>(serviceProvider);
-            var hasteBinService = GetService<IHasteBinService>(serviceProvider);
+            var hasteBinService = GetService<IPasteBinService>(serviceProvider);
             var localization = GetService<ILocalizationService>(serviceProvider);
             
             if (context.Arguments.Count < 2)
@@ -53,7 +53,7 @@ public class BanphrasesCommand : CommandBase
     private async Task<CommandResult> HandleSetAsync(
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
-        IHasteBinService hasteBinService,
+        IPasteBinService pasteBinService,
         ILogger logger,
         ILocalizationService localization)
     {
@@ -69,18 +69,20 @@ public class BanphrasesCommand : CommandBase
         
         string regexPattern;
         
-        // S0: Check if it's a Hastebin URL
-        if (patternOrUrl.StartsWith("https://hastebin.dev/", StringComparison.OrdinalIgnoreCase) ||
-            patternOrUrl.StartsWith("hastebin.dev/", StringComparison.OrdinalIgnoreCase))
+        // S0: Check if it's a Pastebin URL
+        if (patternOrUrl.StartsWith("https://sourceb.in", StringComparison.OrdinalIgnoreCase) ||
+            patternOrUrl.StartsWith("sourceb.in", StringComparison.OrdinalIgnoreCase) || 
+            patternOrUrl.StartsWith("https://cdn.sourceb.in", StringComparison.OrdinalIgnoreCase) ||
+            patternOrUrl.StartsWith("cdn.sourceb.in", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
-                regexPattern = await hasteBinService.GetTextAsync(patternOrUrl, context.CancellationToken);
-                logger.LogInformation("Loaded banphrases from Hastebin: {Url}", patternOrUrl);
+                regexPattern = await pasteBinService.GetTextAsync(patternOrUrl, context.CancellationToken);
+                logger.LogInformation("Loaded banphrases from Pastebin: {Url}", patternOrUrl);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to fetch pattern from Hastebin: {Url}", patternOrUrl);
+                logger.LogError(ex, "Failed to fetch pattern from Pastebin: {Url}", patternOrUrl);
                 return CommandResult.Failure(
                     await localization.GetStringAsync("command.banphrases.set.fail", context.Locale));
             }
@@ -179,7 +181,7 @@ public class BanphrasesCommand : CommandBase
     private async Task<CommandResult> HandleGetAsync(
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
-        IHasteBinService hasteBinService,
+        IPasteBinService pasteBinService,
         ILogger logger,
         ILocalizationService localization)
     {
@@ -206,7 +208,7 @@ public class BanphrasesCommand : CommandBase
         
         try
         {
-            var url = await hasteBinService.UploadTextAsync(pattern, context.CancellationToken);
+            var url = await pasteBinService.UploadTextAsync(pattern, context.CancellationToken);
             return CommandResult.Successfully(
                 await localization.GetStringAsync("command.banphrases.get.success", context.Locale,
                     section,
@@ -224,7 +226,7 @@ public class BanphrasesCommand : CommandBase
     private async Task<CommandResult> HandleListAsync(
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
-        IHasteBinService hasteBinService,
+        IPasteBinService pasteBinService,
         ILogger logger,
         ILocalizationService localization)
     {
@@ -259,7 +261,7 @@ public class BanphrasesCommand : CommandBase
         
         try
         {
-            var url = await hasteBinService.UploadTextAsync(listText, context.CancellationToken);
+            var url = await pasteBinService.UploadTextAsync(listText, context.CancellationToken);
             return CommandResult.Successfully(
                 await localization.GetStringAsync("command.banphrases.list.success", context.Locale,
                     section,
