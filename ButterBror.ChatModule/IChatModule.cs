@@ -14,8 +14,19 @@ public record ModuleCommandExport(
 
 public interface IChatModule
 {
+    /// <summary>
+    /// The module identifier by which the system will recognize it
+    /// </summary>
     string ModuleId { get; }
+    
+    /// <summary>
+    /// Module version
+    /// </summary>
     Version Version { get; }
+    
+    /// <summary>
+    /// Built-in commands in this module
+    /// </summary>
     IReadOnlyList<ModuleCommandExport> ExportedCommands { get; }
 
     /// <summary>
@@ -29,5 +40,46 @@ public interface IChatModule
     /// </summary>
     /// <param name="serviceProvider"></param>
     Task InitializeAsync(IServiceProvider serviceProvider);
+    
+    /// <summary>
+    /// Shutdown module. Called by the system when the module is restarting or the bot is turning off
+    /// </summary>
     Task ShutdownAsync();
+
+    /// <summary>
+    /// Send a message to the chat
+    /// </summary>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="message">Message</param>
+    /// <param name="replyId">ID of the message to which the reply is sent</param>
+    /// <param name="data">Additional data</param>
+    /// <exception cref="NotImplementedException">The method may not be implemented in the class. Recommend checking its presence through the CanSendMessage field</exception>
+    Task SendMessageAsync(string chatId, string message, string? replyId = null, dynamic? data = null)
+    {
+        throw new NotImplementedException();
+    }
+    
+    /// <summary>
+    /// Can the module send messages
+    /// </summary>
+    bool CanSendMessage
+    {
+        get
+        {
+            // S0: Getting a method from an interface
+            var interfaceMethod = typeof(IChatModule).GetMethod(nameof(SendMessageAsync), new[] { typeof(string), typeof(string) });
+            if (interfaceMethod == null)
+                return false;
+
+            // S1: Getting methods from a class
+            var map = this.GetType().GetInterfaceMap(typeof(IChatModule));
+            // S2: Find a method from an interface in a class
+            var index = Array.IndexOf(map.InterfaceMethods, interfaceMethod);
+
+            if (index == -1)
+                return false;
+            // S3: Check that this is custom implementation of the method
+            return map.TargetMethods[index].DeclaringType != typeof(IChatModule);
+        }
+    }
 }

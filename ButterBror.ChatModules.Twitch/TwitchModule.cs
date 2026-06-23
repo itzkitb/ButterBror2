@@ -133,13 +133,16 @@ public class TwitchModule : IChatModule
         }
     }
 
-    public async Task SendMessageAsync(string channel, string message)
+    public async Task SendMessageAsync(string chatId, string message, string? replyId = null, dynamic? data = null)
     {
         if (_twitchClient == null)
             throw new Exception("Twitch client not initialized");
-        
-        await _twitchClient.SendMessageAsync(channel, message);
-    } 
+
+        if (replyId == null)
+            await _twitchClient.SendMessageAsync(chatId, message);
+        else
+            await _twitchClient.SendReplyAsync(chatId, replyId, message);
+    }
     
     private async Task JoinConfiguredChannelsAsync()
     {
@@ -147,13 +150,9 @@ public class TwitchModule : IChatModule
             throw new Exception("Twitch client not initialized");
         
         if (!string.IsNullOrWhiteSpace(_config.Channel))
-        {
             await _twitchClient.JoinChannelAsync(_config.Channel);
-        }
         else
-        {
             await _twitchClient.JoinChannelAsync(_config.BotUsername);
-        }
     }
     private void OnConnected(object? sender, OnConnectedEventArgs e)
     {
@@ -172,10 +171,8 @@ public class TwitchModule : IChatModule
             throw new Exception("Localization not initialized");
         
         if (_twitchClient.IsConnected && !string.IsNullOrWhiteSpace(_config.Channel))
-        {
             await _twitchClient.SendMessageAsync(_config.Channel, 
                 await _localization.GetStringAsync("core.bot.connected", "EN_US"));
-        }
     }
 
     private async void OnDisconnected(object? sender, OnDisconnectedArgs e)
