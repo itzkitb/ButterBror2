@@ -1,19 +1,21 @@
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
-using System.Management;
 using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
 using System.Globalization;
-using LibreHardwareMonitor.Hardware;
 using Polly.Fallback;
+#if WINDOWS
+using System.Management;
+using LibreHardwareMonitor.Hardware;
+#endif
 
 namespace ButterBror.Infrastructure.Services;
 
 public class DeviceStatsService : IDeviceStatsService, IDisposable
 {
     private ILogger<DeviceStatsService> _logger;
-    private CpuTemperatureReader _cpuTempReader;
+    private CpuTemperatureReader? _cpuTempReader;
 
     // Public
     public double CpuLoad => _cpuLoad;
@@ -32,7 +34,9 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
     private long _prevNetSent, _prevNetRecv;
     private long _prevDiskRead, _prevDiskWrite;
     private DateTime _prevSampleTime = DateTime.UtcNow;
+#if !WINDOWS
     private long _prevCpuTotal, _prevCpuIdle;
+#endif
 
     // Task
     private Task _updateTask = Task.CompletedTask;
@@ -108,101 +112,88 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
 
     private double GetSystemCpuPercent()
     {
-        if (OperatingSystem.IsLinux())
+#if !WINDOWS
+        try
         {
-            try
+            var line = File.ReadLines("/proc/stat").First();
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            long user = long.Parse(parts[1]);
+            long nice = long.Parse(parts[2]);
+            long system = long.Parse(parts[3]);
+            long idle = long.Parse(parts[4]);
+            long iowait = parts.Length > 5 ? long.Parse(parts[5]) : 0;
+            long irq = parts.Length > 6 ? long.Parse(parts[6]) : 0;
+            long softirq = parts.Length > 7 ? long.Parse(parts[7]) : 0;
+
+            long total = user + nice + system + idle + iowait + irq + softirq;
+            long active = total - idle - iowait;
+
+            if (_prevCpuTotal == 0)
             {
-                var line = File.ReadLines("/proc/stat").First();
-                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                long user    = long.Parse(parts[1]);
-                long nice    = long.Parse(parts[2]);
-                long system  = long.Parse(parts[3]);
-                long idle    = long.Parse(parts[4]);
-                long iowait  = parts.Length > 5 ? long.Parse(parts[5]) : 0;
-                long irq     = parts.Length > 6 ? long.Parse(parts[6]) : 0;
-                long softirq = parts.Length > 7 ? long.Parse(parts[7]) : 0;
-
-                long total = user + nice + system + idle + iowait + irq + softirq;
-                long active = total - idle - iowait;
-
-                if (_prevCpuTotal == 0)
-                {
-                    _prevCpuTotal = total;
-                    _prevCpuIdle = idle + iowait;
-                    return 0;
-                }
-
-                var totalDiff = total - _prevCpuTotal;
-                var idleDiff = (idle + iowait) - _prevCpuIdle;
-
                 _prevCpuTotal = total;
                 _prevCpuIdle = idle + iowait;
-
-                return totalDiff > 0 ? (totalDiff - idleDiff) * 100.0 / totalDiff : 0;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Failed to read /proc/stat");
                 return 0;
             }
-        }
 
-        // Windows
-        if (OperatingSystem.IsWindows())
+            var totalDiff = total - _prevCpuTotal;
+            var idleDiff = (idle + iowait) - _prevCpuIdle;
+
+            _prevCpuTotal = total;
+            _prevCpuIdle = idle + iowait;
+
+            return totalDiff > 0 ? (totalDiff - idleDiff) * 100.0 / totalDiff : 0;
+        }
+        catch (Exception ex)
         {
-            try
-            {
-                using var counter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-                return counter.NextValue();
-            }
-            catch
-            {
-                return 0;
-            }
+            _logger.LogDebug(ex, "Failed to read /proc/stat");
+            return 0;
         }
-
-        return 0;
+#else
+        try
+        {
+            using var counter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+            return counter.NextValue();
+        }
+        catch
+        {
+            return 0;
+        }
+#endif
     }
 
     private static double GetSystemUsedRamMb()
     {
-        if (OperatingSystem.IsLinux())
+#if !WINDOWS
+        try
         {
-            try
+            var lines = File.ReadAllLines("/proc/meminfo");
+            long total = 0, available = 0;
+            foreach (var line in lines)
             {
-                var lines = File.ReadAllLines("/proc/meminfo");
-                long total = 0, available = 0;
-                foreach (var line in lines)
-                {
-                    if (line.StartsWith("MemTotal:"))
-                        total = long.Parse(line.Split(':')[1].Trim().Split(' ')[0]);
-                    if (line.StartsWith("MemAvailable:"))
-                        available = long.Parse(line.Split(':')[1].Trim().Split(' ')[0]);
-                }
-                return (total - available) / 1024.0; // KB -> MB
+                if (line.StartsWith("MemTotal:"))
+                    total = long.Parse(line.Split(':')[1].Trim().Split(' ')[0]);
+                if (line.StartsWith("MemAvailable:"))
+                    available = long.Parse(line.Split(':')[1].Trim().Split(' ')[0]);
             }
-            catch
-            {
-                return 0;
-            }
-        }
 
-        // Windows
-        if (OperatingSystem.IsWindows())
+            return (total - available) / 1024.0; // KB -> MB
+        }
+        catch
         {
-            try
-            {
-                using var ramCounter = new PerformanceCounter("Memory", "% Committed Bytes In Use");
-                var totalMb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024.0 / 1024.0;
-                return totalMb * ramCounter.NextValue() / 100.0;
-            }
-            catch
-            {
-                return 0;
-            }
+            return 0;
         }
-
-        return 0;
+#else
+        try
+        {
+            using var ramCounter = new PerformanceCounter("Memory", "% Committed Bytes In Use");
+            var totalMb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024.0 / 1024.0;
+            return totalMb * ramCounter.NextValue() / 100.0;
+        }
+        catch
+        {
+            return 0;
+        }
+#endif
     }
 
     private static (long sent, long recv) GetNetworkBytes()
@@ -227,47 +218,40 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
 
     private static (long read, long write) GetDiskBytes()
     {
-        // Linux
-        if (OperatingSystem.IsLinux())
+#if !WINDOWS
+        long read = 0, write = 0;
+        try
         {
-            long read = 0, write = 0;
-            try
+            foreach (var line in File.ReadLines("/proc/diskstats"))
             {
-                foreach (var line in File.ReadLines("/proc/diskstats"))
-                {
-                    var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 10) continue;
-                    var name = parts[2];
-                    if (name.StartsWith("loop") || name.StartsWith("ram")) continue;
-                    if (!char.IsLetter(name[^1])) continue;
-                    read  += long.Parse(parts[5]) * 512;
-                    write += long.Parse(parts[9]) * 512;
-                }
-            }
-            catch
-            {
-                //
-            }
-            return (read, write);
-        }
-
-        // Windows
-        if (OperatingSystem.IsWindows())
-        {
-            try
-            {
-                using var readCounter = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
-                using var writeCounter = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
-
-                return (readCounter.RawValue, writeCounter.RawValue);
-            }
-            catch
-            {
-                return (0, 0);
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 10) continue;
+                var name = parts[2];
+                if (name.StartsWith("loop") || name.StartsWith("ram")) continue;
+                if (!char.IsLetter(name[^1])) continue;
+                read += long.Parse(parts[5]) * 512;
+                write += long.Parse(parts[9]) * 512;
             }
         }
+        catch
+        {
+            //
+        }
 
-        return (0, 0);
+        return (read, write);
+#else
+        try
+        {
+            using var readCounter = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
+            using var writeCounter = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
+
+            return (readCounter.RawValue, writeCounter.RawValue);
+        }
+        catch
+        {
+            return (0, 0);
+        }
+#endif
     }
 
     public void Dispose()
@@ -346,7 +330,7 @@ public sealed class CpuTemperatureReader
     }
 }
 
-#if LINUX
+#if !WINDOWS
 internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
 {
     private static readonly string[] KnownCpuDrivers =
@@ -529,7 +513,7 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
         return null;
     }
 }
-#elif WINDOWS
+#else
 internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDisposable
 {
     private readonly ILogger? _logger;
@@ -655,7 +639,7 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDis
 
     private double TryReadLibreHardwareMonitor()
     {
-        if (!_lhmStarted) return 0;
+        if (!_lhmStarted || _lhmComputer == null) return 0;
 
         try
         {
@@ -700,27 +684,6 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDis
         { 
             //
         }
-    }
-}
-#else
-internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDisposable
-{
-    public CpuTemperatureReaderInstance(ILogger? logger)
-    {
-        if (logger == null)
-            throw new ArgumentNullException(nameof(logger));
-        
-        logger.LogInformation("Unknown platform, CPU temperature will not be measured");
-    }
-
-    public double? Read()
-    {
-        return 0;
-    }
-
-    public void Dispose()
-    {
-        
     }
 }
 #endif
