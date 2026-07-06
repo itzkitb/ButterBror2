@@ -58,28 +58,9 @@ public interface IChatModule
     {
         throw new NotImplementedException();
     }
-    
+
     /// <summary>
-    /// Can the module send messages
+    /// Module flags
     /// </summary>
-    bool CanSendMessage
-    {
-        get
-        {
-            // S0: Getting a method from an interface
-            var interfaceMethod = typeof(IChatModule).GetMethod(nameof(SendMessageAsync), new[] { typeof(string), typeof(string) });
-            if (interfaceMethod == null)
-                return false;
-
-            // S1: Getting methods from a class
-            var map = this.GetType().GetInterfaceMap(typeof(IChatModule));
-            // S2: Find a method from an interface in a class
-            var index = Array.IndexOf(map.InterfaceMethods, interfaceMethod);
-
-            if (index == -1)
-                return false;
-            // S3: Check that this is custom implementation of the method
-            return map.TargetMethods[index].DeclaringType != typeof(IChatModule);
-        }
-    }
+    List<ChatFlags> Flags { get; }
 }

@@ -37,6 +37,9 @@ public class TwitchModule : IChatModule
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
         Services.Localization.DefaultTranslations;
+
+    private List<ChatFlags> _flags = [ChatFlags.CanSendMessages];
+    public List<ChatFlags> Flags => _flags;
     
     private TwitchClient? _twitchClient = null!;
     private IBotCore? _botCore = null!;
