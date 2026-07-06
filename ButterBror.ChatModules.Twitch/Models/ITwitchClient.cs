@@ -57,12 +57,12 @@ public interface ITwitchClient
     /// <summary>
     /// Send a message to a specific channel
     /// </summary>
-    Task SendMessageAsync(string channel, string message);
+    Task SendMessageAsync(string channel, string message, bool convertChannelId = true);
 
     /// <summary>
     /// Reply to a message in a specific channel
     /// </summary>
-    Task SendReplyAsync(string channel, string replyToMessageId, string message);
+    Task SendReplyAsync(string channel, string replyToMessageId, string message, bool convertChannelId = true);
 
     public void InvalidateChannelSettingsCache(string channelId);
     void SetBroadcasterToken(string channelId, string token);

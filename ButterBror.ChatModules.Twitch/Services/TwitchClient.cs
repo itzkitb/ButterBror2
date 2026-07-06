@@ -211,13 +211,13 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         return _ircClient.JoinedChannels.Any(c => c.Channel.Equals(normalizedChannel, StringComparison.OrdinalIgnoreCase));
     }
 
-    public async Task SendMessageAsync(string channel, string message)
+    public async Task SendMessageAsync(string channel, string message, bool convertChannelId = true)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
-        await SendHelixMessageAsync(channel, message, replyToMessageId: null);
+        await SendHelixMessageAsync(channel, message, replyToMessageId: null, convertChannelId);
     }
 
-    public async Task SendReplyAsync(string channel, string replyToMessageId, string message)
+    public async Task SendReplyAsync(string channel, string replyToMessageId, string message, bool convertChannelId = true)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
         if (string.IsNullOrWhiteSpace(replyToMessageId))
@@ -226,10 +226,10 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
             await SendMessageAsync(channel, message);
             return;
         }
-        await SendHelixMessageAsync(channel, message, replyToMessageId);
+        await SendHelixMessageAsync(channel, message, replyToMessageId, convertChannelId);
     }
 
-    private async Task SendHelixMessageAsync(string channel, string message, string? replyToMessageId)
+    private async Task SendHelixMessageAsync(string channel, string message, string? replyToMessageId, bool convertChannelId = true)
     {
         // Sanitize and truncate once — the same result is used for both Helix and IRC paths.
         var sanitizedMessage = SanitizeMessage(message);
@@ -240,7 +240,14 @@ public class TwitchClient : ITwitchWhisperClient, IDisposable
         string? channelId = null;
         try
         {
-            channelId = await GetChannelIdInternalAsync(channel);
+            if (convertChannelId)
+            {
+                channelId = await GetChannelIdInternalAsync(channel);
+            }
+            else
+            {
+                channelId = channel;
+            }
 
             var settings = await GetChannelSettingsAsync(channelId);
             if (!settings.AllowOffline || !settings.AllowOnline)

@@ -140,11 +140,11 @@ public class TwitchModule : IChatModule
     {
         if (_twitchClient == null)
             throw new Exception("Twitch client not initialized");
-
+        
         if (replyId == null)
-            await _twitchClient.SendMessageAsync(chatId, message);
+            await _twitchClient.SendMessageAsync(chatId, message, false);
         else
-            await _twitchClient.SendReplyAsync(chatId, replyId, message);
+            await _twitchClient.SendReplyAsync(chatId, replyId, message, false);
     }
     
     private async Task JoinConfiguredChannelsAsync()
