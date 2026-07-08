@@ -74,8 +74,6 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
             try
             {
                 await Task.Delay(2_000, ct);
-                var now = DateTime.UtcNow;
-                var elapsed = (now - _prevSampleTime).TotalSeconds;
 
                 // System CPU
                 _cpuLoad = GetSystemCpuPercent();
@@ -90,15 +88,15 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
                 _memUsed = GetSystemUsedRamMb();
                 
                 var (sentBytes, recvBytes) = GetNetworkBytes();
-                _netOut = (sentBytes - _prevNetSent) / elapsed / 1024.0 / 1024.0;
-                _netIn  = (recvBytes - _prevNetRecv) / elapsed / 1024.0 / 1024.0;
+                _netOut = (sentBytes - _prevNetSent) / 2.0 / 1024.0;
+                _netIn  = (recvBytes - _prevNetRecv) / 2.0 / 1024.0;
                 _prevNetSent = sentBytes;
                 _prevNetRecv = recvBytes;
 
                 // Disk
                 var (diskRead, diskWrite) = GetDiskBytes();
-                _diskIn  = (diskRead  - _prevDiskRead)  / elapsed / 1024.0 / 1024.0;
-                _diskOut = (diskWrite - _prevDiskWrite) / elapsed / 1024.0 / 1024.0;
+                _diskIn  = (diskRead  - _prevDiskRead)  / 2.0 / 1024.0;
+                _diskOut = (diskWrite - _prevDiskWrite) / 2.0 / 1024.0;
                 _prevDiskRead  = diskRead;
                 _prevDiskWrite = diskWrite;
             }

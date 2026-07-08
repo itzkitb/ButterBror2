@@ -18,12 +18,12 @@ public class MetricsSnapshot
     public double ProcessRamMb { get; set; }
 
     // Network (delta since last snapshot)
-    public double NetSentMbps { get; set; }
-    public double NetRecvMbps { get; set; }
+    public double NetSentKbps { get; set; }
+    public double NetRecvKbps { get; set; }
 
     // Disk (delta since last snapshot)
-    public double DiskReadMbps { get; set; }
-    public double DiskWriteMbps { get; set; }
+    public double DiskReadKbps { get; set; }
+    public double DiskWriteKbps { get; set; }
 
     // Redis
     public long RedisMemoryUsedBytes { get; set; }

@@ -26,22 +26,22 @@ public interface IDeviceStatsService
     double MemoryUsed { get; }
 
     /// <summary>
-    /// Network download speed in megabytes per second
+    /// Network download speed in kilobytes per second
     /// </summary>
     double NetworkIn { get; }
 
     /// <summary>
-    /// Network upload speed in megabytes per second
+    /// Network upload speed in kilobytes per second
     /// </summary>
     double NetworkOut { get; }
 
     /// <summary>
-    /// Disk write speed in megabytes per second
+    /// Disk write speed in kilobytes per second
     /// </summary>
     double DiskIn { get; }
 
     /// <summary>
-    /// Disk read speed in megabytes per second
+    /// Disk read speed in kilobytes per second
     /// </summary>
     double DiskOut { get; }
 }

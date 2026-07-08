@@ -48,10 +48,10 @@ public class MetricsCollector
         snapshot.RamUsedMb   = _deviceStats.MemoryUsed;
         snapshot.RamPercent  = _deviceStats.TotalMemory > 0
             ? _deviceStats.MemoryUsed / _deviceStats.TotalMemory * 100 : 0;
-        snapshot.NetSentMbps = _deviceStats.NetworkOut;
-        snapshot.NetRecvMbps = _deviceStats.NetworkIn;
-        snapshot.DiskReadMbps  = _deviceStats.DiskIn;
-        snapshot.DiskWriteMbps = _deviceStats.DiskOut;
+        snapshot.NetSentKbps = _deviceStats.NetworkOut;
+        snapshot.NetRecvKbps = _deviceStats.NetworkIn;
+        snapshot.DiskReadKbps  = _deviceStats.DiskIn;
+        snapshot.DiskWriteKbps = _deviceStats.DiskOut;
 
         // Process
         var proc = Process.GetCurrentProcess();
