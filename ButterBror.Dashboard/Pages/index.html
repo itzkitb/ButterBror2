@@ -488,7 +488,7 @@
         const cmdsChart = createChart(document.getElementById('cmdsChart'), 'bar', 'Commands', '#92F2FF');
         const msgsChart = createChart(document.getElementById('msgsChart'), 'bar', 'Messages', '#5EEAD4');
 
-        const maxDataPoints = 30;
+        let maxDataPoints = 300;
 
         function updateChart(chart, value) {
             const now = new Date().toLocaleTimeString();
@@ -517,18 +517,18 @@
             updateStatCards(data);
             updateChart(cpuChart, data.CpuPercent ?? 0);
             updateChart(ramChart, data.RamPercent ?? 0);
-            updateChart(netChart, (data.NetSentMbps ?? 0) + (data.NetRecvMbps ?? 0));
-            updateChart(diskChart, (data.DiskReadMbps ?? 0) + (data.DiskWriteMbps ?? 0));
+            updateChart(netChart, (data.NetSentKbps ?? 0) + (data.NetRecvKbps ?? 0));
+            updateChart(diskChart, (data.DiskReadKbps ?? 0) + (data.DiskWriteKbps ?? 0));
             updateChart(cmdsChart, data.CommandsPerMinute ?? 0);
             updateChart(msgsChart, data.MessagesPerMinute ?? 0);
 
             // Update network stats
             document.getElementById('netStats').textContent = 
-                `↓ ${(data.NetRecvMbps ?? 0).toFixed(3)} ↑ ${(data.NetSentMbps ?? 0).toFixed(3)}`;
+                `↓ ${(data.NetRecvKbps ?? 0).toFixed(3)} ↑ ${(data.NetSentKbps ?? 0).toFixed(3)}`;
             
             // Update disk stats
             document.getElementById('diskStats').textContent = 
-                `R ${(data.DiskReadMbps ?? 0).toFixed(3)} W ${(data.DiskWriteMbps ?? 0).toFixed(3)}`;
+                `R ${(data.DiskReadKbps ?? 0).toFixed(3)} W ${(data.DiskWriteKbps ?? 0).toFixed(3)}`;
 
             // Redis
             document.getElementById('redisMemory').textContent = ((data.RedisMemoryUsedBytes ?? 0) / 1024 / 1024).toFixed(1) + ' MB';
