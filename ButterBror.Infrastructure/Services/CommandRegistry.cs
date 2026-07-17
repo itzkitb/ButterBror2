@@ -1,6 +1,6 @@
-using ButterBror.CommandModule.Commands;
-using ButterBror.CommandModule.Enums;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules.Enums;
+using ButterBror.Core.Modules.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

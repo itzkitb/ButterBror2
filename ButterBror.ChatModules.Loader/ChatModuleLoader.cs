@@ -1,11 +1,12 @@
-using ButterBror.ChatModule;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.IO.Compression;
-using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
+using ButterBror.Core.Modules;
+using ButterBror.Core.Modules.Interfaces;
+using ButterBror.Core.Modules.Manifest;
 
 namespace ButterBror.Modules.Loader;
 
@@ -90,12 +91,12 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
 
             // Reading the manifesto
             var manifestPath = Path.Combine(tempDir, ManifestFileName);
-            ModuleManifest? manifest = null;
+            ChatModuleManifest? manifest = null;
 
             if (File.Exists(manifestPath))
             {
                 var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
-                manifest = JsonSerializer.Deserialize<ModuleManifest>(manifestJson);
+                manifest = JsonSerializer.Deserialize<ChatModuleManifest>(manifestJson);
                 _logger.LogDebug("Loaded manifest. name='{ManifestName}', version='{ManifestVersion}'", manifest?.Name, manifest?.Version);
             }
 
@@ -308,7 +309,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
                             if (File.Exists(manifestPath))
                             {
                                 var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
-                                var manifest = JsonSerializer.Deserialize<ModuleManifest>(manifestJson);
+                                var manifest = JsonSerializer.Deserialize<ChatModuleManifest>(manifestJson);
                                 if (manifest?.Name?.Equals(moduleId, StringComparison.OrdinalIgnoreCase) == true)
                                 {
                                     archivePath = file;

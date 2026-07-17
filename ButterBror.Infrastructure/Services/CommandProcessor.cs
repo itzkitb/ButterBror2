@@ -1,9 +1,12 @@
+using System.Security.Cryptography;
+using System.Text;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Messaging;
 using ButterBror.Core.Models;
+using ButterBror.Core.Modules.Commands;
+using ButterBror.Core.Modules.Interfaces;
 using Microsoft.Extensions.Logging;
 using ButterBror.Domain.Entities;
-using ButterBror.CommandModule.Commands;
-using ButterBror.CommandModule.Context;
 
 namespace ButterBror.Infrastructure.Services;
 
@@ -16,6 +19,7 @@ public class CommandProcessor : ICommandProcessor
     private readonly IBanphraseService _banphraseService;
     private readonly IPermissionManager _permissionManager;
     private readonly ILocalizationService _localization;
+    private readonly IErrorTrackingService _errorTrackingService;
 
     public CommandProcessor(
         ICommandDispatcher commandDispatcher,
@@ -24,7 +28,8 @@ public class CommandProcessor : ICommandProcessor
         ILogger<CommandProcessor> logger,
         IBanphraseService banphraseService,
         IPermissionManager permissionManager,
-        ILocalizationService localization)
+        ILocalizationService localization,
+        IErrorTrackingService errorTrackingService)
     {
         _commandDispatcher = commandDispatcher;
         _userService = userService;
@@ -33,12 +38,15 @@ public class CommandProcessor : ICommandProcessor
         _permissionManager = permissionManager;
         _logger = logger;
         _localization = localization;
+        _errorTrackingService = errorTrackingService;
     }
 
     public async Task<CommandResult> ProcessCommandAsync(ICommandContext context)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
+        string unifiedUserId = "unknown";
+        ExtendedCommandContext? extendedContext = null;
+        
         try
         {
             // S0: Getting/creating user profile
@@ -47,6 +55,7 @@ public class CommandProcessor : ICommandProcessor
                 context.Platform,
                 context.User.DisplayName
             );
+            unifiedUserId = user.UnifiedUserId.ToString();
 
             // S1: Validating command
             var validationResult = await ValidateCommand(context, user);
@@ -58,8 +67,8 @@ public class CommandProcessor : ICommandProcessor
             }
 
             // S2: Proceed with user management and command execution
-            var extendedContext = new ExtendedCommandContext(context, user.UnifiedUserId, user.PreferredLocale);
-
+            extendedContext = new ExtendedCommandContext(context, user.UnifiedUserId, user.PreferredLocale);
+            
             // S3: Command Dispatch
             var result = await _commandDispatcher.DispatchAsync(extendedContext);
 
@@ -80,7 +89,7 @@ public class CommandProcessor : ICommandProcessor
                 var banphraseResult = await _banphraseService.CheckMessageAsync(
                     context.Channel.Id,
                     context.Platform,
-                    result.Message ?? string.Empty,
+                    result.Message?.RawText ?? string.Empty,
                     context.CancellationToken
                 );
 
@@ -96,7 +105,7 @@ public class CommandProcessor : ICommandProcessor
                         banphraseResult.MatchedPhrase
                     );
 
-                    result.Message = await _localization.GetStringAsync("core.bot.banphrase", extendedContext.Locale);
+                    result.Message = new Message(await _localization.GetStringAsync("core.bot.banphrase", extendedContext.Locale));
                     result.Success = false;
                 }
             }
@@ -124,18 +133,58 @@ public class CommandProcessor : ICommandProcessor
         catch (Exception ex)
         {
             stopwatch.Stop();
-            _logger.LogError(ex, "Error processing command. name='{CommandName}', uid='{UserId}'",
-                context.CommandName, context.User.Id);
-
+            var errorHash = GenerateExceptionHash(ex);
+            _logger.LogError(ex,
+                "Error processing command. name='{CommandName}', uid='{UserId}', error_code='{ErrorCode}'",
+                context.CommandName, unifiedUserId, errorHash);
+            
+            _errorTrackingService.LogError(ex, "The exception was not caught at the command level", extendedContext ?? context);
+            
             return new CommandResult
             {
                 Success = false,
-                Message = $"Internal error: {ex.Message}",
+                Message = new Message($"🚨 | An internal error has occurred ▹ The developers are already aware of it ▹ Error code: {errorHash}"),
                 ExecutionTime = stopwatch.Elapsed
             };
         }
     }
 
+    public static string GenerateExceptionHash(Exception ex)
+    {
+        if (ex == null) return "UNK:00000000";
+
+        // S0. Receive class
+        var targetMethod = ex.TargetSite;
+        string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";
+
+        // S1. Generating an abbreviation
+        string abbreviation = GetPascalCaseAbbreviation(className);
+
+        // S2. Calculate a hash
+        string input = $"{ex.GetType().FullName}\n{ex.StackTrace}";
+        using var sha256 = SHA256.Create();
+        byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
+        string hash = Convert.ToHexString(bytes)[..8];
+
+        // S3. Final
+        return $"{abbreviation}:{hash}";
+    }
+
+    private static string GetPascalCaseAbbreviation(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "UNK";
+        
+        string cleanName = new string(input.Where(char.IsLetterOrDigit).ToArray());
+        var upperLetters = cleanName.Where(char.IsUpper).ToArray();
+
+        if (upperLetters.Length > 0)
+        {
+            return new string(upperLetters);
+        }
+        
+        return cleanName.Length >= 3 ? cleanName[..3].ToUpper() : cleanName.ToUpper();
+    }
+    
     private async Task<CommandResult> ValidateCommand(ICommandContext context, UserProfile user)
     {
         var commandName = context.CommandName;

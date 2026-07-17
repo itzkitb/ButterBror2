@@ -1,7 +1,6 @@
-using ButterBror.ChatModule;
-using ButterBror.CommandModule.CommandModule;
 using ButterBror.Core.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
+using ButterBror.Core.Modules;
+using ButterBror.Core.Modules.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;

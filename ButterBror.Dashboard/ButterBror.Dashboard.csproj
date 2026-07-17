@@ -9,7 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="../ButterBror.Core/ButterBror.Core.csproj" />
     <ProjectReference Include="../ButterBror.Infrastructure/ButterBror.Infrastructure.csproj" />
-    <ProjectReference Include="../ButterBror.CommandModule/ButterBror.CommandModule.csproj" />
     <ProjectReference Include="../ButterBror.Domain/ButterBror.Domain.csproj" />
   </ItemGroup>
 

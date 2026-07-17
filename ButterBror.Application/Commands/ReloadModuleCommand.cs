@@ -1,21 +1,17 @@
-using ButterBror.ChatModule;
-using ButterBror.CommandModule.Commands;
-using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
-using ButterBror.Data;
-using ButterBror.Infrastructure.Services;
-using Microsoft.Extensions.Logging;
+using ButterBror.Core.Modules.Commands;
+using ButterBror.Core.Modules.Interfaces;
 
 namespace ButterBror.Application.Commands;
 
-public class ReloadModuleCommand : CommandBase
+public class ReloadModuleCommand : ICommand
 {
-    public override async Task<CommandResult> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider)
     {
-        var localization = GetService<ILocalizationService>(serviceProvider);
-        var moduleManager = GetService<IPlatformModuleManager>(serviceProvider);
+        var localization = serviceProvider.GetService<ILocalizationService>();
+        var moduleManager = serviceProvider.GetService<IPlatformModuleManager>();
 
         if (context.Arguments.Count < 2)
         {
@@ -51,7 +47,7 @@ public class ReloadModuleCommand : CommandBase
         }
         catch (Exception ex)
         {
-            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute ReloadModuleCommand",

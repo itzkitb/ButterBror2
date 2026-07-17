@@ -1,0 +1,38 @@
+using ButterBror.Core.Modules.Interfaces;
+
+namespace ButterBror.Core.Modules;
+
+/// <summary>
+/// Information about exported command from module
+/// </summary>
+public record CommandModuleExport(
+    string CommandName,
+    Func<ICommand> Factory,
+    ICommandMetadata Metadata
+);
+
+/// <summary>
+/// Interface for dynamically loaded command modules
+/// </summary>
+public interface ICommandModule
+{
+    string ModuleId { get; }
+    Version Version { get; }
+    IReadOnlyList<CommandModuleExport> ExportedCommands { get; }
+
+    /// <summary>
+    /// Built-in default translations for this module
+    /// </summary>
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations => 
+        new Dictionary<string, IReadOnlyDictionary<string, string>>();
+
+    /// <summary>
+    /// Module initialization
+    /// </summary>
+    Task InitializeAsync(IServiceProvider serviceProvider);
+
+    /// <summary>
+    /// Module shutdown
+    /// </summary>
+    Task ShutdownAsync();
+}

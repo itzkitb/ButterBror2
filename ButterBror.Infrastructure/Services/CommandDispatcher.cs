@@ -1,7 +1,7 @@
-using ButterBror.CommandModule.Commands;
-using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
+using ButterBror.Core.Modules.Commands;
+using ButterBror.Core.Modules.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

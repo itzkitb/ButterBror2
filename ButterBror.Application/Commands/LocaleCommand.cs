@@ -1,7 +1,7 @@
 using System.Text;
-using ButterBror.CommandModule.Commands;
-using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules.Commands;
+using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
 using ButterBror.Localization.Models;
 using ButterBror.Localization.Services;
@@ -12,18 +12,18 @@ namespace ButterBror.Application.Commands;
 /// <summary>
 /// Unified command for locale management
 /// </summary>
-public class LocaleCommand : CommandBase
+public class LocaleCommand : ICommand
 {
     private static string _defaultLocale = "EN_US";
-    public override async Task<CommandResult> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider)
     {
         try
         {
-            var logger = GetLogger<LocaleCommand>(serviceProvider);
-            var localization = GetService<ILocalizationService>(serviceProvider);
-            var userRepository = GetService<IUserRepository>(serviceProvider);
+            var logger = serviceProvider.GetService<Logger<LocaleCommand>>();
+            var localization = serviceProvider.GetService<ILocalizationService>();
+            var userRepository = serviceProvider.GetService<IUserRepository>();
 
             if (context.Arguments.Count == 0)
             {
@@ -46,7 +46,7 @@ public class LocaleCommand : CommandBase
         }
         catch (Exception ex)
         {
-            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute LocaleCommand",
@@ -118,9 +118,9 @@ public class LocaleCommand : CommandBase
 
         var hasteUrl = context.Arguments[2];
 
-        var pasteBinService = GetService<IPasteBinService>(serviceProvider);
-        var fileLoader = GetService<TranslationFileLoader>(serviceProvider);
-        var registry = GetService<LocaleRegistryService>(serviceProvider);
+        var pasteBinService = serviceProvider.GetService<IPasteBinService>();
+        var fileLoader = serviceProvider.GetService<TranslationFileLoader>();
+        var registry = serviceProvider.GetService<LocaleRegistryService>();
 
         var jsonContent = await pasteBinService.GetTextAsync(hasteUrl, context.CancellationToken);
         var translation = System.Text.Json.JsonSerializer.Deserialize<TranslationFile>(
@@ -149,7 +149,7 @@ public class LocaleCommand : CommandBase
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization)
     {
-        var registry = GetService<LocaleRegistryService>(serviceProvider);
+        var registry = serviceProvider.GetService<LocaleRegistryService>();
         var defaultLocale = registry.GetDefaultLocale();
         var locales = registry.GetAllLocales();
 
@@ -185,7 +185,7 @@ public class LocaleCommand : CommandBase
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.locale.delete.usage", context.Locale));
 
-        var registry = GetService<LocaleRegistryService>(serviceProvider);
+        var registry = serviceProvider.GetService<LocaleRegistryService>();
         var resolved = localization.ResolveLocale(context.Arguments[1]);
         
         if (resolved == null)
@@ -234,8 +234,8 @@ public class LocaleCommand : CommandBase
                 await localization.GetStringAsync("command.locale.view.unknown", context.Locale,
                     context.Arguments[1]));
 
-        var fileLoader = GetService<TranslationFileLoader>(serviceProvider);
-        var pasteBinService = GetService<IPasteBinService>(serviceProvider);
+        var fileLoader = serviceProvider.GetService<TranslationFileLoader>();
+        var pasteBinService = serviceProvider.GetService<IPasteBinService>();
 
         var fileName = $"{resolved}.json";
         var path = fileLoader.GetTranslationFilePath(fileName);
@@ -275,7 +275,7 @@ public class LocaleCommand : CommandBase
 
     private async Task<bool> CheckAdminPermissionAsync(Guid unifiedUserId, ICommandServiceProvider serviceProvider)
     {
-        var permissionManager = GetService<IPermissionManager>(serviceProvider);
+        var permissionManager = serviceProvider.GetService<IPermissionManager>();
         return await permissionManager.HasPermissionAsync(unifiedUserId, "su:lang");
     }
 }

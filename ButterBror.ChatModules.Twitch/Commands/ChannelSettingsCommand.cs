@@ -1,8 +1,8 @@
 ﻿using System.Text.Json;
 using ButterBror.ChatModules.Twitch.Models;
-using ButterBror.CommandModule.Commands;
-using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules.Commands;
+using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
 
 namespace ButterBror.ChatModules.Twitch.Commands;

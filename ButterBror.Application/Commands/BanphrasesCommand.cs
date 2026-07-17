@@ -1,22 +1,22 @@
-using ButterBror.CommandModule.Commands;
-using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules.Commands;
+using ButterBror.Core.Modules.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Application.Commands;
 
-public class BanphrasesCommand : CommandBase
+public class BanphrasesCommand : ICommand
 {
-    public override async Task<CommandResult> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider)
     {
         try
         {
-            var logger = GetLogger<BanphrasesCommand>(serviceProvider);
-            var banphraseService = GetService<IBanphraseService>(serviceProvider);
-            var hasteBinService = GetService<IPasteBinService>(serviceProvider);
-            var localization = GetService<ILocalizationService>(serviceProvider);
+            var logger = serviceProvider.GetService<Logger<BanphrasesCommand>>();
+            var banphraseService = serviceProvider.GetService<IBanphraseService>();
+            var hasteBinService = serviceProvider.GetService<IPasteBinService>();
+            var localization = serviceProvider.GetService<ILocalizationService>();
             
             if (context.Arguments.Count < 2)
             {
@@ -40,7 +40,7 @@ public class BanphrasesCommand : CommandBase
         }
         catch (Exception ex)
         {
-            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute BanphrasesCommand",

@@ -1,5 +1,5 @@
+using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Domain;
-using ButterBror.CommandModule.Context;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 

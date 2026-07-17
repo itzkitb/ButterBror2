@@ -1,4 +1,5 @@
-﻿using ButterBror.CommandModule.Context;
+﻿
+using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Domain;
 
 namespace ButterBror.Core.Models;

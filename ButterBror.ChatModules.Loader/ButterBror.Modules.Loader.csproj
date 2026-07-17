@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../ButterBror.ChatModule/ButterBror.ChatModule.csproj" />
+    <ProjectReference Include="..\ButterBror.Core\ButterBror.Core.csproj" />
   </ItemGroup>
 
 </Project>

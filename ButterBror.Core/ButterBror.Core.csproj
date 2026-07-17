@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../ButterBror.CommandModule/ButterBror.CommandModule.csproj" />
     <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />
   </ItemGroup>
 

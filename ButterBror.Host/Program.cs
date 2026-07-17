@@ -1,6 +1,5 @@
 using ButterBror.Application.Commands;
 using ButterBror.Application.Commands.Meta;
-using ButterBror.ChatModule;
 using ButterBror.Core.Interfaces;
 using ButterBror.Dashboard;
 using ButterBror.Dashboard.Services;
@@ -21,6 +20,7 @@ using StackExchange.Redis;
 using System.Text;
 using ButterBror.Application;
 using ButterBror.Core;
+using ButterBror.Core.Modules.Interfaces;
 
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding  = Encoding.UTF8;

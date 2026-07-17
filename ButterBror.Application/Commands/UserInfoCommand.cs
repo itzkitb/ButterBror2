@@ -1,20 +1,20 @@
-using ButterBror.CommandModule.Commands;
-using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules.Commands;
+using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
 
 namespace ButterBror.Application.Commands;
 
-public class UserInfoCommand : CommandBase
+public class UserInfoCommand : ICommand
 {
-    public override async Task<CommandResult> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider)
     {
         try
         {
-            var localization = GetService<ILocalizationService>(serviceProvider);
-            var userRepository = GetService<IUserRepository>(serviceProvider);
+            var localization = serviceProvider.GetService<ILocalizationService>();
+            var userRepository = serviceProvider.GetService<IUserRepository>();
 
             var platform = context.Channel.Platform.ToLowerInvariant();
             var targetUsername = context.Arguments.Count > 0
@@ -34,7 +34,7 @@ public class UserInfoCommand : CommandBase
         }
         catch (Exception ex)
         {
-            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
+            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute UserInfo",

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using ButterBror.CommandModule.Context;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Domain;
 using Microsoft.Extensions.DependencyInjection;
 

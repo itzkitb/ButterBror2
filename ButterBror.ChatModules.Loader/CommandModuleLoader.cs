@@ -2,8 +2,9 @@ using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Runtime.Loader;
 using System.Text.Json;
-using ButterBror.CommandModule.CommandModule;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules;
+using ButterBror.Core.Modules.Manifest;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Modules.Loader;
