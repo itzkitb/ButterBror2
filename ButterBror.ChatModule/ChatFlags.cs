@@ -2,5 +2,6 @@
 
 public enum ChatFlags
 {
-    CanSendMessages
+    CanSendMessages,
+    CanEditMessages
 }

@@ -127,6 +127,8 @@ builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
 
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
 
+builder.Services.AddMemoryCache();
+
 var host = builder.Build();
 
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
