@@ -24,11 +24,15 @@ public class Message
         if (parser == null) throw new ArgumentNullException(nameof(parser));
         if (string.IsNullOrEmpty(rawText) && (attachments == null || !attachments.Any()))
         {
-            throw new ArgumentException("Message must contain either text or at least one attachment.");
+            throw new ArgumentException("Message must contain either text or at least one attachment");
         }
-
-        RawText = rawText;
-        Parts = parser.Parse(rawText ?? string.Empty).AsReadOnly();
+        
+        // S0: Parse the BBCode text into structured parts
+        var parsedParts = parser.Parse(rawText ?? string.Empty);
+        Parts = parsedParts.AsReadOnly();
+        
+        // S1: Reconstruct RawText from parsed parts
+        RawText = string.Concat(parsedParts.Select(p => p.Text));
         InteractiveMarkup = markup;
         Attachments = (attachments ?? Enumerable.Empty<Attachment>()).ToList().AsReadOnly();
     }
