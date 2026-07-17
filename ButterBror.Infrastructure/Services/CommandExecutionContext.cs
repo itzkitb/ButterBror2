@@ -1,63 +1,57 @@
 using System.Text.Json.Serialization;
 using ButterBror.CommandModule.Context;
+using ButterBror.Core.Interfaces;
 using ButterBror.Domain;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class CommandExecutionContext : ICommandExecutionContext
+public class CommandExecutionContext(
+    IPlatformChannel channel,
+    List<string> arguments,
+    IPlatformUser user,
+    string locale,
+    string commandName,
+    CancellationToken cancellationToken = default)
+    : ICommandExecutionContext
 {
-    public IPlatformChannel Channel { get; }
-    public List<string> Arguments { get; }
-    public IPlatformUser User { get; }
-    public string Locale { get; }
-    public string CommandName { get; }
+    public IPlatformChannel Channel { get; } = channel;
+    public List<string> Arguments { get; } = arguments;
+    public IPlatformUser User { get; } = user;
+    public string Locale { get; } = locale;
+    public string CommandName { get; } = commandName;
 
     [JsonIgnore]
-    public CancellationToken CancellationToken { get; }
-
-    public CommandExecutionContext(
-        IPlatformChannel channel,
-        List<string> arguments,
-        IPlatformUser user,
-        string locale,
-        string commandName,
-        CancellationToken cancellationToken = default)
-    {
-        Channel = channel;
-        CommandName = commandName;
-        Arguments = arguments;
-        User = user;
-        Locale = locale;
-        CancellationToken = cancellationToken;
-    }
+    public CancellationToken CancellationToken { get; } = cancellationToken;
 }
 
-public class CommandServiceProvider : ICommandServiceProvider
+public class CommandServiceProvider(IServiceProvider serviceProvider) : ICommandServiceProvider
 {
-    private readonly IServiceProvider _serviceProvider;
-
-    public CommandServiceProvider(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
+    private readonly IDynamicServiceProvider? _dynamicProvider = serviceProvider.GetService<IDynamicServiceProvider>();
 
     public T GetService<T>() where T : notnull
     {
-        return _serviceProvider.GetRequiredService<T>();
+        var service = _dynamicProvider?.GetService(typeof(T)) ?? serviceProvider.GetService(typeof(T));
+        
+        return service is T typedService 
+            ? typedService 
+            : throw new InvalidOperationException($"Service of type {typeof(T).Name} is not registered.");
     }
 
     public T? GetService<T>(string? key = null) where T : notnull
     {
         if (key == null)
         {
-            return _serviceProvider.GetService<T>();
+            return serviceProvider.GetService<T>();
         }
+        
+        var services = _dynamicProvider != null 
+            ? _dynamicProvider.GetServices<T>() 
+            : serviceProvider.GetServices<T>();
 
-        var serviceType = typeof(T);
-        var namedService = _serviceProvider.GetServices<T>()
-            .FirstOrDefault(s => s?.GetType().Name.Contains(key, StringComparison.OrdinalIgnoreCase) == true);
+        var namedService = services.FirstOrDefault(s => 
+            s?.GetType().Name.Contains(key, StringComparison.OrdinalIgnoreCase) == true);
 
-        return namedService ?? _serviceProvider.GetService<T>();
+        return namedService ?? GetService<T>();
     }
 }

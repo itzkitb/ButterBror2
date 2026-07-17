@@ -20,6 +20,7 @@ using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using System.Text;
 using ButterBror.Application;
+using ButterBror.Core;
 
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding  = Encoding.UTF8;
@@ -87,8 +88,7 @@ builder.Services.AddSingleton<ICommandModuleLoader, CommandModuleLoader>();
 
 // Redis
 var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,allowAdmin=true,abortConnect=false";
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-    ConnectionMultiplexer.Connect(redisConfig));
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConfig));
 
 // Repositories
 builder.Services.RegisterResilienceStrategies();
@@ -112,7 +112,7 @@ builder.Services.AddHttpClient<IPasteBinService, PasteBinService>()
         AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
     });
 
-// Banphrase Service
+// Ban-phrase Service
 builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
 builder.Services.AddSingleton<IBanphraseService, BanphraseService>();
 
@@ -128,6 +128,9 @@ builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
 
 builder.Services.AddMemoryCache();
+
+builder.Services.AddSingleton<IDynamicServiceProvider>(sp => 
+    new DynamicServiceProvider(sp));
 
 var host = builder.Build();
 
@@ -148,7 +151,7 @@ await statsService.InitializeAsync(CancellationToken.None);
 
 // Register graceful shutdown for BotStatsService
 var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
-lifetime.ApplicationStopping.Register(async () =>
+lifetime.ApplicationStopping.Register(async void () =>
 {
     await statsService.FlushAsync(CancellationToken.None);
 });
