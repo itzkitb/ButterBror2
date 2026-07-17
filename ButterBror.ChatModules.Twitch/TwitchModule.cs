@@ -34,7 +34,18 @@ public class TwitchModule : IChatModule
     private Func<ICommand> _addChannelCommandFactory = null!;
     private Func<ICommand> _deleteChannelCommandFactory = null!;
     private Func<ICommand> _channelSettingsCommandFactory = null!;
-
+    
+    private const string StandardChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private const string BoldStr = "𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇𝗔𝗕𝗖𝗗𝗘𝗙𝗚𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗";
+    private const string ItalicStr = "𝘢𝘣𝘤𝘥𝘦𝘧𝘨𝘩𝘪𝘫𝘬𝘭𝘮𝘯𝘰𝘱𝘲𝘳𝘴𝘵𝘶𝘷𝘸𝘹𝘺𝘻𝘈𝘉𝘊𝘋𝘌𝘍𝘎𝘏𝘐𝘑𝘒𝘓𝘔𝘕𝘖𝘗𝘘𝘙𝘚𝘛𝘜𝘝𝘞𝘟𝘠𝘡0123456789";
+    private const string BoldItalicStr = "𝙖𝙗𝙘𝙙𝙚𝙛𝙜𝙝𝙞𝙟𝙠𝙡𝙢𝙣𝙤𝙥𝙦𝙧𝙨𝙩𝙪𝙫𝙬𝙭𝙮𝙯𝘼𝘽𝘾𝘿𝙀𝙁𝙂𝙃𝙄𝙅𝙆𝙇𝙈𝙉𝙊𝙋𝙌𝙍𝙎𝙏𝙐𝙑𝙒𝙓𝙔𝙕0123456789";
+    private const string MonospaceStr = "𝚊𝚋𝚌𝚍𝚎𝚏𝚐𝚑𝚒𝚓𝚔𝚕𝚖𝚗𝚘𝚙𝚚𝚛𝚜𝚝𝚞𝚟𝚠𝚡𝚢𝚣𝙰𝙱𝙲𝙳𝙴𝙵𝙶𝙷𝙸𝙹𝙺𝙻𝙼𝙽𝙾𝙿𝚀𝚁𝚂𝚃𝚄𝚅𝚆𝚇𝚈𝚉𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿";
+    
+    private static readonly string[] BoldChars = SplitToGraphemes(BoldStr);
+    private static readonly string[] ItalicChars = SplitToGraphemes(ItalicStr);
+    private static readonly string[] BoldItalicChars = SplitToGraphemes(BoldItalicStr);
+    private static readonly string[] MonospaceChars = SplitToGraphemes(MonospaceStr);
+    
     private List<ModuleCommandExport> _commands = null!;
     private bool _initialized = false;
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => _commands;
@@ -306,94 +317,78 @@ public class TwitchModule : IChatModule
         }
         return sb.ToString();
     }
-
+    
     private string FormatForTwitch(string text, MessageStyles styles)
     {
         if (string.IsNullOrEmpty(text) || styles == MessageStyles.None) 
             return text;
-
-        string result = text;
-
-        // S0. Spoiler
-        if (styles.HasFlag(MessageStyles.Spoiler))
+        
+        var sb = new StringBuilder(text.Length * 2);
+        foreach (char c in text)
         {
-            result = $"||{result}||";
+            sb.Append(FormatCharForTwitch(c, styles));
         }
 
-        // S1. Quote
+        string result = sb.ToString();
+        
         if (styles.HasFlag(MessageStyles.Quote))
         {
             var lines = result.Split('\n');
             result = string.Join("\n", lines.Select(l => $"> {l}"));
         }
 
-        // S2. Other
-        var sb = new StringBuilder();
-        foreach (char c in result)
+        if (styles.HasFlag(MessageStyles.Spoiler))
         {
-            char transformed = GetStyledChar(c, styles);
-            
-            if (styles.HasFlag(MessageStyles.Underline))
-            {
-                sb.Append(transformed);
-                sb.Append('\u0332'); // Combining Low Line
-                continue;
-            }
-            
-            if (styles.HasFlag(MessageStyles.Strikethrough))
-            {
-                sb.Append(transformed);
-                sb.Append('\u0336'); // Combining Long Stroke Overlay
-                continue;
-            }
+            result = $"||{result}||";
+        }
+        
+        return result;
+    }
 
-            sb.Append(transformed);
+    private string FormatCharForTwitch(char c, MessageStyles styles)
+    {
+        if (styles == MessageStyles.None)
+            return c.ToString();
+        
+        int index = StandardChars.IndexOf(c);
+        
+        if (index == -1)
+            return c.ToString();
+        
+        string baseCharStr;
+
+        if (styles.HasFlag(MessageStyles.Bold) && styles.HasFlag(MessageStyles.Italic))
+            baseCharStr = BoldItalicChars[index];
+        else if (styles.HasFlag(MessageStyles.Bold))
+            baseCharStr = BoldChars[index];
+        else if (styles.HasFlag(MessageStyles.Italic))
+            baseCharStr = ItalicChars[index];
+        else if (styles.HasFlag(MessageStyles.Monospace))
+            baseCharStr = MonospaceChars[index];
+        else
+            baseCharStr = c.ToString();
+        
+        if (styles.HasFlag(MessageStyles.Underline))
+        {
+            baseCharStr = $"{baseCharStr}\u0332";
+        }
+    
+        if (styles.HasFlag(MessageStyles.Strikethrough))
+        {
+            baseCharStr = $"{baseCharStr}\u0336";
         }
 
-        return sb.ToString();
+        return baseCharStr;
     }
     
-    private char GetStyledChar(char c, MessageStyles styles)
+    private static string[] SplitToGraphemes(string text)
     {
-        if (c < 'A' || c > 'z') 
+        var result = new List<string>();
+        foreach (var rune in text.EnumerateRunes())
         {
-            if (c >= '0' && c <= '9')
-            {
-                if (styles.HasFlag(MessageStyles.Monospace)) return (char)(c - '0' + 0x1D7F6);
-                if (styles.HasFlag(MessageStyles.Bold)) return (char)(c - '0' + 0x1D7CE);
-            }
-            return c; 
+            result.Add(rune.ToString());
         }
-
-        // Bold-Italic
-        if (styles.HasFlag(MessageStyles.Bold) && styles.HasFlag(MessageStyles.Italic))
-        {
-            if (c >= 'A' && c <= 'Z') return (char)(c - 'A' + 0x1D66E);
-            if (c >= 'a' && c <= 'z') return (char)(c - 'a' + 0x1D656);
-        }
-        
-        // Bold
-        if (styles.HasFlag(MessageStyles.Bold))
-        {
-            if (c >= 'A' && c <= 'Z') return (char)(c - 'A' + 0x1D5D4);
-            if (c >= 'a' && c <= 'z') return (char)(c - 'a' + 0x1D5EE);
-        }
-        
-        // Italic
-        if (styles.HasFlag(MessageStyles.Italic))
-        {
-            if (c >= 'A' && c <= 'Z') return (char)(c - 'A' + 0x1D63C);
-            if (c >= 'a' && c <= 'z') return (char)(c - 'a' + 0x1D622);
-        }
-        
-        // Mono
-        if (styles.HasFlag(MessageStyles.Monospace))
-        {
-            if (c >= 'A' && c <= 'Z') return (char)(c - 'A' + 0x1D68A);
-            if (c >= 'a' && c <= 'z') return (char)(c - 'a' + 0x1D670);
-        }
-
-        return c;
+        return result.ToArray();
     }
     
     private bool TryParseCommand(string message, string prefix, out string commandName, out string[] arguments)
