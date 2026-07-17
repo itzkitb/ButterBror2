@@ -313,7 +313,8 @@ public class BanphrasesCommand : ICommand
 
         if (result.Passed)
         {
-            return CommandResult.Successfully("");
+            var successResponse = await localization.GetStringAsync("command.banphrases.test.success", context.Locale);
+            return CommandResult.Successfully(successResponse);
         }
 
         var response = await localization.GetStringAsync("command.banphrases.test.fail", context.Locale,

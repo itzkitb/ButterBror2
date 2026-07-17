@@ -144,7 +144,8 @@ public class CommandProcessor : ICommandProcessor
             {
                 Success = false,
                 Message = new Message($"🚨 | An internal error has occurred ▹ The developers are already aware of it ▹ Error code: {errorHash}"),
-                ExecutionTime = stopwatch.Elapsed
+                ExecutionTime = stopwatch.Elapsed,
+                SendResult = true
             };
         }
     }
@@ -238,6 +239,6 @@ public class CommandProcessor : ICommandProcessor
 
         // Yay
         _logger.LogInformation("Command passed all validations. name='{CommandName}'", commandName);
-        return CommandResult.Successfully("");
+        return CommandResult.Successfully("Yay");
     }
 }

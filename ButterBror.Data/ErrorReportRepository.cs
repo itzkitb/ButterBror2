@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ButterBror.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using Polly;
@@ -34,7 +35,12 @@ public class ErrorReportRepository : IErrorReportRepository
         {
             IDatabase db = _redis.GetDatabase();
             string key = $"{ErrorPrefix}{report.ErrorId}";
-            string json = JsonSerializer.Serialize(report);
+            var options = new JsonSerializerOptions
+            {
+                Converters = { new SafeObjectConverter() },
+                ReferenceHandler = ReferenceHandler.IgnoreCycles 
+            };
+            string json = JsonSerializer.Serialize(report, options);
             await db.StringSetAsync(key, json);
 
             // Index by user ID if available
@@ -46,7 +52,7 @@ public class ErrorReportRepository : IErrorReportRepository
                 await db.ListTrimAsync(userIndexKey, 0, 99);
             }
 
-            _logger.LogDebug("Saved error report: {ErrorId}", report.ErrorId);
+            _logger.LogDebug("Saved error report. id={ErrorId}", report.ErrorId);
         });
     }
 
@@ -57,7 +63,13 @@ public class ErrorReportRepository : IErrorReportRepository
             IDatabase db = _redis.GetDatabase();
             string key = $"{ErrorPrefix}{errorId}";
             RedisValue json = await db.StringGetAsync(key);
-            return json.HasValue ? JsonSerializer.Deserialize<ErrorReport>(json.ToString()) : null;
+            
+            var options = new JsonSerializerOptions
+            {
+                Converters = { new SafeObjectConverter() }
+            };
+            
+            return json.HasValue ? JsonSerializer.Deserialize<ErrorReport>(json.ToString(), options) : null;
         });
     }
 

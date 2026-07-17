@@ -52,21 +52,59 @@ public class ErrorTrackingService : IErrorTrackingService
         var locale = user?.PreferredLocale ?? "EN_US";
 
         var errorId = await LogErrorInternalAsync(exception, message, user?.UnifiedUserId, platform, extraData);
+        var errorHash = GenerateExceptionHash(exception);
 
         // Get localized message with error ID
         var localizedMessage = await _localizationService.GetStringAsync(
             "core.error.report",
             locale,
-            errorId);
+            errorHash);
 
         _logger.LogInformation(
-            "Error reported for user {UserId} with error ID {ErrorId}",
+            "Error reported for user {UserId} with error ID {ErrorId}. error_code={ErrorCode}",
             userId,
-            errorId);
+            errorId,
+            errorHash);
 
         return CommandResult.Failure(localizedMessage);
     }
 
+    public static string GenerateExceptionHash(Exception ex)
+    {
+        if (ex == null) return "UNK:00000000";
+
+        // S0. Receive class
+        var targetMethod = ex.TargetSite;
+        string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";
+
+        // S1. Generating an abbreviation
+        string abbreviation = GetPascalCaseAbbreviation(className);
+
+        // S2. Calculate a hash
+        string input = $"{ex.GetType().FullName}\n{ex.StackTrace}";
+        using var sha256 = SHA256.Create();
+        byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
+        string hash = Convert.ToHexString(bytes)[..8];
+
+        // S3. Final
+        return $"{abbreviation}:{hash}";
+    }
+
+    private static string GetPascalCaseAbbreviation(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "UNK";
+        
+        string cleanName = new string(input.Where(char.IsLetterOrDigit).ToArray());
+        var upperLetters = cleanName.Where(char.IsUpper).ToArray();
+
+        if (upperLetters.Length > 0)
+        {
+            return new string(upperLetters);
+        }
+        
+        return cleanName.Length >= 3 ? cleanName[..3].ToUpper() : cleanName.ToUpper();
+    }
+    
     private async Task<string> LogErrorInternalAsync(
         Exception exception,
         string message,
