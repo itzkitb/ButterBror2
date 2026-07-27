@@ -37,6 +37,7 @@ public class AuthCommand : CommandBase
             logger.LogInformation("[TW] Auth URL generated. url={Url}", botAuthUrl);
 
             var response = await localization.GetStringAsync("command.auth.success", context.Locale, _config.BotUsername, botAuthUrl);
+            logger.LogInformation("[TW] Result auth message: {res}", response);
             return CommandResult.Successfully(response);
         }
         catch (Exception ex)
