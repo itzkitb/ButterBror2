@@ -31,6 +31,7 @@ public class MetricsSnapshot
     public long RedisOpsPerSecond { get; set; }
     public long RedisOpsPerMinute { get; set; }
     public long RedisOpsPerHour { get; set; }
+    public long RedisTotalKeys { get; set; }
 
     // Bot
     public double CommandsPerMinute { get; set; }

@@ -44,6 +44,11 @@ public interface IBotStatsService
     /// </summary>
     long RedisOpsPerHour { get; }
 
+    /// <summary>
+    /// Redis keys
+    /// </summary>
+    long RedisTotalKeys { get; }
+    
     // Uptime
 
     /// <summary>
@@ -93,7 +98,8 @@ public interface IBotStatsService
     /// <param name="memoryUsedBytes">Redis memory used in bytes</param>
     /// <param name="connectedClients">Number of connected clients</param>
     /// <param name="opsPerSecond">Operations per second</param>
-    void UpdateRedisStats(long memoryUsedBytes, long connectedClients, long opsPerSecond);
+    /// <param name="keys">Total number of keys in the database</param>
+    void UpdateRedisStats(long memoryUsedBytes, long connectedClients, long opsPerSecond, long keys);
 
     // Initialize
 

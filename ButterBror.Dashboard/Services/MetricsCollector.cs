@@ -96,6 +96,8 @@ public class MetricsCollector
                 {
                     snapshot.RedisOpsPerSecond = ops;
                 }
+                
+                snapshot.RedisTotalKeys = await server.DatabaseSizeAsync();
             }
         }
         catch (Exception ex)
@@ -117,7 +119,8 @@ public class MetricsCollector
         _stats.UpdateRedisStats(
             snapshot.RedisMemoryUsedBytes,
             snapshot.RedisConnectedClients,
-            snapshot.RedisOpsPerSecond);
+            snapshot.RedisOpsPerSecond,
+            snapshot.RedisTotalKeys);
 
         return snapshot;
     }

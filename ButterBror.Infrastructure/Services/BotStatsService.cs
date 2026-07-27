@@ -27,6 +27,7 @@ public class BotStatsService : IBotStatsService
     private long _redisMemoryUsedBytes;
     private long _redisConnectedClients;
     private long _redisOpsPerSecond;
+    private long _redisKeys;
     private readonly object _redisLock = new();
 
     // Session tracking
@@ -136,6 +137,15 @@ public class BotStatsService : IBotStatsService
         }
     }
 
+    public long RedisTotalKeys
+    {
+        get
+        {
+            lock (_redisLock)
+                return _redisKeys;
+        }
+    }
+    
     // Uptime
 
     public TimeSpan CurrentSessionUptime => DateTime.UtcNow - _startedAt;
@@ -168,13 +178,14 @@ public class BotStatsService : IBotStatsService
         Interlocked.Increment(ref _currentSessionReplies);
     }
 
-    public void UpdateRedisStats(long memoryUsedBytes, long connectedClients, long opsPerSecond)
+    public void UpdateRedisStats(long memoryUsedBytes, long connectedClients, long opsPerSecond, long keys)
     {
         lock (_redisLock)
         {
             _redisMemoryUsedBytes = memoryUsedBytes;
             _redisConnectedClients = connectedClients;
             _redisOpsPerSecond = opsPerSecond;
+            _redisKeys = keys;
         }
 
         lock (_opsLock)
