@@ -2,53 +2,38 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
 
-/// <summary>
-/// Generates an authorization link for the broadcaster to authorize the bot on their channel
-/// </summary>
-public class AuthCommand : CommandBase
+public class AuthCommand(IServiceProvider serviceProvider, IOptions<TwitchConfiguration> config)
+    : ICommand
 {
-    private readonly TwitchConfiguration _config;
+    private readonly TwitchConfiguration _config = config.Value;
+    private readonly Logger<AuthCommand> _logger = serviceProvider.GetRequiredService<Logger<AuthCommand>>();
+    private ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
-    public AuthCommand(IOptions<TwitchConfiguration> config)
-    {
-        _config = config.Value;
-    }
-
-    public override async Task<CommandResult> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider)
     {
-        try
+        if (string.IsNullOrWhiteSpace(_config.ClientId))
         {
-            var logger = GetLogger<AuthCommand>(serviceProvider);
-            var localization = GetService<ILocalizationService>(serviceProvider);
-
-            if (string.IsNullOrWhiteSpace(_config.ClientId))
-            {
-                throw new Exception("ClientId is not configured");
-            }
-
-            var botAuthUrl = $"{_config.RedirectUri}?client_id={_config.ClientId}&bot_username={_config.BotUsername}";
-            logger.LogInformation("[TW] Auth URL generated. url={Url}", botAuthUrl);
-
-            var response = await localization.GetStringAsync("command.auth.success", context.Locale, _config.BotUsername, botAuthUrl);
-            logger.LogInformation("[TW] Result auth message: {res}", response);
-            return CommandResult.Successfully(response);
+            throw new Exception("ClientId is not configured");
         }
-        catch (Exception ex)
-        {
-            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
-            return await errorTracking.LogErrorAsync(
-                ex,
-                ex.Message,
-                context.User.Id,
-                context.Channel.Platform,
-                context);
-        }
+
+        var botAuthUrl = $"{_config.RedirectUri}?client_id={_config.ClientId}&bot_username={_config.BotUsername}";
+        _logger.LogInformation("[TW] Auth URL generated. url={Url}", botAuthUrl);
+
+        var response = await _localization.GetStringAsync(
+            "command.auth.success",
+            context.Locale,
+            _config.BotUsername,
+            botAuthUrl);
+        
+        _logger.LogInformation("[TW] Result auth message: {res}", response);
+        return CommandResult.Successfully(response);
     }
 }

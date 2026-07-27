@@ -3,7 +3,8 @@ using ButterBror.Core.Modules.Interfaces;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
 
-// Metadata for join command
+// Commands metadata
+// ><> Join
 internal class JoinChannelCommandMetadata : ICommandMetadata
 {
     public string Name => "join";
@@ -16,7 +17,7 @@ internal class JoinChannelCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// Metadata for part command
+// ><> Part
 internal class PartChannelCommandMetadata : ICommandMetadata
 {
     public string Name => "part";
@@ -29,7 +30,7 @@ internal class PartChannelCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// Metadata for setprefix command
+// ><> SetPrefix
 internal class SetPrefixCommandMetadata : ICommandMetadata
 {
     public string Name => "setprefix";
@@ -42,7 +43,7 @@ internal class SetPrefixCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// Metadata for auth command
+// ><> Auth
 internal class AuthCommandMetadata : ICommandMetadata
 {
     public string Name => "auth";
@@ -55,7 +56,7 @@ internal class AuthCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// Metadata for addchannel command
+// ><> AddChannel
 internal class AddChannelCommandMetadata : ICommandMetadata
 {
     public string Name => "addchannel";
@@ -68,7 +69,7 @@ internal class AddChannelCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// Metadata for deletechannel command
+// ><> DeleteChannel
 internal class DeleteChannelCommandMetadata : ICommandMetadata
 {
     public string Name => "deletechannel";
@@ -81,7 +82,7 @@ internal class DeleteChannelCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// Metadata for channel settings command
+// ><> Twitch settings
 internal class ChannelSettingsCommandMetadata : ICommandMetadata
 {
     public string Name => "twitchset";

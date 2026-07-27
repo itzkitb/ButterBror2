@@ -2,16 +2,9 @@ using ButterBror.Domain;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 
-public class TwitchChannel : IPlatformChannel
+public class TwitchChannel(string channelName, string channelId) : IPlatformChannel
 {
-    public TwitchChannel(string channelName, string channelId)
-    {
-        Id = channelId;
-        Name = channelName;
-        Platform = "sillyapps:twitch";
-    }
-
-    public string Id { get; }
-    public string Name { get; }
-    public string Platform { get; }
+    public string Id { get; } = channelId;
+    public string Name { get; } = channelName;
+    public string Platform { get; } = "sillyapps:twitch";
 }

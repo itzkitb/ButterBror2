@@ -3,16 +3,10 @@ using ButterBror.Data;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 
-public class TwitchChannelManager : ITwitchChannelManager
+public class TwitchChannelManager(ICustomDataRepository db) : ITwitchChannelManager
 {
-    private readonly ICustomDataRepository _db;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private const string RedisKey = "twitch:channels";
-
-    public TwitchChannelManager(ICustomDataRepository db)
-    {
-        _db = db;
-    }
 
     public async Task<List<string>> GetChannelsAsync()
     {
@@ -36,7 +30,7 @@ public class TwitchChannelManager : ITwitchChannelManager
             if (!channels.Contains(channel, StringComparer.OrdinalIgnoreCase))
             {
                 channels.Add(channel);
-                await _db.SetDataAsync(RedisKey, JsonSerializer.Serialize(channels));
+                await db.SetDataAsync(RedisKey, JsonSerializer.Serialize(channels));
             }
         }
         finally
@@ -53,7 +47,7 @@ public class TwitchChannelManager : ITwitchChannelManager
             var channels = await GetChannelsInternalAsync();
             if (channels.RemoveAll(c => string.Equals(c, channel, StringComparison.OrdinalIgnoreCase)) > 0)
             {
-                await _db.SetDataAsync(RedisKey, JsonSerializer.Serialize(channels));
+                await db.SetDataAsync(RedisKey, JsonSerializer.Serialize(channels));
             }
         }
         finally
@@ -64,7 +58,7 @@ public class TwitchChannelManager : ITwitchChannelManager
     
     private async Task<List<string>> GetChannelsInternalAsync()
     {
-        var json = await _db.GetDataAsync(RedisKey) ?? "[]";
+        var json = await db.GetDataAsync(RedisKey) ?? "[]";
         return JsonSerializer.Deserialize<List<string>>(json) ?? new();
     }
 }

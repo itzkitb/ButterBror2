@@ -3,26 +3,20 @@ using ButterBror.Domain;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 
-public class TwitchCommandContext : ICommandContext
+public class TwitchCommandContext(
+    string commandName,
+    string[] arguments,
+    IPlatformUser user,
+    IPlatformChannel channel,
+    DateTime executedAt)
+    : ICommandContext
 {
-    public TwitchCommandContext(string commandName, string[] arguments,
-                               IPlatformUser user, IPlatformChannel channel, DateTime executedAt)
-    {
-        CommandName = commandName;
-        Arguments = arguments;
-        User = user;
-        Channel = channel;
-        ExecutedAt = executedAt;
-        Platform = "sillyapps:twitch";
-        CorrelationId = Guid.NewGuid();
-    }
-
-    public string CommandName { get; }
-    public string[] Arguments { get; }
-    public IPlatformUser User { get; }
-    public IPlatformChannel Channel { get; }
-    public DateTime ExecutedAt { get; }
-    public string Platform { get; }
-    public Guid CorrelationId { get; }
+    public string CommandName { get; } = commandName;
+    public string[] Arguments { get; } = arguments;
+    public IPlatformUser User { get; } = user;
+    public IPlatformChannel Channel { get; } = channel;
+    public DateTime ExecutedAt { get; } = executedAt;
+    public string Platform { get; } = "sillyapps:twitch";
+    public Guid CorrelationId { get; } = Guid.NewGuid();
     public CancellationToken CancellationToken { get; set; }
 }

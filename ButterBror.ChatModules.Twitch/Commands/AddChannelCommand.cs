@@ -1,71 +1,60 @@
 ﻿using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.Core.Interfaces;
 using ButterBror.Data;
-using System.Text.Json;
-using ButterBror.Core.Modules;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
 
-/// <summary>
-/// Adds a channel to the IRC or EventSub list and connects to it on the fly
-/// </summary>
-public class AddChannelCommand : CommandBase
+public class AddChannelCommand(
+    IServiceProvider serviceProvider,
+    ITwitchClient twitchClient,
+    ITwitchChannelManager channelManager)
+    : ICommand
 {
-    private readonly ITwitchClient _twitchClient;
-    private readonly ITwitchChannelManager _channelManager;
+    private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
+    private readonly IUserRepository _userRepo = serviceProvider.GetRequiredService<IUserRepository>();
+    private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
-    public AddChannelCommand(ITwitchClient twitchClient, ITwitchChannelManager channelManager)
-    {
-        _twitchClient = twitchClient;
-        _channelManager = channelManager;
-    }
-
-    public override async Task<CommandResult> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider)
     {
-        var logger = GetLogger<AddChannelCommand>(serviceProvider);
-        var customData = GetService<ICustomDataRepository>(serviceProvider);
-        var permissionManager = GetService<IPermissionManager>(serviceProvider);
-        var userRepository = GetService<IUserRepository>(serviceProvider);
-        var localization = GetService<ILocalizationService>(serviceProvider);
-
         // S0: Validate arguments
         if (context.Arguments.Count < 1)
         {
             return CommandResult.Failure(
-                await localization.GetStringAsync("command.add_channel.usage", context.Locale));
+                await _localization.GetStringAsync("command.add_channel.usage", context.Locale));
         }
 
         var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
         // S2: Check permissions
-        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
+        var user = await _userRepo.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
         if (user == null)
         {
             throw new Exception("User not found");
         }
 
-        var hasPermission = await permissionManager.HasPermissionAsync(
+        var hasPermission = await _permissionManager.HasPermissionAsync(
             user.UnifiedUserId,
             "su:twitch:addchannel");
 
         if (!hasPermission)
         {
             return CommandResult.Failure(
-                await localization.GetStringAsync("command.add_channel.permission", context.Locale));
+                await _localization.GetStringAsync("command.add_channel.permission", context.Locale));
         }
 
         // S3: Persist to Redis
-        await _channelManager.AddChannelAsync(channelName);
+        await channelManager.AddChannelAsync(channelName);
 
         // S4: Connect on the fly
-        await _twitchClient.AddChannelAsync(channelName);
+        await twitchClient.AddChannelAsync(channelName);
 
         return CommandResult.Successfully(
-            await localization.GetStringAsync("command.add_channel.success", context.Locale,
+            await _localization.GetStringAsync("command.add_channel.success", context.Locale,
                 channelName));
     }
 }

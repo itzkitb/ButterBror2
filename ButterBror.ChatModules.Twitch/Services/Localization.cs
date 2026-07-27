@@ -1,6 +1,6 @@
 ﻿namespace ButterBror.ChatModules.Twitch.Services;
 
-public class Localization
+public static class Localization
 {
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations => 
         new Dictionary<string, IReadOnlyDictionary<string, string>>()

@@ -4,5 +4,5 @@ namespace ButterBror.ChatModules.Twitch.Events;
 
 public class OnMessageReceivedArgs : EventArgs
 {
-    public ChatMessage ChatMessage { get; set; } = new();
+    public ChatMessage ChatMessage { get; internal init; } = new();
 }
