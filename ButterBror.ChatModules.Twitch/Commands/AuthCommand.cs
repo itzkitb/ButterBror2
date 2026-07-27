@@ -45,7 +45,7 @@ public class AuthCommand : CommandBase
             var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
             return await errorTracking.LogErrorAsync(
                 ex,
-                "Failed to execute Auth",
+                ex.Message,
                 context.User.Id,
                 context.Channel.Platform,
                 context);
