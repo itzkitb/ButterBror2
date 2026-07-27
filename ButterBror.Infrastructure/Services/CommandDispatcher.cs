@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Messaging;
 using ButterBror.Core.Models;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
@@ -7,23 +10,14 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class CommandDispatcher : ICommandDispatcher
+public class CommandDispatcher(
+    ILogger<CommandDispatcher> logger,
+    ICommandRegistry commandRegistry,
+    IServiceProvider provider,
+    IErrorTrackingService errorTrackingService)
+    : ICommandDispatcher
 {
-    private readonly ILogger<CommandDispatcher> _logger;
-    private readonly ICommandRegistry _commandRegistry;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IDashboardBridge? _dashboardBridge;
-
-    public CommandDispatcher(
-        ILogger<CommandDispatcher> logger,
-        ICommandRegistry commandRegistry,
-        IServiceProvider serviceProvider)
-    {
-        _logger = logger;
-        _commandRegistry = commandRegistry;
-        _serviceProvider = serviceProvider;
-        _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
-    }
+    private readonly IDashboardBridge? _dashboardBridge = provider.GetService<IDashboardBridge>();
 
     public async Task<CommandResult> DispatchAsync(ICommandContext context)
     {
@@ -32,7 +26,7 @@ public class CommandDispatcher : ICommandDispatcher
         try
         {
             // S0: Obtaining the command factory from the registry
-            var factory = _commandRegistry.GetCommandFactory(context.CommandName);
+            var factory = commandRegistry.GetCommandFactory(context.CommandName);
             if (factory == null)
             {
                 return CommandResult.Failure($"Command not found. name='{context.CommandName}'", sendResult: false);
@@ -43,8 +37,9 @@ public class CommandDispatcher : ICommandDispatcher
 
             // S2: Create an execution context and service provider
             var locale = (context as ExtendedCommandContext)?.Locale ?? "EN_US";
-            var commandContext = new CommandExecutionContext(context.Channel, context.Arguments.ToList(), context.User, locale, context.CommandName);
-            var serviceProvider = new CommandServiceProvider(_serviceProvider);
+            var commandContext = new CommandExecutionContext(context.Channel, context.Arguments.ToList(), context.User,
+                locale, context.CommandName);
+            var serviceProvider = new CommandServiceProvider(provider);
 
             var result = await command.ExecuteAsync(commandContext, serviceProvider);
             result.ExecutionTime = stopwatch.Elapsed;
@@ -56,8 +51,61 @@ public class CommandDispatcher : ICommandDispatcher
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error dispatching command. name='{CommandName}'", context.CommandName);
-            return CommandResult.Failure($"Internal error executing command: {ex.Message}");
+            var errorHash = GenerateExceptionHash(ex);
+            logger.LogError(ex,
+                "Error dispatching command. name='{CommandName}', uid='{UserId}', error_code='{ErrorCode}'",
+                context.CommandName, context.User.Id, errorHash);
+
+            errorTrackingService.LogError(ex, "The exception was not caught at the command level", context);
+
+            return new CommandResult
+            {
+                Success = false,
+                Message = new Message(
+                    $"🚨 | An internal error has occurred ▹ The developers are already aware of it ▹ Error code: {errorHash}"),
+                ExecutionTime = stopwatch.Elapsed,
+                SendResult = true
+            };
         }
+        finally
+        {
+            stopwatch.Stop();
+        }
+    }
+    
+    public static string GenerateExceptionHash(Exception ex)
+    {
+        if (ex == null) return "UNK:00000000";
+
+        // S0. Receive class
+        var targetMethod = ex.TargetSite;
+        string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";
+
+        // S1. Generating an abbreviation
+        string abbreviation = GetPascalCaseAbbreviation(className);
+
+        // S2. Calculate a hash
+        string input = $"{ex.GetType().FullName}\n{ex.StackTrace}";
+        using var sha256 = SHA256.Create();
+        byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
+        string hash = Convert.ToHexString(bytes)[..8];
+
+        // S3. Final
+        return $"{abbreviation}:{hash}";
+    }
+
+    private static string GetPascalCaseAbbreviation(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "UNK";
+        
+        string cleanName = new string(input.Where(char.IsLetterOrDigit).ToArray());
+        var upperLetters = cleanName.Where(char.IsUpper).ToArray();
+
+        if (upperLetters.Length > 0)
+        {
+            return new string(upperLetters);
+        }
+        
+        return cleanName.Length >= 3 ? cleanName[..3].ToUpper() : cleanName.ToUpper();
     }
 }
