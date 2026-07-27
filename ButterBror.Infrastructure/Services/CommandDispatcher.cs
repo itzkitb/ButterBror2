@@ -56,7 +56,7 @@ public class CommandDispatcher(
                 "Error dispatching command. name='{CommandName}', uid='{UserId}', error_code='{ErrorCode}'",
                 context.CommandName, context.User.Id, errorHash);
 
-            errorTrackingService.LogError(ex, "The exception was not caught at the command level", context);
+            errorTrackingService.LogError(ex, ex.Message, context);
 
             return new CommandResult
             {

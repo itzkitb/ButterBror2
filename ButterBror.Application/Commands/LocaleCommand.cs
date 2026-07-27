@@ -21,7 +21,7 @@ public class LocaleCommand : ICommand
     {
         try
         {
-            var logger = serviceProvider.GetService<Logger<LocaleCommand>>();
+            var logger = serviceProvider.GetService<ILogger<LocaleCommand>>();
             var localization = serviceProvider.GetService<ILocalizationService>();
             var userRepository = serviceProvider.GetService<IUserRepository>();
 

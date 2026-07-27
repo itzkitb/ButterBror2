@@ -13,7 +13,7 @@ public class BanphrasesCommand : ICommand
     {
         try
         {
-            var logger = serviceProvider.GetService<Logger<BanphrasesCommand>>();
+            var logger = serviceProvider.GetService<ILogger<BanphrasesCommand>>();
             var banphraseService = serviceProvider.GetService<IBanphraseService>();
             var hasteBinService = serviceProvider.GetService<IPasteBinService>();
             var localization = serviceProvider.GetService<ILocalizationService>();

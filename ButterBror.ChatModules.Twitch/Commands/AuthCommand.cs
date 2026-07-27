@@ -12,7 +12,7 @@ public class AuthCommand(IServiceProvider serviceProvider, IOptions<TwitchConfig
     : ICommand
 {
     private readonly TwitchConfiguration _config = config.Value;
-    private readonly Logger<AuthCommand> _logger = serviceProvider.GetRequiredService<Logger<AuthCommand>>();
+    private readonly ILogger<AuthCommand> _logger = serviceProvider.GetRequiredService<ILogger<AuthCommand>>();
     private ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
