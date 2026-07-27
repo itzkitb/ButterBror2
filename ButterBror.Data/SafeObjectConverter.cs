@@ -7,7 +7,8 @@ public class SafeObjectConverter : JsonConverter<object>
 {
     public override object? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        return JsonSerializer.Deserialize(ref reader, typeToConvert, options);
+        using var doc = JsonDocument.ParseValue(ref reader);
+        return doc.RootElement.Clone();
     }
 
     public override void Write(Utf8JsonWriter writer, object value, JsonSerializerOptions options)
@@ -21,9 +22,17 @@ public class SafeObjectConverter : JsonConverter<object>
         try
         {
             var cloneOptions = new JsonSerializerOptions(options);
-            cloneOptions.Converters.Remove(this); 
             
-            JsonSerializer.Serialize(writer, value, value.GetType(), cloneOptions);
+            for (int i = cloneOptions.Converters.Count - 1; i >= 0; i--)
+            {
+                if (cloneOptions.Converters[i] is SafeObjectConverter)
+                {
+                    cloneOptions.Converters.RemoveAt(i);
+                }
+            }
+            
+            using var doc = JsonSerializer.SerializeToDocument(value, value.GetType(), cloneOptions);
+            doc.WriteTo(writer);
         }
         catch (Exception ex)
         {
