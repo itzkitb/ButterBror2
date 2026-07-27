@@ -13,80 +13,58 @@ namespace ButterBror.ChatModules.Twitch.Commands;
 public class DeleteChannelCommand : CommandBase
 {
     private readonly ITwitchClient _twitchClient;
+    private readonly ITwitchChannelManager _channelManager;
 
-    public DeleteChannelCommand(ITwitchClient twitchClient)
+    public DeleteChannelCommand(ITwitchClient twitchClient, ITwitchChannelManager channelManager)
     {
         _twitchClient = twitchClient;
+        _channelManager = channelManager;
     }
 
     public override async Task<CommandResult> ExecuteAsync(
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider)
     {
-        try
+        var logger = GetLogger<AddChannelCommand>(serviceProvider);
+        var customData = GetService<ICustomDataRepository>(serviceProvider);
+        var permissionManager = GetService<IPermissionManager>(serviceProvider);
+        var userRepository = GetService<IUserRepository>(serviceProvider);
+        var localization = GetService<ILocalizationService>(serviceProvider);
+
+        // S0: Validate arguments
+        if (context.Arguments.Count < 1)
         {
-            var logger = GetLogger<AddChannelCommand>(serviceProvider);
-            var customData = GetService<ICustomDataRepository>(serviceProvider);
-            var permissionManager = GetService<IPermissionManager>(serviceProvider);
-            var userRepository = GetService<IUserRepository>(serviceProvider);
-            var localization = GetService<ILocalizationService>(serviceProvider);
-
-            // S0: Validate arguments
-            if (context.Arguments.Count < 1)
-            {
-                return CommandResult.Failure(
-                    await localization.GetStringAsync("command.del_channel.usage", context.Locale));
-            }
-            var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
-
-            // S2: Check permissions
-            var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-            if (user == null)
-            {
-                throw new Exception("User not found");
-            }
-
-            var hasPermission = await permissionManager.HasPermissionAsync(
-                user.UnifiedUserId,
-                "su:twitch:deletechannel");
-
-            if (!hasPermission)
-            {
-                return CommandResult.Failure(
-                    await localization.GetStringAsync("command.del_channel.permission", context.Locale));
-            }
-
-            // S3: Persist to Redis
-            var redisKey = "twitch:channels";
-            var currentJson = await customData.GetDataAsync(redisKey) ?? "[]";
-            var channels = JsonSerializer.Deserialize<List<string>>(currentJson) ?? new List<string>();
-
-            if (!channels.Contains(channelName, StringComparer.OrdinalIgnoreCase))
-            {
-                return CommandResult.Failure(
-                    await localization.GetStringAsync("command.del_channel.not_found", context.Locale,
-                        channelName));
-            }
-
-            channels.Remove(channelName);
-            await customData.SetDataAsync(redisKey, JsonSerializer.Serialize(channels));
-
-            // S4: Connect on the fly
-            await _twitchClient.LeaveChannelAsync(channelName);
-
-            return CommandResult.Successfully(
-                await localization.GetStringAsync("command.del_channel.success", context.Locale,
-                    channelName));
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.del_channel.usage", context.Locale));
         }
-        catch (Exception ex)
+
+        var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
+
+        // S2: Check permissions
+        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
+        if (user == null)
         {
-            var errorTracking = GetService<IErrorTrackingService>(serviceProvider);
-            return await errorTracking.LogErrorAsync(
-                ex,
-                "Failed to execute DeleteChannel",
-                context.User.Id,
-                context.Channel.Platform,
-                context);
+            throw new Exception("User not found");
         }
+
+        var hasPermission = await permissionManager.HasPermissionAsync(
+            user.UnifiedUserId,
+            "su:twitch:deletechannel");
+
+        if (!hasPermission)
+        {
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.del_channel.permission", context.Locale));
+        }
+
+        // S3: Persist to Redis
+        await _channelManager.RemoveChannelAsync(channelName);
+
+        // S4: Connect on the fly
+        await _twitchClient.LeaveChannelAsync(channelName);
+
+        return CommandResult.Successfully(
+            await localization.GetStringAsync("command.del_channel.success", context.Locale,
+                channelName));
     }
 }

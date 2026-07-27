@@ -25,7 +25,7 @@ namespace ButterBror.ChatModules.Twitch;
 public class TwitchModule : IChatModule
 {
     public string ModuleId => "sillyapps:twitch";
-    public Version Version => new(1, 1, 0);
+    public Version Version => new(1, 1, 1);
 
     private Func<ICommand> _joinCommandFactory = null!;
     private Func<ICommand> _partCommandFactory = null!;
@@ -65,10 +65,14 @@ public class TwitchModule : IChatModule
     private ICustomDataRepository _db = null!;
     private IDashboardBridge? _dashboardBridge;
     private ILocalizationService? _localization;
+    private ITwitchChannelManager? _channelManager;
     private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
     
     public async Task InitializeAsync(IServiceProvider serviceProvider)
     {
+        var dynamicServiceProvider = serviceProvider.GetRequiredService<IDynamicServiceProvider>();
+        dynamicServiceProvider.AddSingleton<ITwitchChannelManager, TwitchChannelManager>();
+        
         var appDataPathProvider = serviceProvider.GetRequiredService<IAppDataPathProvider>();
         var configService = new TwitchConfigurationService(appDataPathProvider);
         var config = configService.LoadConfiguration();
@@ -79,6 +83,7 @@ public class TwitchModule : IChatModule
         _dashboardBridge = serviceProvider.GetService<IDashboardBridge>();
         _botCore = serviceProvider.GetService<IBotCore>();
         _localization = serviceProvider.GetService<ILocalizationService>();
+        _channelManager = dynamicServiceProvider.GetRequiredService<ITwitchChannelManager>();
         
         var ircChannelsString = _db.GetDataAsync("twitch:channels").GetAwaiter().GetResult() ?? "[]";
         var ircChannels = JsonSerializer.Deserialize<List<string>>(ircChannelsString) ?? [];
@@ -96,8 +101,8 @@ public class TwitchModule : IChatModule
         _partCommandFactory = () => new PartChannelCommand(_twitchClient);
         _setPrefixCommandFactory = () => new SetPrefixCommand(this);
         _authCommandFactory = () => new AuthCommand(options);
-        _addChannelCommandFactory = () => new AddChannelCommand(_twitchClient);
-        _deleteChannelCommandFactory = () => new DeleteChannelCommand(_twitchClient);
+        _addChannelCommandFactory = () => new AddChannelCommand(_twitchClient, _channelManager);
+        _deleteChannelCommandFactory = () => new DeleteChannelCommand(_twitchClient, _channelManager);
         _channelSettingsCommandFactory = () => new ChannelSettingsCommand(_twitchClient);
         
         _commands = new List<ModuleCommandExport>
@@ -535,6 +540,9 @@ public class TwitchModule : IChatModule
             if (_twitchClient == null)
                 throw new Exception("Twitch client not initialized");
             
+            if (_channelManager == null)
+                throw new Exception("Twitch channel manager not initialized");
+            
             var channelId = await _twitchClient.GetChannelIdAsync(e.Channel);
             if (string.IsNullOrWhiteSpace(channelId))
             {
@@ -557,6 +565,7 @@ public class TwitchModule : IChatModule
             _twitchClient.SetBroadcasterToken(channelId, e.Token);
             _twitchClient.ClearIrcFallback(channelId);
 
+            await _channelManager.AddChannelAsync(e.Channel);
             await _twitchClient.AddChannelAsync(e.Channel);
             await _twitchClient.SendMessageAsync(e.Channel, "✅ | Successfully authorized, hi!");
 
