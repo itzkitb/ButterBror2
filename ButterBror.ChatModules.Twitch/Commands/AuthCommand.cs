@@ -36,7 +36,7 @@ public class AuthCommand : CommandBase
             var botAuthUrl = $"{_config.RedirectUri}?client_id={_config.ClientId}&bot_username={_config.BotUsername}";
             logger.LogInformation("[TW] Auth URL generated. url={Url}", botAuthUrl);
 
-            var response = await localization.GetStringAsync("", context.Locale, _config.BotUsername, botAuthUrl);
+            var response = await localization.GetStringAsync("command.auth.success", context.Locale, _config.BotUsername, botAuthUrl);
             return CommandResult.Successfully(response);
         }
         catch (Exception ex)
