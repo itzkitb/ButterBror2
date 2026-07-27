@@ -97,7 +97,21 @@ public class MetricsCollector
                     snapshot.RedisOpsPerSecond = ops;
                 }
                 
-                snapshot.RedisTotalKeys = await server.DatabaseSizeAsync();
+                var tasks = Enumerable.Range(0, 16).Select(async i =>
+                {
+                    try
+                    {
+                        var size = await _redis.GetDatabase(i).ExecuteAsync("DBSIZE");
+                        return size.IsNull ? 0L : (long)size;
+                    }
+                    catch
+                    {
+                        return 0L;
+                    }
+                });
+
+                var counts = await Task.WhenAll(tasks);
+                snapshot.RedisTotalKeys = counts.Sum();
             }
         }
         catch (Exception ex)
