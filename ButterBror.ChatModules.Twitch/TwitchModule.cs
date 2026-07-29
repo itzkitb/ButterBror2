@@ -21,7 +21,7 @@ public class TwitchModule : IChatModule
 {
     // ><> Metadata
     public string ModuleId => "sillyapps:twitch";
-    public Version Version { get; } = new(1, 3, 0);
+    public Version Version { get; } = new(1, 3, 1);
     public List<ChatModuleFlags> Flags { get; } = [ChatModuleFlags.CanSendMessages];
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>

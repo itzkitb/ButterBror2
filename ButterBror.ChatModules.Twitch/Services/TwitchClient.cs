@@ -5,8 +5,8 @@ using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Registry;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using ButterBror.Data;
 using TwitchLib.Api;
@@ -16,6 +16,7 @@ using TwitchLib.Client.Models;
 using TwitchLib.Communication.Clients;
 using TwitchLib.Communication.Models;
 using TwitchLib.EventSub.Websockets;
+using System.Threading.Channels;
 
 namespace ButterBror.ChatModules.Twitch.Services;
 
@@ -25,6 +26,8 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     private const string AppTokenCacheKey = "app";
     private static readonly TimeSpan TokenExpiryBuffer = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan IrcFallbackDuration = TimeSpan.FromHours(1);
+    private const int NormalChannelDelayMs = 1500;
+    private const int ModVipChannelDelayMs = 100;
     
     // ><> Dependencies & Configuration
     private readonly TwitchConfiguration _config;
@@ -49,11 +52,24 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     private readonly ConcurrentDictionary<string, AppAccessTokenEntry> _appTokenCache = new(StringComparer.Ordinal);
     private readonly TimeSpan _statusCacheDuration = TimeSpan.FromMinutes(2);
     
+    // ><> Rate Limiting & Queues
+    private readonly ConcurrentDictionary<string, bool> _isModOrVipCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<Channel<QueuedMessage>>> _channelQueues = new(StringComparer.OrdinalIgnoreCase);
+    
     // ><> Locks & State
+    private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _appTokenRefreshLock = new(1, 1);
     private string _botId = string.Empty;
     private bool _isDisposed;
 
+    private sealed record QueuedMessage(
+        string Channel,
+        string Message,
+        string? ReplyToMessageId,
+        bool ConvertChannelId,
+        TaskCompletionSource TaskCompletionSource
+    );
+    
     #region ><> Events
     public event EventHandler<Events.OnMessageReceivedArgs>? OnMessageReceived;
     public event EventHandler<OnConnectedEventArgs>? OnConnected;
@@ -229,6 +245,10 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         if (!IsJoined(channel))
             return;
         
+        if (_channelQueues.TryRemove(channel.ToLowerInvariant(), out var lazyQueue))
+        {
+            lazyQueue.Value.Writer.TryComplete();
+        }
         await _ircClient.LeaveChannelAsync(channel);
         _logger.LogInformation("[TW] Left #{Channel}", channel);
     }
@@ -243,7 +263,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     public async Task SendMessageAsync(string channel, string message, bool convertChannelId = true)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
-        await SendHelixMessageAsync(channel, message, replyToMessageId: null, convertChannelId);
+        await EnqueueMessageAsync(channel, message, replyToMessageId: null, convertChannelId);
     }
     public async Task SendReplyAsync(string channel, string replyToMessageId, string message, bool convertChannelId = true)
     {
@@ -251,10 +271,74 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         if (string.IsNullOrWhiteSpace(replyToMessageId))
         {
             _logger.LogWarning("[TW] SendReplyAsync called with empty messageId, falling back to SendMessageAsync");
-            await SendMessageAsync(channel, message);
+            await SendMessageAsync(channel, message, convertChannelId);
             return;
         }
-        await SendHelixMessageAsync(channel, message, replyToMessageId, convertChannelId);
+        await EnqueueMessageAsync(channel, message, replyToMessageId, convertChannelId);
+    }
+    private async Task EnqueueMessageAsync(string channel, string message, string? replyToMessageId, bool convertChannelId)
+    {
+        var normalizedChannel = channel.ToLowerInvariant();
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var item = new QueuedMessage(normalizedChannel, message, replyToMessageId, convertChannelId, tcs);
+        
+        var queue = _channelQueues.GetOrAdd(normalizedChannel, ch => new Lazy<Channel<QueuedMessage>>(() =>
+        {
+            var newChannel = Channel.CreateUnbounded<QueuedMessage>(new UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = false
+            });
+            _ = ProcessChannelQueueAsync(ch, newChannel.Reader);
+            return newChannel;
+        }, LazyThreadSafetyMode.ExecutionAndPublication));
+        
+        await queue.Value.Writer.WriteAsync(item);
+        await tcs.Task;
+    }
+    private async Task ProcessChannelQueueAsync(string channel, ChannelReader<QueuedMessage> reader)
+    {
+        long lastSentTimestamp = 0;
+
+        try
+        {
+            await foreach (var item in reader.ReadAllAsync(_cts.Token))
+            {
+                try
+                {
+                    bool isModOrVip = _isModOrVipCache.TryGetValue(channel, out var cached) && cached;
+                    int requiredDelayMs = isModOrVip ? ModVipChannelDelayMs : NormalChannelDelayMs;
+
+                    if (lastSentTimestamp > 0)
+                    {
+                        var elapsedMs = Stopwatch.GetElapsedTime(lastSentTimestamp).TotalMilliseconds;
+                        if (elapsedMs < requiredDelayMs)
+                        {
+                            var delay = TimeSpan.FromMilliseconds(requiredDelayMs - elapsedMs);
+                            await Task.Delay(delay, _cts.Token);
+                        }
+                    }
+
+                    lastSentTimestamp = Stopwatch.GetTimestamp();
+
+                    await SendHelixMessageAsync(item.Channel, item.Message, item.ReplyToMessageId, item.ConvertChannelId);
+                    item.TaskCompletionSource.TrySetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    item.TaskCompletionSource.TrySetCanceled();
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    item.TaskCompletionSource.TrySetException(ex);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Нормальное завершение при остановке бота
+        }
     }
     public async Task SendWhisperAsync(string recipientUserId, string message)
     {
@@ -650,6 +734,24 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         _ircClient.OnGiftedSubscription += OnClientGiftedSubscription;
         _ircClient.OnRaidNotification += OnClientRaidNotification;
         _ircClient.OnBitsBadgeTier += OnClientBitsReceived;
+        _ircClient.OnUserStateChanged += OnClientUserStateChanged;
+    }
+    private Task OnClientUserStateChanged(object? sender, OnUserStateChangedArgs e)
+    {
+        try
+        {
+            var channel = e.UserState.Channel.ToLowerInvariant();
+            bool isMod = e.UserState.IsModerator;
+            bool isVip = e.UserState.Badges.Any(b => b.Key.Equals("vip", StringComparison.OrdinalIgnoreCase));
+
+            _isModOrVipCache[channel] = isMod || isVip;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TW] Error parsing USERSTATE badges for channel {Channel}", e.UserState.Channel);
+        }
+
+        return Task.CompletedTask;
     }
     private async Task OnClientConnected(object? sender, OnConnectedEventArgs e)
     {
@@ -919,6 +1021,13 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         if (disposing)
         {
             _isDisposed = true;
+            _cts.Cancel();
+            
+            foreach (var lazyQueue in _channelQueues.Values)
+            {
+                lazyQueue.Value.Writer.TryComplete();
+            }
+            
             _appTokenRefreshLock.Dispose();
             _tokenHttpClient.Dispose();
             if (_ircClient.IsConnected)
