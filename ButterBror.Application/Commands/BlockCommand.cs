@@ -19,16 +19,15 @@ public class BlockCommand : ICommand
             var userRepository = serviceProvider.GetService<IUserRepository>();
             var blockCommandId = new BlockCommandMeta().Id;
 
-            if (context.Arguments.Count < 2)
+            if (context.Arguments.Count < 1)
             {
                 return CommandResult.Failure(
                     await localization.GetStringAsync("command.block.usage", context.Locale));
             }
-
-            var action = context.Arguments[0].ToLowerInvariant(); // block / unblock
-            var targetType = context.Arguments[1].ToLowerInvariant(); // user / global / platform / chat
-
-            bool isBlock = action == "block";
+            
+            bool isBlock = !context.CommandName.Equals("unblock", StringComparison.OrdinalIgnoreCase) 
+                           || !context.CommandName.Equals("unban", StringComparison.OrdinalIgnoreCase);
+            var targetType = context.Arguments[0].ToLowerInvariant(); // user / global / platform / chat
 
             return targetType switch
             {
@@ -58,10 +57,10 @@ public class BlockCommand : ICommand
         IUserRepository userRepository,
         bool isBlock)
     {
-        if (context.Arguments.Count < 3)
+        if (context.Arguments.Count < 2)
             return CommandResult.Failure(await localization.GetStringAsync("command.block.user.usage", context.Locale));
 
-        var userName = context.Arguments[2];
+        var userName = context.Arguments[1];
         var userEntity = await userRepository.FindUserAsync(context.Channel.Platform, userName);
         var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
         
@@ -73,10 +72,10 @@ public class BlockCommand : ICommand
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.block.user.block_self", context.Locale));
         
-        var isGlobal = (context.Arguments.Count > 3 && context.Arguments[3].Equals("global", 
-            StringComparison.InvariantCultureIgnoreCase)) || context.Arguments.Count <= 3;
-        var targetPlatform = context.Arguments.Count > 3 ? context.Arguments[3] : "global";
-        var reason = context.Arguments.Count > 4 ? string.Join(" ", context.Arguments.Skip(4)) : null;
+        var isGlobal = (context.Arguments.Count > 2 && context.Arguments[2].Equals("global", 
+            StringComparison.OrdinalIgnoreCase)) || context.Arguments.Count <= 2;
+        var targetPlatform = context.Arguments.Count > 2 ? context.Arguments[2] : "global";
+        var reason = context.Arguments.Count > 3 ? string.Join(" ", context.Arguments.Skip(3)) : null;
 
         if (isBlock)
             await restriction.BlockUserAsync(targetPlatform, userEntity.UnifiedUserId, reason, isGlobal, context.CancellationToken);
@@ -94,12 +93,12 @@ public class BlockCommand : ICommand
         bool isBlock,
         string blockCommandId)
     {
-        if (context.Arguments.Count < 3)
+        if (context.Arguments.Count < 2)
             return CommandResult.Failure(await localization.GetStringAsync("command.block.global.usage", context.Locale));
 
-        var commandId = context.Arguments[2];
+        var commandId = context.Arguments[1];
 
-        if (commandId.Equals(blockCommandId, StringComparison.InvariantCultureIgnoreCase))
+        if (commandId.Equals(blockCommandId, StringComparison.OrdinalIgnoreCase))
             return CommandResult.Failure(await localization.GetStringAsync("command.block.block_ban", context.Locale));
         
         if (isBlock)
@@ -118,13 +117,13 @@ public class BlockCommand : ICommand
         bool isBlock,
         string blockCommandId)
     {
-        if (context.Arguments.Count < 4)
+        if (context.Arguments.Count < 3)
             return CommandResult.Failure(await localization.GetStringAsync("command.block.platform.usage", context.Locale));
 
-        var platform = context.Arguments[2];
-        var commandId = context.Arguments[3];
+        var platform = context.Arguments[1];
+        var commandId = context.Arguments[2];
 
-        if (commandId.Equals(blockCommandId, StringComparison.InvariantCultureIgnoreCase))
+        if (commandId.Equals(blockCommandId, StringComparison.OrdinalIgnoreCase))
             return CommandResult.Failure(await localization.GetStringAsync("command.block.block_ban", context.Locale));
         
         if (isBlock)
@@ -143,14 +142,14 @@ public class BlockCommand : ICommand
         bool isBlock,
         string blockCommandId)
     {
-        if (context.Arguments.Count < 3)
+        if (context.Arguments.Count < 2)
             return CommandResult.Failure(await localization.GetStringAsync("command.block.chat.usage", context.Locale));
 
-        var commandId = context.Arguments[2];
+        var commandId = context.Arguments[1];
         var platform = context.Channel.Platform;
-        var channelId = context.Arguments.Count > 3 ? context.Arguments[3] : context.Channel.Id;
+        var channelId = context.Arguments.Count > 2 ? context.Arguments[2] : context.Channel.Id;
 
-        if (commandId.Equals(blockCommandId, StringComparison.InvariantCultureIgnoreCase))
+        if (commandId.Equals(blockCommandId, StringComparison.OrdinalIgnoreCase))
             return CommandResult.Failure(await localization.GetStringAsync("command.block.block_ban", context.Locale));
         
         if (isBlock)
