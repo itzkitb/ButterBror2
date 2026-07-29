@@ -25,8 +25,8 @@ public class BlockCommand : ICommand
                     await localization.GetStringAsync("command.block.usage", context.Locale));
             }
             
-            bool isBlock = !context.CommandName.Equals("unblock", StringComparison.OrdinalIgnoreCase) 
-                           || !context.CommandName.Equals("unban", StringComparison.OrdinalIgnoreCase);
+            var isBlock = !context.CommandName.Equals("unblock", StringComparison.OrdinalIgnoreCase) 
+                          && !context.CommandName.Equals("unban", StringComparison.OrdinalIgnoreCase);
             var targetType = context.Arguments[0].ToLowerInvariant(); // user / global / platform / chat
 
             return targetType switch
