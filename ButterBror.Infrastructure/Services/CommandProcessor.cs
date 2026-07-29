@@ -10,55 +10,48 @@ using ButterBror.Domain.Entities;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class CommandProcessor : ICommandProcessor
+public class CommandProcessor(
+    ICommandDispatcher commandDispatcher,
+    IUserService userService,
+    ICommandRegistry commandRegistry,
+    ILogger<CommandProcessor> logger,
+    IBanphraseService banphraseService,
+    IPermissionManager permissionManager,
+    ILocalizationService localization,
+    IErrorTrackingService errorTrackingService,
+    IRestrictionService restrictionService)
+    : ICommandProcessor
 {
-    private readonly ICommandDispatcher _commandDispatcher;
-    private readonly IUserService _userService;
-    private readonly ICommandRegistry _commandRegistry;
-    private readonly ILogger<CommandProcessor> _logger;
-    private readonly IBanphraseService _banphraseService;
-    private readonly IPermissionManager _permissionManager;
-    private readonly ILocalizationService _localization;
-    private readonly IErrorTrackingService _errorTrackingService;
-
-    public CommandProcessor(
-        ICommandDispatcher commandDispatcher,
-        IUserService userService,
-        ICommandRegistry commandRegistry,
-        ILogger<CommandProcessor> logger,
-        IBanphraseService banphraseService,
-        IPermissionManager permissionManager,
-        ILocalizationService localization,
-        IErrorTrackingService errorTrackingService)
-    {
-        _commandDispatcher = commandDispatcher;
-        _userService = userService;
-        _commandRegistry = commandRegistry;
-        _banphraseService = banphraseService;
-        _permissionManager = permissionManager;
-        _logger = logger;
-        _localization = localization;
-        _errorTrackingService = errorTrackingService;
-    }
+    private readonly IPermissionManager _permissionManager = permissionManager;
 
     public async Task<CommandResult> ProcessCommandAsync(ICommandContext context)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         string unifiedUserId = "unknown";
-        ExtendedCommandContext? extendedContext = null;
-        
+        ExtendedCommandContext? eContext = null;
+
         try
         {
             // S0: Getting/creating user profile
-            var user = await _userService.GetOrCreateUserAsync(
+            var user = await userService.GetOrCreateUserAsync(
                 context.User.Id,
                 context.Platform,
                 context.User.DisplayName
             );
             unifiedUserId = user.UnifiedUserId.ToString();
 
-            // S1: Validating command
-            var validationResult = await ValidateCommand(context, user);
+            // S1. Find a command
+            var commandMeta = commandRegistry.GetCommandMetadata(context.CommandName);
+            if (commandMeta == null)
+            {
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("core.bot.command.not_found", user.PreferredLocale,
+                        context.CommandName),
+                    sendResult: false);
+            }
+
+            // S2: Validating command
+            var validationResult = await ValidateCommand(context, commandMeta, user);
             if (!validationResult.Success)
             {
                 stopwatch.Stop();
@@ -66,27 +59,59 @@ public class CommandProcessor : ICommandProcessor
                 return validationResult;
             }
 
-            // S2: Proceed with user management and command execution
-            extendedContext = new ExtendedCommandContext(context, user.UnifiedUserId, user.PreferredLocale);
-            
-            // S3: Command Dispatch
-            var result = await _commandDispatcher.DispatchAsync(extendedContext);
+            // S3: Proceed with user management and command execution
+            eContext = new ExtendedCommandContext(context, user.UnifiedUserId, user.PreferredLocale);
+
+            // S4: Checking user block status
+            var userStatus = await restrictionService.CheckUserBlockStatusAsync(
+                eContext.Channel.Platform,
+                eContext.UnifiedUserId,
+                eContext.CancellationToken);
+
+            if (userStatus.IsBlocked)
+            {
+                var blockMessage = await localization.GetStringAsync("core.bot.user_blocked", eContext.Locale);
+                return CommandResult.Failure(blockMessage, sendResult: userStatus.ShouldNotify);
+            }
+
+            // S5. Checking command block status
+            var blockStatus = await restrictionService.CheckCommandStatusAsync(
+                eContext.Channel.Platform,
+                eContext.Channel.Id,
+                commandMeta.Id,
+                eContext.CancellationToken);
+
+            if (blockStatus != CommandBlockStatus.Allowed)
+            {
+                var reasonMessageKey = blockStatus switch
+                {
+                    CommandBlockStatus.BlockedGlobally => "core.bot.command.blocked_global",
+                    CommandBlockStatus.BlockedOnPlatform => "core.bot.command.blocked_platform",
+                    CommandBlockStatus.BlockedInChat => "core.bot.command.blocked_chat",
+                    _ => "core.bot.command.blocked"
+                };
+
+                var message = await localization.GetStringAsync(reasonMessageKey, eContext.Locale, commandMeta.Id);
+                return CommandResult.Failure(message);
+            }
+
+            // S6: Command Dispatch
+            var result = await commandDispatcher.DispatchAsync(eContext);
 
             stopwatch.Stop();
             result.ExecutionTime = stopwatch.Elapsed;
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Command executed by user. name='{CommandName}' uid='{UserId}' execution_time={ExecutionTime} success={Success}",
                 context.CommandName, user.UnifiedUserId, stopwatch.ElapsedMilliseconds, result.Success);
 
-            // S4: Check banphrases
-            var commandMeta = _commandRegistry.GetCommandMetadata(context.CommandName);
+            // S7: Check banphrases
             // If any permission start with "su:" skipping check
-            var skipCheck = commandMeta != null ? commandMeta.RequiredPermissions.Any((c) => c.StartsWith("su:")) : false;
+            var skipCheck = commandMeta.RequiredPermissions.Any((c) => c.StartsWith("su:"));
 
             if (!skipCheck)
             {
-                var banphraseResult = await _banphraseService.CheckMessageAsync(
+                var banphraseResult = await banphraseService.CheckMessageAsync(
                     context.Channel.Id,
                     context.Platform,
                     result.Message?.RawText ?? string.Empty,
@@ -95,7 +120,7 @@ public class CommandProcessor : ICommandProcessor
 
                 if (!banphraseResult.Passed)
                 {
-                    _logger.LogInformation(
+                    logger.LogInformation(
                         "Command result blocked by banphrase. command='{Command}', uid='{UserId}', section='{Section}', category='{Category}', pattern='{Pattern}', phrase='{Phrase}'",
                         context.CommandName,
                         user.UnifiedUserId,
@@ -105,28 +130,22 @@ public class CommandProcessor : ICommandProcessor
                         banphraseResult.MatchedPhrase
                     );
 
-                    result.Message = new Message(await _localization.GetStringAsync("core.bot.banphrase", extendedContext.Locale));
+                    result.Message =
+                        new Message(await localization.GetStringAsync("core.bot.banphrase", eContext.Locale));
                     result.Success = false;
                 }
             }
             else
             {
-                _logger.LogWarning("Skipping the ban phrases check");
+                logger.LogWarning("Skipping the ban phrases check");
             }
 
-            if (commandMeta != null)
-            {
-                // S5: Updating user statistics
-                await _userService.UpdateUserStatisticsAsync(
-                    user.UnifiedUserId,
-                    commandMeta.Name,
-                    result.Success
-                );
-            }
-            else
-            {
-                _logger.LogWarning("Unable to find command meta!");
-            }
+            // S8: Updating user statistics
+            await userService.UpdateUserStatisticsAsync(
+                user.UnifiedUserId,
+                commandMeta.Name,
+                result.Success
+            );
 
             return result;
         }
@@ -134,16 +153,18 @@ public class CommandProcessor : ICommandProcessor
         {
             stopwatch.Stop();
             var errorHash = GenerateExceptionHash(ex);
-            _logger.LogError(ex,
+            logger.LogError(ex,
                 "Error processing command. name='{CommandName}', uid='{UserId}', error_code='{ErrorCode}'",
                 context.CommandName, unifiedUserId, errorHash);
-            
-            _errorTrackingService.LogError(ex, "The exception was not caught at the command level", extendedContext ?? context);
-            
+
+            errorTrackingService.LogError(ex, "The exception was not caught at the command level",
+                eContext ?? context);
+
             return new CommandResult
             {
                 Success = false,
-                Message = new Message($"🚨 | An internal error has occurred ▹ The developers are already aware of it ▹ Error code: {errorHash}"),
+                Message = new Message(
+                    $"🚨 | An internal error has occurred ▹ The developers are already aware of it ▹ Error code: {errorHash}"),
                 ExecutionTime = stopwatch.Elapsed,
                 SendResult = true
             };
@@ -154,20 +175,20 @@ public class CommandProcessor : ICommandProcessor
     {
         if (ex == null) return "UNK:00000000";
 
-        // S0. Receive class
+        // S0: Receive class
         var targetMethod = ex.TargetSite;
         string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";
 
-        // S1. Generating an abbreviation
+        // S1: Generating an abbreviation
         string abbreviation = GetPascalCaseAbbreviation(className);
 
-        // S2. Calculate a hash
+        // S2: Calculate a hash
         string input = $"{ex.GetType().FullName}\n{ex.StackTrace}";
         using var sha256 = SHA256.Create();
         byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
         string hash = Convert.ToHexString(bytes)[..8];
 
-        // S3. Final
+        // S3: Final
         return $"{abbreviation}:{hash}";
     }
 
@@ -186,59 +207,49 @@ public class CommandProcessor : ICommandProcessor
         return cleanName.Length >= 3 ? cleanName[..3].ToUpper() : cleanName.ToUpper();
     }
     
-    private async Task<CommandResult> ValidateCommand(ICommandContext context, UserProfile user)
+    private async Task<CommandResult> ValidateCommand(ICommandContext context, ICommandMetadata meta, UserProfile user)
     {
         var commandName = context.CommandName;
 
-        // S0: Validating that command exists
-        var commandMetadata = _commandRegistry.GetCommandMetadata(commandName);
-        if (commandMetadata == null)
-        {
-            return CommandResult.Failure(
-                await _localization.GetStringAsync("core.bot.command.not_found", user.PreferredLocale,
-                    commandName),
-                sendResult:false);
-        }
-
-        // S1: Checking platform compatibility
+        // S0: Checking platform compatibility
         var platformId = context.Platform.ToLowerInvariant();
-        if (!_commandRegistry.IsCommandCompatibleWithPlatform(commandName, platformId))
+        if (!commandRegistry.IsCommandCompatibleWithPlatform(commandName, platformId))
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("core.bot.command.compatibility", user.PreferredLocale,
+                await localization.GetStringAsync("core.bot.command.compatibility", user.PreferredLocale,
                     commandName,
                     context.Platform),
                 sendResult:false);
         }
 
-        // S2: Validating permissions
-        if (!await _commandRegistry.UserHasPermissionForCommandAsync(commandName, user.UnifiedUserId))
+        // S1: Validating permissions
+        if (!await commandRegistry.UserHasPermissionForCommandAsync(commandName, user.UnifiedUserId))
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("core.bot.command.permission", user.PreferredLocale));
+                await localization.GetStringAsync("core.bot.command.permission", user.PreferredLocale));
         }
 
-        // S3: Cooldown check
-        var lastUse = await _userService.GetCommandLastUsedAsync(commandMetadata.Id, user.UnifiedUserId);
+        // S2: Cooldown check
+        var lastUse = await userService.GetCommandLastUsedAsync(meta.Id, user.UnifiedUserId);
         var betweenUses = DateTime.UtcNow - lastUse;
-        if (betweenUses != null && ((TimeSpan)betweenUses).TotalSeconds < commandMetadata.CooldownSeconds)
+        if (betweenUses != null && ((TimeSpan)betweenUses).TotalSeconds < meta.CooldownSeconds)
         {
-            _logger.LogDebug("Command cooldown. uid='{UserId}', cid='{CommandId}', remain={Seconds}, cooldown={CooldownSeconds}",
+            logger.LogDebug("Command cooldown. uid='{UserId}', cid='{CommandId}', remain={Seconds}, cooldown={CooldownSeconds}",
                 user.UnifiedUserId,
-                commandMetadata.Id,
+                meta.Id,
                 ((TimeSpan)betweenUses).TotalSeconds,
-                commandMetadata.CooldownSeconds
+                meta.CooldownSeconds
             );
             return CommandResult.Failure(
-                await _localization.GetStringAsync("core.bot.command.cooldown", user.PreferredLocale,
+                await localization.GetStringAsync("core.bot.command.cooldown", user.PreferredLocale,
                     commandName,
-                    commandMetadata.CooldownSeconds - ((TimeSpan)betweenUses).TotalSeconds),
+                    meta.CooldownSeconds - ((TimeSpan)betweenUses).TotalSeconds),
                 sendResult:false);
         }
-        _ = _userService.SetCommandLastUseAsync(commandMetadata.Id, user.UnifiedUserId, DateTime.UtcNow);
-
-        // Yay
-        _logger.LogInformation("Command passed all validations. name='{CommandName}'", commandName);
+        _ = userService.SetCommandLastUseAsync(meta.Id, user.UnifiedUserId, DateTime.UtcNow);
+        
+        // S3: Yay
+        logger.LogInformation("Command passed all validations. name='{CommandName}'", commandName);
         return CommandResult.Successfully("Yay");
     }
 }

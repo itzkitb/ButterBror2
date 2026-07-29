@@ -58,6 +58,19 @@ public class Localization
                 { "command.module_reload.not_found_local", "Модуль не был найден в файлах" },
                 { "command.module_reload.exception", "Произошла ошибка. Подробности смотрите в консоли" },
                 { "command.module_reload.success", "Модуль успешно перезагружен" },
+                // Block
+                { "command.block.global.usage", "Использование: block global <command_id>" },
+                { "command.block.global.success", "Команда '{0}' заблокирована глобально" },
+                { "command.unblock.global.success", "Команда '{0}' разблокирована глобально" },
+                { "command.block.platform.usage", "Использование: block platform <платформа> <command_id>" },
+                { "command.block.platform.success", "Команда '{0}' заблокирована на платформе {1}" },
+                { "command.unblock.platform.success", "Команда '{0}' разблокирована на платформе {1}" },
+                { "command.block.chat.usage", "Использование: block chat <command_id> [channel_id]" },
+                { "command.block.chat.success", "Команда '{0}' заблокирована в чате {1}" },
+                { "command.unblock.chat.success", "Команда '{0}' разблокирована в чате {1}" },
+                { "command.block.user.not_found", "Пользователь не найден" },
+                { "command.block.user.block_self", "Вы не можете заблокировать себя" },
+                { "command.block.block_ban", "Текущая команда не может быть заблокирована" },
                 // User info
                 { "command.user_info.not_found", "Пользователь не найден. Попробуйте использовать его полный никнейм или ID" },
                 { "command.user_info.success", "Имя пользователя: {0}, Идентификатор: {1}" },
@@ -68,6 +81,7 @@ public class Localization
                 { "core.bot.command.compatibility", "Команда '{0}' несовместима с платформой '{1}'" },
                 { "core.bot.command.permission", "Доступ запрещен" },
                 { "core.bot.command.cooldown", "Команда '{0}' находится в режиме ожидания. Пожалуйста, подождите {1} секунд" },
+                { "core.bot.user_blocked", "Вы заблокированы в системе бота и не можете использовать команды" },
                 // Word
                 { "word.second", "с." },
                 { "word.minute", "м." },
@@ -139,6 +153,19 @@ public class Localization
                 // User info
                 { "command.user_info.not_found", "User not found. Try using their full nickname or ID" },
                 { "command.user_info.success", "Username: {0}, Id: {1}" },
+                // Block
+                { "command.block.global.usage", "Usage: block global <command_id>" },
+                { "command.block.global.success", "Command '{0}' (ID) has been blocked globally" },
+                { "command.unblock.global.success", "Command '{0}' (ID) has been unblocked globally" },
+                { "command.block.platform.usage", "Usage: block platform <platform> <command_id>" },
+                { "command.block.platform.success", "Command '{0}' (ID) blocked on platform {1}" },
+                { "command.unblock.platform.success", "Command '{0}' (ID) unblocked on platform {1}" },
+                { "command.block.chat.usage", "Usage: block chat <command_id> [channelId]" },
+                { "command.block.chat.success", "Command '{0}' (ID) blocked in chat {1}" },
+                { "command.unblock.chat.success", "Command '{0}' (ID) unblocked in chat {1}" },
+                { "command.block.user.not_found", "User not found" },
+                { "command.block.user.block_self", "You cannot block yourself" },
+                { "command.block.block_ban", "The current command cannot be blocked" },
                 // Core
                 { "core.error.report", "An error occurred! (Id: {0})" },
                 { "core.bot.connected", "Bot connected successfully :P" },
@@ -147,6 +174,7 @@ public class Localization
                 { "core.bot.command.compatibility", "Command '{0}' is not compatible with platform '{1}'" },
                 { "core.bot.command.permission", "Permission denied" },
                 { "core.bot.command.cooldown", "Command '{0}' is on cooldown. Please, wait {1} seconds" },
+                { "core.bot.user_blocked", "You are blocked from using this bot" },
                 // Word
                 { "word.second", "s." },
                 { "word.minute", "m." },

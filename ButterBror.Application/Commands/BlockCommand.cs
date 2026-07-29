@@ -1,0 +1,164 @@
+﻿using ButterBror.Application.Commands.Meta;
+using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules.Commands;
+using ButterBror.Core.Modules.Interfaces;
+using ButterBror.Data;
+
+namespace ButterBror.Application.Commands;
+
+public class BlockCommand : ICommand
+{
+    public async Task<CommandResult> ExecuteAsync(
+        ICommandExecutionContext context,
+        ICommandServiceProvider serviceProvider)
+    {
+        try
+        {
+            var restrictionService = serviceProvider.GetService<IRestrictionService>();
+            var localization = serviceProvider.GetService<ILocalizationService>();
+            var userRepository = serviceProvider.GetService<IUserRepository>();
+            var blockCommandId = new BlockCommandMeta().Id;
+
+            if (context.Arguments.Count < 2)
+            {
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("command.block.usage", context.Locale));
+            }
+
+            var action = context.Arguments[0].ToLowerInvariant(); // block / unblock
+            var targetType = context.Arguments[1].ToLowerInvariant(); // user / global / platform / chat
+
+            bool isBlock = action == "block";
+
+            return targetType switch
+            {
+                "user" => await HandleUserBlockAsync(context, restrictionService, localization, userRepository, isBlock),
+                "global" => await HandleGlobalBlockAsync(context, restrictionService, localization, isBlock, blockCommandId),
+                "platform" => await HandlePlatformBlockAsync(context, restrictionService, localization, isBlock, blockCommandId),
+                "chat" => await HandleChatBlockAsync(context, restrictionService, localization, isBlock, blockCommandId),
+                _ => CommandResult.Failure(await localization.GetStringAsync("command.block.unknown_target", context.Locale))
+            };
+        }
+        catch (Exception ex)
+        {
+            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
+            return await errorTracking.LogErrorAsync(
+                ex,
+                "Failed to execute BlockCommand",
+                context.User.Id,
+                context.Channel.Platform,
+                context);
+        }
+    }
+
+    private async Task<CommandResult> HandleUserBlockAsync(
+        ICommandExecutionContext context,
+        IRestrictionService restriction,
+        ILocalizationService localization,
+        IUserRepository userRepository,
+        bool isBlock)
+    {
+        if (context.Arguments.Count < 3)
+            return CommandResult.Failure(await localization.GetStringAsync("command.block.user.usage", context.Locale));
+
+        var userName = context.Arguments[2];
+        var userEntity = await userRepository.FindUserAsync(context.Channel.Platform, userName);
+        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
+        
+        if (userEntity == null || user == null)
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.block.user.not_found", context.Locale));
+        
+        if (userEntity.UnifiedUserId.Equals(user.UnifiedUserId))
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.block.user.block_self", context.Locale));
+        
+        var isGlobal = (context.Arguments.Count > 3 && context.Arguments[3].Equals("global", 
+            StringComparison.InvariantCultureIgnoreCase)) || context.Arguments.Count <= 3;
+        var targetPlatform = context.Arguments.Count > 3 ? context.Arguments[3] : "global";
+        var reason = context.Arguments.Count > 4 ? string.Join(" ", context.Arguments.Skip(4)) : null;
+
+        if (isBlock)
+            await restriction.BlockUserAsync(targetPlatform, userEntity.UnifiedUserId, reason, isGlobal, context.CancellationToken);
+        else
+            await restriction.UnblockUserAsync(targetPlatform, userEntity.UnifiedUserId, isGlobal, context.CancellationToken);
+
+        var locKey = isBlock ? "command.block.user.success" : "command.unblock.user.success";
+        return CommandResult.Successfully(await localization.GetStringAsync(locKey, context.Locale, userName, targetPlatform));
+    }
+
+    private async Task<CommandResult> HandleGlobalBlockAsync(
+        ICommandExecutionContext context,
+        IRestrictionService restriction,
+        ILocalizationService localization,
+        bool isBlock,
+        string blockCommandId)
+    {
+        if (context.Arguments.Count < 3)
+            return CommandResult.Failure(await localization.GetStringAsync("command.block.global.usage", context.Locale));
+
+        var commandId = context.Arguments[2];
+
+        if (commandId.Equals(blockCommandId, StringComparison.InvariantCultureIgnoreCase))
+            return CommandResult.Failure(await localization.GetStringAsync("command.block.block_ban", context.Locale));
+        
+        if (isBlock)
+            await restriction.BlockCommandGlobalAsync(commandId, context.CancellationToken);
+        else
+            await restriction.UnblockCommandGlobalAsync(commandId, context.CancellationToken);
+
+        var locKey = isBlock ? "command.block.global.success" : "command.unblock.global.success";
+        return CommandResult.Successfully(await localization.GetStringAsync(locKey, context.Locale, commandId));
+    }
+
+    private async Task<CommandResult> HandlePlatformBlockAsync(
+        ICommandExecutionContext context,
+        IRestrictionService restriction,
+        ILocalizationService localization,
+        bool isBlock,
+        string blockCommandId)
+    {
+        if (context.Arguments.Count < 4)
+            return CommandResult.Failure(await localization.GetStringAsync("command.block.platform.usage", context.Locale));
+
+        var platform = context.Arguments[2];
+        var commandId = context.Arguments[3];
+
+        if (commandId.Equals(blockCommandId, StringComparison.InvariantCultureIgnoreCase))
+            return CommandResult.Failure(await localization.GetStringAsync("command.block.block_ban", context.Locale));
+        
+        if (isBlock)
+            await restriction.BlockCommandPlatformAsync(platform, commandId, context.CancellationToken);
+        else
+            await restriction.UnblockCommandPlatformAsync(platform, commandId, context.CancellationToken);
+
+        var locKey = isBlock ? "command.block.platform.success" : "command.unblock.platform.success";
+        return CommandResult.Successfully(await localization.GetStringAsync(locKey, context.Locale, commandId, platform));
+    }
+
+    private async Task<CommandResult> HandleChatBlockAsync(
+        ICommandExecutionContext context,
+        IRestrictionService restriction,
+        ILocalizationService localization,
+        bool isBlock,
+        string blockCommandId)
+    {
+        if (context.Arguments.Count < 3)
+            return CommandResult.Failure(await localization.GetStringAsync("command.block.chat.usage", context.Locale));
+
+        var commandId = context.Arguments[2];
+        var platform = context.Channel.Platform;
+        var channelId = context.Arguments.Count > 3 ? context.Arguments[3] : context.Channel.Id;
+
+        if (commandId.Equals(blockCommandId, StringComparison.InvariantCultureIgnoreCase))
+            return CommandResult.Failure(await localization.GetStringAsync("command.block.block_ban", context.Locale));
+        
+        if (isBlock)
+            await restriction.BlockCommandChatAsync(platform, channelId, commandId, context.CancellationToken);
+        else
+            await restriction.UnblockCommandChatAsync(platform, channelId, commandId, context.CancellationToken);
+
+        var locKey = isBlock ? "command.block.chat.success" : "command.unblock.chat.success";
+        return CommandResult.Successfully(await localization.GetStringAsync(locKey, context.Locale, commandId, channelId));
+    }
+}

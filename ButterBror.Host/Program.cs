@@ -1,6 +1,16 @@
+using System.Net;
+using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
+using ButterBror.Application;
 using ButterBror.Application.Commands;
 using ButterBror.Application.Commands.Meta;
+using ButterBror.Core;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Dashboard;
 using ButterBror.Dashboard.Services;
 using ButterBror.Data;
@@ -12,27 +22,21 @@ using ButterBror.Infrastructure.Services;
 using ButterBror.Infrastructure.Storage;
 using ButterBror.Localization.Services;
 using ButterBror.Modules.Loader;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using StackExchange.Redis;
-using System.Text;
-using ButterBror.Application;
-using ButterBror.Core;
-using ButterBror.Core.Modules.Interfaces;
 
+// ><> Console setup
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding  = Encoding.UTF8;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Logging
+// ><> Configs
 builder.Logging.ClearProviders();
+
 builder.Logging.AddConsole(options =>
 {
     options.FormatterName = CustomConsoleFormatter.FormatterName;
 });
+
 builder.Services.Configure<CustomConsoleFormatterOptions>(options =>
 {
     if (Environment.GetEnvironmentVariable("CI") == "true" ||
@@ -40,123 +44,112 @@ builder.Services.Configure<CustomConsoleFormatterOptions>(options =>
     {
         options.UseColors = false;
     }
-
     // options.UseTrueColor = true;
 });
+
 builder.Logging.AddConsoleFormatter<CustomConsoleFormatter, CustomConsoleFormatterOptions>();
 
-// Filter informational logs
+// Log Level Filters
 builder.Logging.AddFilter("Polly", LogLevel.Warning);
 builder.Logging.AddFilter("Polly.Core", LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 
-// Version checker
-builder.Services.AddSingleton<IBotCoreInfo, BotCoreInfo>();
+// ><> Services
 
-// Dashboard
+// ^ Core & Infrastructure
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IBotCoreInfo, BotCoreInfo>();
+builder.Services.AddSingleton<IBotCore, BotCoreService>();
+builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
+builder.Services.AddSingleton<AppDataStorageProvider>();
+builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
+builder.Services.AddSingleton<IDynamicServiceProvider>(sp => new DynamicServiceProvider(sp));
+
+// ^ Database
+var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,allowAdmin=true,abortConnect=false";
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConfig));
+
+// ^ Resilience & Repos
+builder.Services.RegisterResilienceStrategies();
+builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
+builder.Services.AddScoped<ICommandUsageRepository, RedisCommandUsageRepository>();
+builder.Services.AddSingleton<ICustomDataRepository, RedisCustomDataRepository>();
+builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
+builder.Services.AddScoped<IErrorReportRepository, ErrorReportRepository>();
+
+// ^ Users
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IPermissionManager, PermissionManager>();
+
+// ^ Commands & Modules
+builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
+builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
+builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
+builder.Services.AddSingleton<IChatModuleRegistry, PlatformModuleRegistry>();
+builder.Services.AddSingleton<ICommandRegistry, CommandRegistry>();
+
+builder.Services.AddSingleton<IChatModuleLoader, ChatModuleLoader>();
+builder.Services.AddSingleton<ICommandModuleLoader, CommandModuleLoader>();
+
+// ^ Domain & Feature
+builder.Services.AddScoped<IFormatterService, FormatterService>();
+builder.Services.AddSingleton<IBotStatsService, BotStatsService>();
+builder.Services.AddSingleton<IBanphraseService, BanphraseService>();
+builder.Services.AddScoped<IErrorTrackingService, ErrorTrackingService>();
+builder.Services.AddSingleton<IRestrictionService, RestrictionService>();
+
+// ^ Localization
+builder.Services.AddSingleton<TranslationFileLoader>();
+builder.Services.AddSingleton<LocaleRegistryService>();
+builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
+
+// ^ External Integrations
+builder.Services.AddHttpClient<IPasteBinService, PasteBinService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+    });
+
+// ^ Dashboard
 builder.Services.Configure<DashboardOptions>(builder.Configuration.GetSection("Dashboard"));
 builder.Services.AddSingleton<IDashboardBridge, DashboardBridge>();
 builder.Services.AddSingleton<MetricsCollector>();
 builder.Services.AddSingleton<AdminCommandExecutor>();
 builder.Services.AddSingleton<RedisExplorerService>();
 builder.Services.AddSingleton<FileManagerService>();
-builder.Services.AddHostedService<DashboardServer>();
-
-// Drive statistics service
 builder.Services.AddSingleton<IDeviceStatsService, DeviceStatsService>();
+
+// ^ Hosted
+builder.Services.AddHostedService<DashboardServer>();
 builder.Services.AddHostedService<DeviceStatsHostedService>();
-
-// Services
-builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
-builder.Services.AddSingleton<AppDataStorageProvider>();
-builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
-builder.Services.AddScoped<IFormatterService, FormatterService>();
-
-// Bot Stats Service
-builder.Services.AddSingleton<IBotStatsService, BotStatsService>();
-
-// Use the new unified command dispatcher
-builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
-builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
-builder.Services.AddSingleton<IChatModuleRegistry, PlatformModuleRegistry>();
-builder.Services.AddSingleton<ICommandRegistry, CommandRegistry>();
-
-// Module Loaders
-builder.Services.AddSingleton<IChatModuleLoader, ChatModuleLoader>();
-builder.Services.AddSingleton<ICommandModuleLoader, CommandModuleLoader>();
-
-// Redis
-var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,allowAdmin=true,abortConnect=false";
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConfig));
-
-// Repositories
-builder.Services.RegisterResilienceStrategies();
-builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
-builder.Services.AddScoped<ICommandUsageRepository, RedisCommandUsageRepository>();
-builder.Services.AddSingleton<ICustomDataRepository, RedisCustomDataRepository>();
-
-// Permission Manager
-builder.Services.AddScoped<IPermissionManager, PermissionManager>();
-
-// Core
-builder.Services.AddSingleton<IBotCore, BotCoreService>();
-
-// Background service
 builder.Services.AddHostedService<BotHostedService>();
 
-// HasteBin Service
-builder.Services.AddHttpClient<IPasteBinService, PasteBinService>()
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-    {
-        AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
-    });
-
-// Ban-phrase Service
-builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
-builder.Services.AddSingleton<IBanphraseService, BanphraseService>();
-
-// Error Tracking Service
-builder.Services.AddScoped<IErrorReportRepository, ErrorReportRepository>();
-builder.Services.AddScoped<IErrorTrackingService, ErrorTrackingService>();
-
-// Localization Service
-builder.Services.AddSingleton<TranslationFileLoader>();
-builder.Services.AddSingleton<LocaleRegistryService>();
-builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
-
-builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
-
-builder.Services.AddMemoryCache();
-
-builder.Services.AddSingleton<IDynamicServiceProvider>(sp => 
-    new DynamicServiceProvider(sp));
-
+// ><> Build & Post-build
 var host = builder.Build();
 
+// S0: Logger & Core Info
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation("· - —==≡ ButterBror is starting ≡==- — ·");
 
 var coreInfoService = host.Services.GetRequiredService<IBotCoreInfo>();
 coreInfoService.Initialize();
 
-// Register Dashboard logger provider after build
+// S1: Dashboard Logger Provider
 var bridge = host.Services.GetRequiredService<IDashboardBridge>();
 var loggerFactory = host.Services.GetRequiredService<ILoggerFactory>();
 loggerFactory.AddProvider(new DashboardLoggerProvider(bridge));
 
-// Initialize BotStatsService
+// S2: Stats Init & Graceful Shutdown Setup
 var statsService = host.Services.GetRequiredService<IBotStatsService>();
 await statsService.InitializeAsync(CancellationToken.None);
 
-// Register graceful shutdown for BotStatsService
 var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 lifetime.ApplicationStopping.Register(async void () =>
 {
     await statsService.FlushAsync(CancellationToken.None);
 });
 
-// Initialize dashboard admin user in Redis
+// S3: Admin User
 using (var scope = host.Services.CreateScope())
 {
     try
@@ -164,14 +157,12 @@ using (var scope = host.Services.CreateScope())
         var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
         var permManager = scope.ServiceProvider.GetRequiredService<IPermissionManager>();
 
-        // Create or retrieve the dashboard-admin user
         var adminUser = await userService.GetOrCreateUserAsync(
             platformId: "dashboard-admin",
             platform: "dashboard",
             displayName: "Dashboard Admin"
         );
 
-        // Grant super-admin permissions if not already granted
         await permManager.AddPermissionAsync(adminUser.UnifiedUserId, "su:*");
 
         logger.LogInformation(
@@ -184,7 +175,7 @@ using (var scope = host.Services.CreateScope())
     }
 }
 
-// Register all commands after services are built
+// S4: Global Commands & Localization Setup
 using (var scope = host.Services.CreateScope())
 {
     var commandRegistry = scope.ServiceProvider.GetRequiredService<ICommandRegistry>();
@@ -209,12 +200,17 @@ using (var scope = host.Services.CreateScope())
         () => new ReloadModuleCommand(),
         new ReloadModuleMeta()
     );
+    commandRegistry.RegisterGlobalCommand(
+        "block",
+        () => new BlockCommand(),
+        new BlockCommandMeta()
+    );
 
-    // Load global banphrase categories on startup
+    // Load global banphrase categories
     var banphraseService = scope.ServiceProvider.GetRequiredService<IBanphraseService>();
     await banphraseService.ReloadGlobalCategoriesAsync();
 
-    // Initializing lang
+    // Init Localization
     var localizationService = scope.ServiceProvider.GetRequiredService<ILocalizationService>();
     if (localizationService is LocalizationService impl)
     {
@@ -223,4 +219,6 @@ using (var scope = host.Services.CreateScope())
     localizationService.RegisterModuleTranslations("butterbror:system", Localization.DefaultTranslations);
 }
 
+// ><> Hello, world!
 await host.RunAsync();
+// ><> Bye.

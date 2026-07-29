@@ -6,11 +6,11 @@ namespace ButterBror.Application.Commands.Meta;
 public class UserInfoMeta : ICommandMetadata
 {
     public string Name => "userinfo";
-    public List<string> Aliases => new List<string> { "ui", "whois" };
+    public List<string> Aliases => ["ui", "whois"];
     public int CooldownSeconds => 10;
-    public List<string> RequiredPermissions => new List<string>();
+    public List<string> RequiredPermissions => [];
     public string ArgumentsHelpText => "<username>";
-    public string Id => "sillyapps:userinfo";
-    public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-    public List<string> PlatformCompatibilityList => new List<string> { "sillyapps:twitch", "sillyapps:discord", "sillyapps:telegram" };
+    public string Id => "bb:builtin:userinfo";
+    public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Blacklist;
+    public List<string> PlatformCompatibilityList => [];
 }
