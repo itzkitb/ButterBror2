@@ -21,7 +21,7 @@ public class TwitchModule : IChatModule
 {
     // ><> Metadata
     public string ModuleId => "sillyapps:twitch";
-    public Version Version { get; } = new(1, 3, 1);
+    public Version Version { get; } = new(1, 3, 2);
     public List<ChatModuleFlags> Flags { get; } = [ChatModuleFlags.CanSendMessages];
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
@@ -204,14 +204,15 @@ public class TwitchModule : IChatModule
     }
 
     // ><> Message & Command Processing
-    public async Task SendMessageAsync(string chatId, string message, string? replyId = null, dynamic? data = null)
+    public async Task SendMessageAsync(string chatId, Message message, string? replyId = null, dynamic? data = null)
     {
         EnsureInitialized();
+        var msg = _messageRender.RenderTwitchMessage(message);
         
         if (replyId == null)
-            await _twitchClient.SendMessageAsync(chatId, message, false);
+            await _twitchClient.SendMessageAsync(chatId, msg, false);
         else
-            await _twitchClient.SendReplyAsync(chatId, replyId, message, false);
+            await _twitchClient.SendReplyAsync(chatId, replyId, msg, false);
     }
 
     private async Task ProcessCommandIfAnyAsync(ChatMessage chatMessage)
