@@ -1,7 +1,8 @@
-using System.Text;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Web;
 using ButterBror.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using Polly;
@@ -9,30 +10,19 @@ using Polly.Registry;
 
 namespace ButterBror.Infrastructure.Services;
 
-/// <summary>
-/// Implementation of Sourceb.in service
-/// </summary>
-public class PasteBinService : IPasteBinService
+public class PasteBinService(
+    HttpClient httpClient,
+    ILogger<PasteBinService> logger,
+    ResiliencePipelineProvider<string> pipelineProvider)
+    : IPasteBinService
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<PasteBinService> _logger;
-    private readonly ResiliencePipeline _apiPipeline;
+    private readonly ResiliencePipeline _apiPipeline = pipelineProvider.GetPipeline("api");
     
-    private const string BaseUrl = "https://sourceb.in";
-    private const string ApiUrl = "https://sourceb.in/api/bins";
-    private const string CdnUrl = "https://cdn.sourceb.in/bins";
+    private const string BaseUrl = "tupid.lol";
+    private const string ApiUrl = "https://api.tupid.lol/pb/";
+    private const string UploadUrl = $"{ApiUrl}create";
     
-    private static readonly Regex KeyPattern = new(@"^[a-zA-Z0-9]{10}$", RegexOptions.Compiled);
-
-    public PasteBinService(
-        HttpClient httpClient,
-        ILogger<PasteBinService> logger,
-        ResiliencePipelineProvider<string> pipelineProvider)
-    {
-        _httpClient = httpClient;
-        _logger = logger;
-        _apiPipeline = pipelineProvider.GetPipeline("api");
-    }
+    private static readonly Regex KeyPattern = new(@"^[a-zA-Z0-9]{5}$", RegexOptions.Compiled);
 
     public async Task<string> UploadTextAsync(string content, CancellationToken cancellationToken = default)
     {
@@ -41,28 +31,31 @@ public class PasteBinService : IPasteBinService
             throw new ArgumentException("Content cannot be empty", nameof(content));
         }
 
-        _logger.LogDebug("Uploading text to Sourceb.in (length: {Length})", content.Length);
+        logger.LogDebug("Uploading text to pastebin (length: {Length})", content.Length);
 
         return await _apiPipeline.ExecuteAsync(async (ct) =>
         {
-            var payload = new SourceBinUploadPayload
+            var payload = new CreatePayload { Text = content };
+            
+            using var response = await httpClient.PostAsJsonAsync(UploadUrl, payload, ct);
+            await using var responseStream = await response.Content.ReadAsStreamAsync(ct);
+            
+            if (!response.IsSuccessStatusCode)
             {
-                Files = new List<SourceBinFile> { new() { Content = content } }
-            };
+                var errData = await JsonSerializer.DeserializeAsync<ErrorResponse>(responseStream, cancellationToken: ct);
+                logger.LogError("Failed to upload to pastebin. HTTP {Status}: {message}", response.StatusCode, errData?.Message);
+                return "[API_ERROR]";
+            }
 
-            var jsonPayload = JsonSerializer.Serialize(payload);
-            var httpContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync(ApiUrl, httpContent, ct);
-            response.EnsureSuccessStatusCode();
-
-            var responseString = await response.Content.ReadAsStringAsync(ct);
-            var key = ExtractKeyFromResponse(responseString);
-
-            var fullUrl = $"{BaseUrl}/{key}";
-            _logger.LogInformation("Text uploaded to Sourceb.in: {Url}", fullUrl);
-
-            return fullUrl;
+            var data = await JsonSerializer.DeserializeAsync<CreateResponse>(responseStream, cancellationToken: ct);
+            if (data is not { Status: "ok" })
+            {
+                logger.LogError("Failed to upload to pastebin: Invalid response or status is not 'ok'");
+                return "[API_ERROR]";
+            }
+            
+            logger.LogInformation("Text uploaded to pastebin: {Url}", data.Url);
+            return data.Url;
         }, cancellationToken);
     }
 
@@ -74,34 +67,30 @@ public class PasteBinService : IPasteBinService
         }
 
         var key = ExtractKey(urlOrKey);
-        _logger.LogDebug("Retrieving text from Sourceb.in with key: {Key}", key);
+        logger.LogDebug("Retrieving text from pastebin with key: {Key}", key);
 
         return await _apiPipeline.ExecuteAsync(async (ct) =>
         {
-            var response = await _httpClient.GetAsync($"{CdnUrl}/{key}/0", ct);
-            response.EnsureSuccessStatusCode();
+            using var response = await httpClient.GetAsync($"{ApiUrl}{key}", ct);
+            await using var responseStream = await response.Content.ReadAsStreamAsync(ct);
 
-            var content = await response.Content.ReadAsStringAsync(ct);
-            _logger.LogDebug("Successfully retrieved text from Sourceb.in (length: {Length})", content.Length);
-
-            return content;
-        }, cancellationToken);
-    }
-
-    private static string ExtractKeyFromResponse(string jsonResponse)
-    {
-        using var doc = JsonDocument.Parse(jsonResponse);
-        
-        if (doc.RootElement.TryGetProperty("key", out var keyElement))
-        {
-            var key = keyElement.GetString();
-            if (!string.IsNullOrWhiteSpace(key))
+            if (!response.IsSuccessStatusCode)
             {
-                return key;
+                var errData = await JsonSerializer.DeserializeAsync<ErrorResponse>(responseStream, cancellationToken: ct);
+                logger.LogError("Failed to retrieve text from pastebin. HTTP {Status}: {message}", response.StatusCode, errData?.Message);
+                return "[API_ERROR]";
             }
-        }
-
-        throw new InvalidOperationException("Invalid response from Sourceb.in: 'key' property not found or empty");
+            
+            var data = await JsonSerializer.DeserializeAsync<PasteResponse>(responseStream, cancellationToken: ct);
+            if (data is not { Status: "ok" })
+            {
+                logger.LogError("Failed to retrieve text from pastebin: Invalid response or status is not 'ok'");
+                return "[API_ERROR]";
+            }
+            
+            logger.LogDebug("Successfully retrieved text from pastebin (length: {Length})", data.Content?.Length ?? 0);
+            return data.Content ?? string.Empty;
+        }, cancellationToken);
     }
 
     private static string ExtractKey(string urlOrKey)
@@ -115,45 +104,52 @@ public class PasteBinService : IPasteBinService
 
         try
         {
-            var uri = new Uri(urlOrKey);
-            
-            if (uri.Host.Equals("cdn.sourceb.in", StringComparison.OrdinalIgnoreCase))
+            if (Uri.TryCreate(urlOrKey, UriKind.Absolute, out var uri) && 
+                uri.Host.Equals(BaseUrl, StringComparison.OrdinalIgnoreCase))
             {
-                var segments = uri.Segments;
-                if (segments.Length >= 4 && segments[1].Equals("bins/", StringComparison.OrdinalIgnoreCase))
+                var queryParameters = HttpUtility.ParseQueryString(uri.Query);
+                var key = queryParameters["i"];
+                
+                if (!string.IsNullOrEmpty(key) && KeyPattern.IsMatch(key))
                 {
-                    return segments[2].TrimEnd('/');
-                }
-            }
-            
-            else if (uri.Host.Equals("sourceb.in", StringComparison.OrdinalIgnoreCase) || 
-                     uri.Host.Equals("www.sourceb.in", StringComparison.OrdinalIgnoreCase))
-            {
-                var segments = uri.Segments;
-                if (segments.Length >= 2)
-                {
-                    return segments[1].TrimEnd('/');
+                    return key;
                 }
             }
         }
-        catch (UriFormatException)
+        catch (Exception)
         {
+            // ignored
         }
 
         throw new ArgumentException(
-            $"Invalid Sourceb.in URL or key format: {urlOrKey}. Expected format: https://sourceb.in/{{key}} or just {{key}}",
+            $"Invalid pastebin URL or key format: {urlOrKey}. Expected format: https://{BaseUrl}/p?i={{key}} or just {{key}}",
             nameof(urlOrKey));
     }
     
-    private class SourceBinUploadPayload
+    private record CreatePayload
     {
-        [JsonPropertyName("files")]
-        public List<SourceBinFile> Files { get; set; } = new();
+        [JsonPropertyName("text")] public required string Text { get; init; }
+    }
+    
+    private record Response
+    {
+        [JsonPropertyName("status")] public required string Status { get; init; }
+    }
+    
+    private record CreateResponse : Response
+    {
+        [JsonPropertyName("id")] public required string Id { get; init; }
+        [JsonPropertyName("url")] public required string Url { get; init; }
     }
 
-    private class SourceBinFile
+    private record PasteResponse : Response
     {
-        [JsonPropertyName("content")]
-        public string Content { get; set; } = string.Empty;
+        [JsonPropertyName("id")] public required string Id { get; init; }
+        [JsonPropertyName("content")] public required string Content { get; init; }
+    }
+
+    private record ErrorResponse : Response
+    {
+        [JsonPropertyName("message")] public required string Message { get; init; }
     }
 }
