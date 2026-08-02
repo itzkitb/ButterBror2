@@ -70,10 +70,8 @@ public class BanphrasesCommand : ICommand
         string regexPattern;
         
         // S0: Check if it's a Pastebin URL
-        if (patternOrUrl.StartsWith("https://sourceb.in", StringComparison.OrdinalIgnoreCase) ||
-            patternOrUrl.StartsWith("sourceb.in", StringComparison.OrdinalIgnoreCase) || 
-            patternOrUrl.StartsWith("https://cdn.sourceb.in", StringComparison.OrdinalIgnoreCase) ||
-            patternOrUrl.StartsWith("cdn.sourceb.in", StringComparison.OrdinalIgnoreCase))
+        if (patternOrUrl.StartsWith("https://tupid.lol/p", StringComparison.OrdinalIgnoreCase) ||
+            patternOrUrl.StartsWith("tupid.lol/p", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
