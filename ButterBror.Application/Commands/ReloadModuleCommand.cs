@@ -51,7 +51,7 @@ public class ReloadModuleCommand : ICommand
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute ReloadModuleCommand",
-                context.User.Id,
+                context.User.UnifiedId,
                 context.Channel.Platform,
                 context);
         }

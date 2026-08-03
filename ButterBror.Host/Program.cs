@@ -163,11 +163,11 @@ using (var scope = host.Services.CreateScope())
             displayName: "Dashboard Admin"
         );
 
-        await permManager.AddPermissionAsync(adminUser.UnifiedUserId, "su:*");
+        await permManager.AddPermissionAsync(adminUser.UnifiedId, "su:*");
 
         logger.LogInformation(
             "Initialized dashboard admin. unified_uid='{UserId}'",
-            adminUser.UnifiedUserId);
+            adminUser.UnifiedId);
     }
     catch (Exception ex)
     {

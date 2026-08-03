@@ -4,7 +4,6 @@ using ButterBror.Core.Interfaces;
 using ButterBror.Core.Messaging;
 using ButterBror.Core.Models;
 using ButterBror.Core.Modules.Commands;
-using ButterBror.Core.Modules.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -17,9 +16,9 @@ public class CommandDispatcher(
     IErrorTrackingService errorTrackingService)
     : ICommandDispatcher
 {
-    private readonly IDashboardBridge? _dashboardBridge = provider.GetService<IDashboardBridge>();
+    private readonly IDashboardBridge _dashboardBridge = provider.GetRequiredService<IDashboardBridge>();
 
-    public async Task<CommandResult> DispatchAsync(ICommandContext context)
+    public async Task<CommandResult> DispatchAsync(ExtendedCommandContext context)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -36,16 +35,21 @@ public class CommandDispatcher(
             var command = factory();
 
             // S2: Create an execution context and service provider
-            var locale = (context as ExtendedCommandContext)?.Locale ?? "EN_US";
-            var commandContext = new CommandExecutionContext(context.Channel, context.Arguments.ToList(), context.User,
-                locale, context.CommandName);
+            var locale = context.Locale;
+            var commandContext = new CommandExecutionContext(
+                context.Channel,
+                context.Arguments.ToList(),
+                context.User,
+                context.UserProfile,
+                locale,
+                context.CommandName);
             var serviceProvider = new CommandServiceProvider(provider);
 
             var result = await command.ExecuteAsync(commandContext, serviceProvider);
             result.ExecutionTime = stopwatch.Elapsed;
 
             // Notify dashboard about executed command
-            _dashboardBridge?.IncrementCommandCount();
+            _dashboardBridge.IncrementCommandCount();
 
             return result;
         }
@@ -75,8 +79,6 @@ public class CommandDispatcher(
     
     public static string GenerateExceptionHash(Exception ex)
     {
-        if (ex == null) return "UNK:00000000";
-
         // S0. Receive class
         var targetMethod = ex.TargetSite;
         string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";

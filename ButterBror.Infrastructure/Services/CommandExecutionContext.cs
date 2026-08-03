@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Domain;
+using ButterBror.Domain.Entities;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.Infrastructure.Services;
@@ -9,7 +10,8 @@ namespace ButterBror.Infrastructure.Services;
 public class CommandExecutionContext(
     IPlatformChannel channel,
     List<string> arguments,
-    IPlatformUser user,
+    IPlatformUser platformUser,
+    UserProfile user,
     string locale,
     string commandName,
     CancellationToken cancellationToken = default)
@@ -17,7 +19,8 @@ public class CommandExecutionContext(
 {
     public IPlatformChannel Channel { get; } = channel;
     public List<string> Arguments { get; } = arguments;
-    public IPlatformUser User { get; } = user;
+    public IPlatformUser PlatformUser { get; } = platformUser;
+    public UserProfile User { get; } = user;
     public string Locale { get; } = locale;
     public string CommandName { get; } = commandName;
 
@@ -50,7 +53,7 @@ public class CommandServiceProvider(IServiceProvider serviceProvider) : ICommand
             : serviceProvider.GetServices<T>();
 
         var namedService = services.FirstOrDefault(s => 
-            s?.GetType().Name.Contains(key, StringComparison.OrdinalIgnoreCase) == true);
+            s.GetType().Name.Contains(key, StringComparison.OrdinalIgnoreCase));
 
         return namedService ?? GetService<T>();
     }

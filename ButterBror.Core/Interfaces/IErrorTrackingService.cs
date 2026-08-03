@@ -23,12 +23,13 @@ public interface IErrorTrackingService
     /// <param name="exception">Exception to log</param>
     /// <param name="message">Custom error message</param>
     /// <param name="userId">User ID for localization</param>
+    /// <param name="platform">Platform id</param>
     /// <param name="extraData">Additional context data</param>
     /// <returns>CommandResult with localized error message</returns>
     Task<CommandResult> LogErrorAsync(
         Exception exception,
         string message,
-        string userId,
+        Guid userId,
         string platform,
         params object[] extraData);
 }

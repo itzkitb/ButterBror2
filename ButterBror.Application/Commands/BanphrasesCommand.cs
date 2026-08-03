@@ -25,15 +25,14 @@ public class BanphrasesCommand : ICommand
             }
             
             var action = context.Arguments[0].ToLowerInvariant();
-            var section = context.Arguments[1].ToLowerInvariant();
             
             return action switch
             {
                 "set" => await HandleSetAsync(context, banphraseService, hasteBinService, logger, localization),
                 "get" => await HandleGetAsync(context, banphraseService, hasteBinService, logger, localization),
                 "list" => await HandleListAsync(context, banphraseService, hasteBinService, logger, localization),
-                "test" => await HandleTestAsync(context, banphraseService, logger, localization),
-                "delete" => await HandleDeleteAsync(context, banphraseService, logger, localization),
+                "test" => await HandleTestAsync(context, banphraseService, localization),
+                "delete" => await HandleDeleteAsync(context, banphraseService, localization),
                 _ => CommandResult.Failure(
                         await localization.GetStringAsync("command.banphrases.unknown", context.Locale))
             };
@@ -44,7 +43,7 @@ public class BanphrasesCommand : ICommand
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute BanphrasesCommand",
-                context.User.Id,
+                context.User.UnifiedId,
                 context.Channel.Platform,
                 context);
         }
@@ -276,7 +275,6 @@ public class BanphrasesCommand : ICommand
     private async Task<CommandResult> HandleTestAsync(
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
-        ILogger logger,
         ILocalizationService localization)
     {
         if (context.Arguments.Count < 3)
@@ -291,17 +289,15 @@ public class BanphrasesCommand : ICommand
         var channelId = context.Channel.Id;
 
         // For testing, we need to determine which section to check
-        string testSection, testPlatform, testChannelId;
+        string testPlatform, testChannelId;
 
         if (section == "global")
         {
-            testSection = "global";
             testPlatform = platform;
             testChannelId = channelId;
         }
         else
         {
-            testSection = section;
             testPlatform = platform;
             testChannelId = channelId;
         }
@@ -343,7 +339,6 @@ public class BanphrasesCommand : ICommand
     private async Task<CommandResult> HandleDeleteAsync(
         ICommandExecutionContext context,
         IBanphraseService banphraseService,
-        ILogger logger,
         ILocalizationService localization)
     {
         if (context.Arguments.Count < 3)

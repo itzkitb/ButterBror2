@@ -37,9 +37,9 @@ public class LocaleCommand : ICommand
             {
                 "set" => await HandleSetAsync(context, serviceProvider, localization, userRepository, logger),
                 "list" => await HandleListAsync(serviceProvider, localization),
-                "delete" => await HandleDeleteAsync(context, serviceProvider, localization, userRepository, logger),
-                "view" => await HandleViewAsync(context, serviceProvider, localization, userRepository, logger),
-                "reload" => await HandleReloadAsync(context, serviceProvider, localization, userRepository, logger),
+                "delete" => await HandleDeleteAsync(context, serviceProvider, localization, logger),
+                "view" => await HandleViewAsync(context, serviceProvider, localization, logger),
+                "reload" => await HandleReloadAsync(context, serviceProvider, localization, logger),
                 _ => CommandResult.Failure(
                     await localization.GetStringAsync("command.locale.unknown", _defaultLocale))
             };
@@ -50,7 +50,7 @@ public class LocaleCommand : ICommand
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute LocaleCommand",
-                context.User.Id,
+                context.User.UnifiedId,
                 context.Channel.Platform,
                 context);
         }
@@ -70,13 +70,9 @@ public class LocaleCommand : ICommand
         }
 
         var targetLocale = context.Arguments[1];
-        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        
-        if (user == null)
-            return CommandResult.Failure(
-                await localization.GetStringAsync("command.locale.set.user_not_found", _defaultLocale));
+        var user = context.User;
 
-        var resolvedLocale = localization.ResolveLocale(targetLocale);
+        var resolvedLocale = localization.ResolveLocale(targetLocale, false);
         if (resolvedLocale == null)
         {
             var message = await localization.GetStringAsync(
@@ -87,7 +83,7 @@ public class LocaleCommand : ICommand
 
         if (context.Arguments.Count >= 3)
         {
-            return await HandleAdminSetAsync(context, serviceProvider, localization, userRepository, logger, resolvedLocale);
+            return await HandleAdminSetAsync(context, serviceProvider, localization, logger, resolvedLocale);
         }
 
         user.PreferredLocale = resolvedLocale;
@@ -95,7 +91,7 @@ public class LocaleCommand : ICommand
 
         var successMessage = await localization.GetStringAsync("command.locale.set.success", resolvedLocale);
 
-        logger.LogDebug("User {UserId} changed locale to {Locale}", user.UnifiedUserId, resolvedLocale);
+        logger.LogDebug("User {UserId} changed locale to {Locale}", user.UnifiedId, resolvedLocale);
         return CommandResult.Successfully(successMessage, user);
     }
 
@@ -103,12 +99,11 @@ public class LocaleCommand : ICommand
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
-        IUserRepository userRepository,
         ILogger logger,
         string resolvedLocale)
     {
-        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null || !await CheckAdminPermissionAsync(user.UnifiedUserId, serviceProvider))
+        var user = context.User;
+        if (!await CheckAdminPermissionAsync(user.UnifiedId, serviceProvider))
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.locale.set.admin.permission", context.Locale));
 
@@ -138,7 +133,7 @@ public class LocaleCommand : ICommand
         await localization.ReloadAsync(context.CancellationToken);
 
         logger.LogInformation("Updated locale {Locale} from HasteBin by admin {AdminId}", 
-            resolvedLocale, user.UnifiedUserId);
+            resolvedLocale, user.UnifiedId);
         
         return CommandResult.Successfully(
             await localization.GetStringAsync("command.locale.set.admin.success", context.Locale,
@@ -173,11 +168,10 @@ public class LocaleCommand : ICommand
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
-        IUserRepository userRepository,
         ILogger logger)
     {
-        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null || !await CheckAdminPermissionAsync(user.UnifiedUserId, serviceProvider))
+        var user = context.User;
+        if (!await CheckAdminPermissionAsync(user.UnifiedId, serviceProvider))
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.locale.delete.permission", context.Locale));
 
@@ -186,7 +180,7 @@ public class LocaleCommand : ICommand
                 await localization.GetStringAsync("command.locale.delete.usage", context.Locale));
 
         var registry = serviceProvider.GetService<LocaleRegistryService>();
-        var resolved = localization.ResolveLocale(context.Arguments[1]);
+        var resolved = localization.ResolveLocale(context.Arguments[1], false);
         
         if (resolved == null)
             return CommandResult.Failure(
@@ -201,7 +195,7 @@ public class LocaleCommand : ICommand
         if (success)
         {
             await localization.ReloadAsync(context.CancellationToken);
-            logger.LogInformation("Deleted locale {Locale} by admin {AdminId}", resolved, user.UnifiedUserId);
+            logger.LogInformation("Deleted locale {Locale} by admin {AdminId}", resolved, user.UnifiedId);
             return CommandResult.Successfully(
                 await localization.GetStringAsync("command.locale.delete.success", context.Locale,
                     resolved));
@@ -216,11 +210,10 @@ public class LocaleCommand : ICommand
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
-        IUserRepository userRepository,
         ILogger logger)
     {
-        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null || !await CheckAdminPermissionAsync(user.UnifiedUserId, serviceProvider))
+        var user = context.User;
+        if (!await CheckAdminPermissionAsync(user.UnifiedId, serviceProvider))
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.locale.view.permission", context.Locale));
 
@@ -228,7 +221,7 @@ public class LocaleCommand : ICommand
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.locale.view.usage", context.Locale));
 
-        var resolved = localization.ResolveLocale(context.Arguments[1]);
+        var resolved = localization.ResolveLocale(context.Arguments[1], false);
         if (resolved == null)
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.locale.view.unknown", context.Locale,
@@ -259,16 +252,15 @@ public class LocaleCommand : ICommand
         ICommandExecutionContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
-        IUserRepository userRepository,
         ILogger logger)
     {
-        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null || !await CheckAdminPermissionAsync(user.UnifiedUserId, serviceProvider))
+        var user = context.User;
+        if (!await CheckAdminPermissionAsync(user.UnifiedId, serviceProvider))
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.locale.reload.permission", context.Locale));
 
         await localization.ReloadAsync(context.CancellationToken);
-        logger.LogInformation("Localization cache reloaded by admin {AdminId}", user.UnifiedUserId);
+        logger.LogInformation("Localization cache reloaded by admin {AdminId}", user.UnifiedId);
         return CommandResult.Successfully(
             await localization.GetStringAsync("command.locale.reload.success", context.Locale));
     }

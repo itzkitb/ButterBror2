@@ -11,14 +11,14 @@ namespace ButterBror.Dashboard.Services;
 /// </summary>
 public class AdminCommandExecutor
 {
-    private readonly ICommandDispatcher _dispatcher;
+    private readonly IBotCore _botCore;
     private readonly ILogger<AdminCommandExecutor> _logger;
 
     public AdminCommandExecutor(
-        ICommandDispatcher dispatcher,
+        IBotCore core,
         ILogger<AdminCommandExecutor> logger)
     {
-        _dispatcher = dispatcher;
+        _botCore = core;
         _logger = logger;
     }
 
@@ -59,7 +59,7 @@ public class AdminCommandExecutor
         var context = new DashboardCommandContext(commandName, args, commandPlatform);
         context.CancellationToken = ct;
 
-        return await _dispatcher.DispatchAsync(context);
+        return await _botCore.ProcessCommandAsync(context);
     }
 }
 

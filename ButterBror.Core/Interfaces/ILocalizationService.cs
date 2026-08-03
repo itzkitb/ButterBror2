@@ -25,12 +25,7 @@ public interface ILocalizationService
     /// <summary>
     /// Checks if a locale is registered
     /// </summary>
-    bool IsLocaleRegistered(string locale);
-
-    /// <summary>
-    /// Resolves locale alias to canonical code
-    /// </summary>
-    string ResolveLocale(string locale);
+    string? ResolveLocale(string locale, bool fixNull = true);
 
     /// <summary>
     /// Registers built-in default translations for a module

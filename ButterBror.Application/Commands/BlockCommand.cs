@@ -44,7 +44,7 @@ public class BlockCommand : ICommand
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute BlockCommand",
-                context.User.Id,
+                context.User.UnifiedId,
                 context.Channel.Platform,
                 context);
         }
@@ -62,13 +62,13 @@ public class BlockCommand : ICommand
 
         var userName = context.Arguments[1];
         var userEntity = await userRepository.FindUserAsync(context.Channel.Platform, userName);
-        var user = await userRepository.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
+        var user = context.User;
         
-        if (userEntity == null || user == null)
+        if (userEntity == null)
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.block.user.not_found", context.Locale));
         
-        if (userEntity.UnifiedUserId.Equals(user.UnifiedUserId))
+        if (userEntity.UnifiedId.Equals(user.UnifiedId))
             return CommandResult.Failure(
                 await localization.GetStringAsync("command.block.user.block_self", context.Locale));
         
@@ -78,9 +78,9 @@ public class BlockCommand : ICommand
         var reason = context.Arguments.Count > 3 ? string.Join(" ", context.Arguments.Skip(3)) : null;
 
         if (isBlock)
-            await restriction.BlockUserAsync(targetPlatform, userEntity.UnifiedUserId, reason, isGlobal, context.CancellationToken);
+            await restriction.BlockUserAsync(targetPlatform, userEntity.UnifiedId, reason, isGlobal, context.CancellationToken);
         else
-            await restriction.UnblockUserAsync(targetPlatform, userEntity.UnifiedUserId, isGlobal, context.CancellationToken);
+            await restriction.UnblockUserAsync(targetPlatform, userEntity.UnifiedId, isGlobal, context.CancellationToken);
 
         var locKey = isBlock ? "command.block.user.success" : "command.unblock.user.success";
         return CommandResult.Successfully(await localization.GetStringAsync(locKey, context.Locale, userName, targetPlatform));

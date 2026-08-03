@@ -2,7 +2,6 @@ using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
-using ButterBror.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -15,7 +14,6 @@ public class JoinChannelCommand(
 {
     private readonly ILogger<JoinChannelCommand> _logger = serviceProvider.GetRequiredService<ILogger<JoinChannelCommand>>();
     private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
-    private readonly IUserRepository _userRepo = serviceProvider.GetRequiredService<IUserRepository>();
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
@@ -32,15 +30,11 @@ public class JoinChannelCommand(
         string channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
         // S1: Resolve user
-        var user = await _userRepo.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null)
-        {
-            throw new Exception("User not found");
-        }
+        var user = context.User;
 
         // S2: Check permissions
         var hasPermission = await _permissionManager.HasPermissionAsync(
-            user.UnifiedUserId,
+            user.UnifiedId,
             "su:twitch:join");
 
         if (!hasPermission)

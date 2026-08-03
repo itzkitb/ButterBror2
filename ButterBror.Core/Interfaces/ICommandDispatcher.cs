@@ -1,9 +1,9 @@
-﻿using ButterBror.Core.Modules.Commands;
-using ButterBror.Core.Modules.Interfaces;
+﻿using ButterBror.Core.Models;
+using ButterBror.Core.Modules.Commands;
 
 namespace ButterBror.Core.Interfaces;
 
 public interface ICommandDispatcher
 {
-    Task<CommandResult> DispatchAsync(ICommandContext context);
+    Task<CommandResult> DispatchAsync(ExtendedCommandContext context);
 }

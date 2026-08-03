@@ -30,7 +30,7 @@ public class UserInfoCommand : ICommand
             return CommandResult.Successfully(
                 await localization.GetStringAsync("command.userinfo.success", context.Locale,
                     userEntity.DisplayName,
-                    userEntity.UnifiedUserId));
+                    userEntity.UnifiedId));
         }
         catch (Exception ex)
         {
@@ -38,7 +38,7 @@ public class UserInfoCommand : ICommand
             return await errorTracking.LogErrorAsync(
                 ex,
                 "Failed to execute UserInfo",
-                context.User.Id,
+                context.User.UnifiedId,
                 context.Channel.Platform,
                 context);
         }

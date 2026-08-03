@@ -1,6 +1,5 @@
 ﻿using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.Core.Interfaces;
-using ButterBror.Data;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,7 +13,6 @@ public class AddChannelCommand(
     : ICommand
 {
     private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
-    private readonly IUserRepository _userRepo = serviceProvider.GetRequiredService<IUserRepository>();
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
@@ -31,14 +29,9 @@ public class AddChannelCommand(
         var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
         // S2: Check permissions
-        var user = await _userRepo.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null)
-        {
-            throw new Exception("User not found");
-        }
-
+        var user = context.User;
         var hasPermission = await _permissionManager.HasPermissionAsync(
-            user.UnifiedUserId,
+            user.UnifiedId,
             "su:twitch:addchannel");
 
         if (!hasPermission)

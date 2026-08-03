@@ -17,7 +17,7 @@ public class ErrorTrackingService : IErrorTrackingService
     private readonly IUserRepository _userRepository;
     private readonly ILocalizationService _localizationService;
     private readonly ILogger<ErrorTrackingService> _logger;
-    private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
+    private static readonly RandomNumberGenerator Rng = RandomNumberGenerator.Create();
     private const string Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private const int IdLength = 10;
     private const int MaxAttempts = 5;
@@ -43,15 +43,15 @@ public class ErrorTrackingService : IErrorTrackingService
     public async Task<CommandResult> LogErrorAsync(
         Exception exception,
         string message,
-        string userId,
+        Guid userId,
         string platform,
         params object[] extraData)
     {
         // Get user's preferred locale
-        var user = await _userRepository.GetByPlatformIdAsync(platform, userId);
+        var user = await _userRepository.GetByUnifiedIdAsync(userId);
         var locale = user?.PreferredLocale ?? "EN_US";
 
-        var errorId = await LogErrorInternalAsync(exception, message, user?.UnifiedUserId, platform, extraData);
+        var errorId = await LogErrorInternalAsync(exception, message, user?.UnifiedId, platform, extraData);
         var errorHash = GenerateExceptionHash(exception);
 
         // Get localized message with error ID
@@ -71,8 +71,6 @@ public class ErrorTrackingService : IErrorTrackingService
 
     public static string GenerateExceptionHash(Exception ex)
     {
-        if (ex == null) return "UNK:00000000";
-
         // S0. Receive class
         var targetMethod = ex.TargetSite;
         string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";
@@ -182,7 +180,7 @@ public class ErrorTrackingService : IErrorTrackingService
         var sb = new StringBuilder(IdLength);
         var data = new byte[IdLength];
 
-        _rng.GetBytes(data);
+        Rng.GetBytes(data);
 
         foreach (var b in data)
         {

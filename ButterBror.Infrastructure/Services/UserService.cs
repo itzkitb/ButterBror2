@@ -37,7 +37,7 @@ public class UserService : IUserService
 
         var newUser = new UserProfile
         {
-            UnifiedUserId = Guid.NewGuid(),
+            UnifiedId = Guid.NewGuid(),
             DisplayName = displayName,
             CreatedAt = DateTime.UtcNow,
             LastActive = DateTime.UtcNow

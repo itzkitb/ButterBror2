@@ -16,14 +16,11 @@ public class CommandProcessor(
     ICommandRegistry commandRegistry,
     ILogger<CommandProcessor> logger,
     IBanphraseService banphraseService,
-    IPermissionManager permissionManager,
     ILocalizationService localization,
     IErrorTrackingService errorTrackingService,
     IRestrictionService restrictionService)
     : ICommandProcessor
 {
-    private readonly IPermissionManager _permissionManager = permissionManager;
-
     public async Task<CommandResult> ProcessCommandAsync(ICommandContext context)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -38,7 +35,7 @@ public class CommandProcessor(
                 context.Platform,
                 context.User.DisplayName
             );
-            unifiedUserId = user.UnifiedUserId.ToString();
+            unifiedUserId = user.UnifiedId.ToString();
 
             // S1. Find a command
             var commandMeta = commandRegistry.GetCommandMetadata(context.CommandName);
@@ -60,7 +57,7 @@ public class CommandProcessor(
             }
 
             // S3: Proceed with user management and command execution
-            eContext = new ExtendedCommandContext(context, user.UnifiedUserId, user.PreferredLocale);
+            eContext = new ExtendedCommandContext(context, user);
 
             // S4: Checking user block status
             var userStatus = await restrictionService.CheckUserBlockStatusAsync(
@@ -103,7 +100,7 @@ public class CommandProcessor(
 
             logger.LogInformation(
                 "Command executed by user. name='{CommandName}' uid='{UserId}' execution_time={ExecutionTime} success={Success}",
-                context.CommandName, user.UnifiedUserId, stopwatch.ElapsedMilliseconds, result.Success);
+                context.CommandName, user.UnifiedId, stopwatch.ElapsedMilliseconds, result.Success);
 
             // S7: Check banphrases
             // If any permission start with "su:" skipping check
@@ -123,7 +120,7 @@ public class CommandProcessor(
                     logger.LogInformation(
                         "Command result blocked by banphrase. command='{Command}', uid='{UserId}', section='{Section}', category='{Category}', pattern='{Pattern}', phrase='{Phrase}'",
                         context.CommandName,
-                        user.UnifiedUserId,
+                        user.UnifiedId,
                         banphraseResult.FailedSection,
                         banphraseResult.FailedCategory,
                         banphraseResult.MatchedPattern,
@@ -142,7 +139,7 @@ public class CommandProcessor(
 
             // S8: Updating user statistics
             await userService.UpdateUserStatisticsAsync(
-                user.UnifiedUserId,
+                user.UnifiedId,
                 commandMeta.Name,
                 result.Success
             );
@@ -173,8 +170,6 @@ public class CommandProcessor(
 
     public static string GenerateExceptionHash(Exception ex)
     {
-        if (ex == null) return "UNK:00000000";
-
         // S0: Receive class
         var targetMethod = ex.TargetSite;
         string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";
@@ -223,19 +218,19 @@ public class CommandProcessor(
         }
 
         // S1: Validating permissions
-        if (!await commandRegistry.UserHasPermissionForCommandAsync(commandName, user.UnifiedUserId))
+        if (!await commandRegistry.UserHasPermissionForCommandAsync(commandName, user.UnifiedId))
         {
             return CommandResult.Failure(
                 await localization.GetStringAsync("core.bot.command.permission", user.PreferredLocale));
         }
 
         // S2: Cooldown check
-        var lastUse = await userService.GetCommandLastUsedAsync(meta.Id, user.UnifiedUserId);
+        var lastUse = await userService.GetCommandLastUsedAsync(meta.Id, user.UnifiedId);
         var betweenUses = DateTime.UtcNow - lastUse;
         if (betweenUses != null && ((TimeSpan)betweenUses).TotalSeconds < meta.CooldownSeconds)
         {
             logger.LogDebug("Command cooldown. uid='{UserId}', cid='{CommandId}', remain={Seconds}, cooldown={CooldownSeconds}",
-                user.UnifiedUserId,
+                user.UnifiedId,
                 meta.Id,
                 ((TimeSpan)betweenUses).TotalSeconds,
                 meta.CooldownSeconds
@@ -246,7 +241,7 @@ public class CommandProcessor(
                     meta.CooldownSeconds - ((TimeSpan)betweenUses).TotalSeconds),
                 sendResult:false);
         }
-        _ = userService.SetCommandLastUseAsync(meta.Id, user.UnifiedUserId, DateTime.UtcNow);
+        _ = userService.SetCommandLastUseAsync(meta.Id, user.UnifiedId, DateTime.UtcNow);
         
         // S3: Yay
         logger.LogInformation("Command passed all validations. name='{CommandName}'", commandName);

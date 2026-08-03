@@ -1,7 +1,7 @@
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
 
-namespace ButterBror.Infrastructure.Services;
+namespace ButterBror.Core.Interfaces;
 
 public interface ICommandProcessor
 {

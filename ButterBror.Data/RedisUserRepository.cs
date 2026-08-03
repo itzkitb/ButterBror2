@@ -53,7 +53,7 @@ public class RedisUserRepository : IUserRepository
         return await _redisPipeline.ExecuteAsync(async ct =>
         {
             IDatabase db = _redis.GetDatabase();
-            string key = $"{UserPrefix}{user.UnifiedUserId}";
+            string key = $"{UserPrefix}{user.UnifiedId}";
             string json = JsonSerializer.Serialize(user);
 
             await db.StringSetAsync(key, json);
@@ -62,13 +62,13 @@ public class RedisUserRepository : IUserRepository
             foreach (KeyValuePair<string, string> platform in user.PlatformIds)
             {
                 string indexKey = $"{PlatformIndexPrefix}{platform.Key}:{platform.Value}";
-                await db.StringSetAsync(indexKey, user.UnifiedUserId.ToString());
+                await db.StringSetAsync(indexKey, user.UnifiedId.ToString());
             }
 
             // Updating the index by display name
             string normalized = NormalizeDisplayName(user.DisplayName);
             string displayNameIndexKey = $"{DisplayNameIndexPrefix}{normalized}";
-            await db.StringSetAsync(displayNameIndexKey, user.UnifiedUserId.ToString());
+            await db.StringSetAsync(displayNameIndexKey, user.UnifiedId.ToString());
 
             return user;
         });

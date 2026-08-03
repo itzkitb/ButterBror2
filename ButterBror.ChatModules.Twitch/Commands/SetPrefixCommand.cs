@@ -11,7 +11,6 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
 {
     public static string GetPrefixKey(string channelId) => $"twitch:channel_prefix:{channelId}";
     private readonly ILogger<SetPrefixCommand> _logger = serviceProvider.GetRequiredService<ILogger<SetPrefixCommand>>();
-    private readonly IUserRepository _userRepo = serviceProvider.GetRequiredService<IUserRepository>();
     private readonly ICustomDataRepository _customRepo = serviceProvider.GetRequiredService<ICustomDataRepository>();
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
@@ -39,19 +38,12 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
             return CommandResult.Failure(
                 await _localization.GetStringAsync("command.set_prefix.32chars", context.Locale));
         }
-
-        // S1: Resolve unified user
-        var user = await _userRepo.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null)
-        {
-            throw new Exception("User not found");
-        }
-
-        // S2: Persist the new prefix in Redis
+        
+        // S1: Persist the new prefix in Redis
         var key = GetPrefixKey(context.Channel.Id);
         await _customRepo.SetDataAsync(key, newPrefix);
 
-        // S3: Fuck cache
+        // S2: Cache
         module.InvalidatePrefixCache(context.Channel.Id);
 
         _logger.LogInformation(

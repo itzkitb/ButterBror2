@@ -1,6 +1,7 @@
 
 using System.Text.Json.Serialization;
 using ButterBror.Domain;
+using ButterBror.Domain.Entities;
 
 namespace ButterBror.Core.Modules.Interfaces;
 
@@ -11,7 +12,8 @@ public interface ICommandExecutionContext
 {
     IPlatformChannel Channel { get; }
     List<string> Arguments { get; }
-    IPlatformUser User { get; }
+    IPlatformUser PlatformUser { get; }
+    UserProfile User { get; }
     string Locale { get; }
     string CommandName { get; }
     

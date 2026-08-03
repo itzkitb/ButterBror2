@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace ButterBror.Domain.Entities;
+﻿namespace ButterBror.Domain.Entities;
 
 public class UserProfile
 {
-    public Guid UnifiedUserId { get; set; }
+    public Guid UnifiedId { get; set; }
     public Dictionary<string, string> PlatformIds { get; set; } = new(); // platform -> platformSpecificId
     public string DisplayName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }

@@ -1,12 +1,13 @@
 ﻿
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Domain;
+using ButterBror.Domain.Entities;
 
 namespace ButterBror.Core.Models;
 
 public class ExtendedCommandContext : ICommandContext
 {
-    public ExtendedCommandContext(ICommandContext originalContext, Guid unifiedUserId, string locale)
+    public ExtendedCommandContext(ICommandContext originalContext, UserProfile user)
     {
         CommandName = originalContext.CommandName;
         Arguments = originalContext.Arguments;
@@ -15,8 +16,9 @@ public class ExtendedCommandContext : ICommandContext
         ExecutedAt = originalContext.ExecutedAt;
         Platform = originalContext.Platform;
         CorrelationId = originalContext.CorrelationId;
-        UnifiedUserId = unifiedUserId;
-        Locale = locale;
+        UnifiedUserId = user.UnifiedId;
+        Locale = user.PreferredLocale;
+        UserProfile = user;
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
         CancellationToken = cts.Token;
     }
@@ -24,6 +26,7 @@ public class ExtendedCommandContext : ICommandContext
     public string CommandName { get; }
     public string[] Arguments { get; }
     public IPlatformUser User { get; }
+    public UserProfile UserProfile { get; }
     public IPlatformChannel Channel { get; }
     public DateTime ExecutedAt { get; }
     public string Platform { get; }

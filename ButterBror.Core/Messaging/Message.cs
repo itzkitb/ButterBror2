@@ -28,7 +28,7 @@ public class Message
         }
         
         // S0: Parse the BBCode text into structured parts
-        var parsedParts = parser.Parse(rawText ?? string.Empty);
+        var parsedParts = parser.Parse(rawText);
         Parts = parsedParts.AsReadOnly();
         
         // S1: Reconstruct RawText from parsed parts

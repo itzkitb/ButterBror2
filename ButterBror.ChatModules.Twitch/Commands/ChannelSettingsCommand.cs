@@ -13,7 +13,6 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
 {
     private readonly ICustomDataRepository _customRepo = serviceProvider.GetRequiredService<ICustomDataRepository>();
     private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
-    private readonly IUserRepository _userRepo = serviceProvider.GetRequiredService<IUserRepository>();
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
@@ -21,14 +20,9 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
         ICommandServiceProvider serviceProvider)
     {
         // S0: Check permissions
-        var user = await _userRepo.GetByPlatformIdAsync(context.User.Platform, context.User.Id);
-        if (user == null)
-        {
-            throw new Exception("User not found");
-        }
-
+        var user = context.User;
         var hasPermission = await _permissionManager.HasPermissionAsync(
-            user.UnifiedUserId,
+            user.UnifiedId,
             "su:twitch:settings");
 
         if (!hasPermission)

@@ -88,8 +88,8 @@ public class PasteBinService(
                 return "[API_ERROR]";
             }
             
-            logger.LogDebug("Successfully retrieved text from pastebin (length: {Length})", data.Content?.Length ?? 0);
-            return data.Content ?? string.Empty;
+            logger.LogDebug("Successfully retrieved text from pastebin (length: {Length})", data.Content.Length);
+            return data.Content;
         }, cancellationToken);
     }
 

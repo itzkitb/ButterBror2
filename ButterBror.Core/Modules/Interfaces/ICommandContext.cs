@@ -1,5 +1,4 @@
-﻿
-using ButterBror.Domain;
+﻿using ButterBror.Domain;
 
 namespace ButterBror.Core.Modules.Interfaces;
 

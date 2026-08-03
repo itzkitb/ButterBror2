@@ -66,7 +66,7 @@ public class LocalizationService : ILocalizationService
         }
 
         // S3: Final fallback
-        if (result == key && args?.Length > 0)
+        if (result == key && args.Length > 0)
         {
             try
             {
@@ -102,13 +102,13 @@ public class LocalizationService : ILocalizationService
     }
 
     public bool IsLocaleRegistered(string locale) => _registry.IsLocaleRegistered(locale);
-    public string ResolveLocale(string locale) => _registry.ResolveLocale(locale) ?? _defaultLocale ?? "EN_US";
+    public string? ResolveLocale(string locale, bool fixNull = true) => fixNull ? _registry.ResolveLocale(locale) ?? _defaultLocale ?? "EN_US" : _registry.ResolveLocale(locale);
 
     public void RegisterModuleTranslations(
         string moduleId,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> translations)
     {
-        if (translations == null || translations.Count == 0)
+        if (translations.Count == 0)
         {
             _logger.LogDebug("No translations to register for module: {ModuleId}", moduleId);
             return;
@@ -140,7 +140,7 @@ public class LocalizationService : ILocalizationService
             {
                 try
                 {
-                    result = args?.Length > 0
+                    result = args.Length > 0
                         ? string.Format(CultureInfo.InvariantCulture, fileTemplate, args)
                         : fileTemplate;
                     return true;
@@ -159,7 +159,7 @@ public class LocalizationService : ILocalizationService
             {
                 try
                 {
-                    result = args?.Length > 0
+                    result = args.Length > 0
                         ? string.Format(CultureInfo.InvariantCulture, moduleTemplate, args)
                         : moduleTemplate;
                     return true;
@@ -194,7 +194,7 @@ public class LocalizationService : ILocalizationService
 
         try
         {
-            return args?.Length > 0
+            return args.Length > 0
                 ? string.Format(CultureInfo.InvariantCulture, template, args)
                 : template;
         }
