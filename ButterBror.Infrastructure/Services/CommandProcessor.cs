@@ -36,6 +36,7 @@ public class CommandProcessor(
                 context.User.DisplayName
             );
             unifiedUserId = user.UnifiedId.ToString();
+            logger.LogInformation(unifiedUserId);
 
             // S1. Find a command
             var commandMeta = commandRegistry.GetCommandMetadata(context.CommandName);

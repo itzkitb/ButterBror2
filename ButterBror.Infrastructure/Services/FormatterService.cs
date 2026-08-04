@@ -3,38 +3,24 @@ using ButterBror.Core.Interfaces;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class FormatterService : IFormatterService
+public class FormatterService(ILocalizationService localizationService) : IFormatterService
 {
-    private readonly ILocalizationService _localizationService;
-
-    public FormatterService(ILocalizationService localizationService)
-    {
-        _localizationService = localizationService;
-    }
-
     public async Task<string> FormatTimeSpanAsync(TimeSpan ts, string locale)
     {
+        ts = ts.Duration();
+
+        List<(int Value, string Unit)> candidates;
+
         if (ts.TotalDays >= 1)
-        {
-            return $"{ts.Days} {await GetL(locale, "day")} " +
-                   $"{ts.Hours} {await GetL(locale, "hour")} " +
-                   $"{ts.Minutes} {await GetL(locale, "minute")}";
-        }
-        
-        if (ts.TotalHours >= 1)
-        {
-            return $"{ts.Hours} {await GetL(locale, "hour")} " +
-                   $"{ts.Minutes} {await GetL(locale, "minute")} " +
-                   $"{ts.Seconds} {await GetL(locale, "second")}";
-        }
+            candidates = [(ts.Days, "day"), (ts.Hours, "hour"), (ts.Minutes, "minute")];
+        else if (ts.TotalHours >= 1)
+            candidates = [(ts.Hours, "hour"), (ts.Minutes, "minute"), (ts.Seconds, "second")];
+        else if (ts.TotalMinutes >= 1)
+            candidates = [(ts.Minutes, "minute"), (ts.Seconds, "second")];
+        else
+            candidates = [(ts.Seconds, "second")];
 
-        if (ts.TotalMinutes >= 1)
-        {
-            return $"{ts.Minutes} {await GetL(locale, "minute")} " +
-                   $"{ts.Seconds} {await GetL(locale, "second")}";
-        }
-
-        return $"{ts.Seconds} {await GetL(locale, "second")}";
+        return await BuildFormattedStringAsync(candidates, locale);
     }
 
     public async Task<string> FormatUtcDateAsync(DateTime utcDate, string locale)
@@ -89,19 +75,55 @@ public class FormatterService : IFormatterService
         }
 
         if (years > 0)
-            return $"{years} {await GetL(locale, "year")} {months} {await GetL(locale, "month")} {days} {await GetL(locale, "day")}";
-        
+        {
+            return await BuildFormattedStringAsync([
+                (years, "year"),
+                (months, "month"),
+                (days, "day")
+            ], locale);
+        }
+
         if (months > 0)
-            return $"{months} {await GetL(locale, "month")} {days} {await GetL(locale, "day")} {timeDiff.Hours} {await GetL(locale, "hour")}";
+        {
+            return await BuildFormattedStringAsync([
+                (months, "month"),
+                (days, "day"),
+                (timeDiff.Hours, "hour")
+            ], locale);
+        }
 
         if (days > 0)
-            return $"{days} {await GetL(locale, "day")} {timeDiff.Hours} {await GetL(locale, "hour")} {timeDiff.Minutes} {await GetL(locale, "minute")}";
+        {
+            return await BuildFormattedStringAsync([
+                (days, "day"),
+                (timeDiff.Hours, "hour"),
+                (timeDiff.Minutes, "minute")
+            ], locale);
+        }
         
         return await FormatTimeSpanAsync(timeDiff, locale);
     }
 
+    private async Task<string> BuildFormattedStringAsync(IEnumerable<(int Value, string Unit)> parts, string locale)
+    {
+        var valueTuples = parts.ToList();
+        var activeParts = valueTuples.Where(p => p.Value > 0).ToList();
+        
+        if (activeParts.Count == 0)
+        {
+            var fallbackUnit = valueTuples.LastOrDefault().Unit ?? "second";
+            return $"0 {await GetL(locale, fallbackUnit)}";
+        }
+        
+        var tasks = activeParts.Select(async p =>
+            $"{p.Value} {await GetL(locale, p.Unit)}");
+
+        var results = await Task.WhenAll(tasks);
+        return string.Join(" ", results);
+    }
+    
     private async Task<string> GetL(string locale, string unit)
     {
-        return await _localizationService.GetStringAsync($"word.{unit}", locale);
+        return await localizationService.GetStringAsync($"word.{unit}", locale);
     }
 }
