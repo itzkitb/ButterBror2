@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ApplicationIcon>logo.ico</ApplicationIcon>
     <GenerateDocumentationFile>False</GenerateDocumentationFile>
-    <Version>0.2.4</Version>
+    <Version>1.0.0.0</Version>
     <Authors>itzkitb</Authors>
     <PackageProjectUrl>https://github.com/itzkitb/butterbror2</PackageProjectUrl>
   </PropertyGroup>

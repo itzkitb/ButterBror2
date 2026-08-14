@@ -16,7 +16,7 @@ public interface ICommandRegistry
 
     // Query methods
     bool ContainsCommand(string id, bool idIsName = false);
-    string GetCommandModuleId(string id, bool idIsName = false);
+    string? GetCommandModuleId(string id, bool idIsName = false);
     IEnumerable<ICommandMetadata> GetRegisteredCommands();
     bool IsCommandCompatibleWithPlatform(string id, string platformId, bool idIsName = false);
     Task<bool> UserHasPermissionForCommandAsync(string id, Guid unifiedUserId, bool idIsName = false);

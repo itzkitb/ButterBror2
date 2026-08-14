@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Enums;
 using ButterBror.Core.Modules.Interfaces;
@@ -6,23 +7,24 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class CommandRegistry : ICommandRegistry
+public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRegistry> logger)
+    : ICommandRegistry
 {
-    private readonly HashSet<CommandEntry> _commands = new();
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<CommandRegistry> _logger;
+    private readonly Dictionary<string, CommandEntry> _commandsById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CommandEntry> _commandsByName = new(StringComparer.OrdinalIgnoreCase);
+    
+    private readonly List<RegexCommandEntry> _regexCommands = new();
 
     private record CommandEntry(
         Func<ICommand> Factory,
         ICommandMetadata Metadata,
         string ModuleId
     );
-    
-    public CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRegistry> logger)
-    {
-        _serviceProvider = serviceProvider;
-        _logger = logger;
-    }
+
+    private record RegexCommandEntry(
+        Regex Pattern,
+        CommandEntry Entry
+    );
 
     public void RegisterGlobalCommand(Func<ICommand> factory, ICommandMetadata metadata)
     {
@@ -31,61 +33,84 @@ public class CommandRegistry : ICommandRegistry
 
     public void RegisterModuleCommand(string moduleId, Func<ICommand> factory, ICommandMetadata metadata)
     {
-        if (moduleId == "global") throw new ArgumentException("moduleId cannot be 'global'");
-
+        if (moduleId == "global")
+            throw new ArgumentException("moduleId cannot be 'global'");
         RegisterCommand(factory, metadata, moduleId);
     }
 
     private void RegisterCommand(Func<ICommand> factory, ICommandMetadata metadata, string moduleId)
     {
-        _commands.Add(new CommandEntry(factory, metadata, moduleId));
+        var entry = new CommandEntry(factory, metadata, moduleId);
+        
+        _commandsById[metadata.Id] = entry;
+        _commandsByName[metadata.Name] = entry;
+        foreach (var alias in metadata.Aliases)
+        {
+            _commandsByName[alias] = entry;
+        }
+        
+        if (metadata.RegexAliases.Count > 0)
+        {
+            foreach (var regex in metadata.RegexAliases)
+            {
+                _regexCommands.Add(new RegexCommandEntry(regex, entry));
+            }
+        }
     }
 
-    public Func<ICommand>? GetCommandFactory(string id, bool idIsName = false)
+    private CommandEntry? GetCommandByNameInternal(string name)
     {
-        var entry = idIsName ? GetCommandByIdInternal(id) : GetCommandByNameInternal(id);
-        if (entry == null)
-            return null;
-        return entry.Factory;
+        if (_commandsByName.TryGetValue(name, out var exactMatch))
+        {
+            return exactMatch;
+        }
+        
+        foreach (var regexEntry in _regexCommands)
+        {
+            if (regexEntry.Pattern.IsMatch(name))
+            {
+                _commandsByName[name] = regexEntry.Entry;
+                return regexEntry.Entry;
+            }
+        }
+
+        return null;
+    }
+    
+    private CommandEntry? GetCommandByIdInternal(string id)
+    {
+        _commandsById.TryGetValue(id, out var entry);
+        return entry;
+    }
+    
+    private CommandEntry? ResolveEntry(string identifier, bool idIsName)
+    {
+        return idIsName ? GetCommandByNameInternal(identifier) : GetCommandByIdInternal(identifier);
     }
 
-    public ICommandMetadata? GetCommandMetadata(string id, bool idIsName = false)
-    {
-        var entry = idIsName ? GetCommandByIdInternal(id) : GetCommandByNameInternal(id);
-        if (entry == null)
-            return null;
-        return entry.Metadata;
-    }
+    public Func<ICommand>? GetCommandFactory(string id, bool idIsName = false) 
+        => ResolveEntry(id, idIsName)?.Factory;
 
-    public bool ContainsCommand(string id, bool idIsName = false)
-    {
-        var entry = idIsName ? GetCommandByIdInternal(id) : GetCommandByNameInternal(id);
-        return entry != null;
-    }
+    public ICommandMetadata? GetCommandMetadata(string id, bool idIsName = false) 
+        => ResolveEntry(id, idIsName)?.Metadata;
 
-    public string GetCommandModuleId(string id, bool idIsName = false)
-    {
-        var entry = idIsName ? GetCommandByIdInternal(id) : GetCommandByNameInternal(id);
-        if (entry == null)
-            return null;
-        return entry.ModuleId;
-    }
+    public bool ContainsCommand(string id, bool idIsName = false) 
+        => ResolveEntry(id, idIsName) != null;
+
+    public string? GetCommandModuleId(string id, bool idIsName = false) 
+        => ResolveEntry(id, idIsName)?.ModuleId;
 
     public IEnumerable<ICommandMetadata> GetRegisteredCommands()
     {
-        var meta = _commands.Select(c => c.Metadata);
-        return meta;
+        return _commandsById.Values.Select(c => c.Metadata).Distinct();
     }
 
     public bool IsCommandCompatibleWithPlatform(string id, string platformId, bool idIsName = false)
     {
-        var entry = idIsName ? GetCommandByIdInternal(id) : GetCommandByNameInternal(id);
-        if (entry == null)
-            return false;
+        var entry = ResolveEntry(id, idIsName);
+        if (entry == null) return false;
 
         var metadata = entry.Metadata;
-
-        // Check platform compatibility from metadata
         switch (metadata.PlatformCompatibilityType)
         {
             case PlatformCompatibilityType.Whitelist:
@@ -99,23 +124,15 @@ public class CommandRegistry : ICommandRegistry
 
     public async Task<bool> UserHasPermissionForCommandAsync(string id, Guid unifiedUserId, bool idIsName = false)
     {
-        var entry = idIsName ? GetCommandByIdInternal(id) : GetCommandByNameInternal(id);
-        if (entry == null)
-            return false;
+        var entry = ResolveEntry(id, idIsName);
+        if (entry == null) return false;
 
         var metadata = entry.Metadata;
+        if (metadata.RequiredPermissions.Count == 0) return true;
 
-        // If command requires no permissions, allow
-        if (metadata.RequiredPermissions.Count == 0)
-        {
-            return true;
-        }
-
-        // Use scoped PermissionManager for permission check
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = serviceProvider.CreateScope();
         var permissionManager = scope.ServiceProvider.GetRequiredService<IPermissionManager>();
 
-        // Check if user has any of the required permissions using PermissionManager
         foreach (var requiredPerm in metadata.RequiredPermissions)
         {
             if (await permissionManager.HasPermissionAsync(unifiedUserId, requiredPerm))
@@ -129,58 +146,32 @@ public class CommandRegistry : ICommandRegistry
 
     public void UnregisterModuleCommands(string moduleId)
     {
-        var keysToRemove = _commands
-            .Where(entry => entry.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var removedCount = 0;
 
-        foreach (var key in keysToRemove)
+        var idsToRemove = _commandsById
+            .Where(x => x.Value.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.Key).ToList();
+            
+        foreach (var key in idsToRemove)
         {
-            _commands.Remove(key);
+            _commandsById.Remove(key);
+            removedCount++;
         }
 
-        if (keysToRemove.Count > 0)
+        var namesToRemove = _commandsByName
+            .Where(x => x.Value.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.Key).ToList();
+            
+        foreach (var key in namesToRemove)
         {
-            _logger.LogDebug("Unregistered {Count} command(s) for module '{ModuleId}'", keysToRemove.Count, moduleId);
+            _commandsByName.Remove(key);
         }
-    }
+        
+        _regexCommands.RemoveAll(x => x.Entry.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
 
-    private CommandEntry? GetCommandByNameInternal(string name)
-    {
-        foreach (var c in _commands)
+        if (removedCount > 0)
         {
-            var meta = c.Metadata;
-            if (meta.Name.Equals(name, StringComparison.OrdinalIgnoreCase) ||
-                meta.Aliases.Contains(name, StringComparer.OrdinalIgnoreCase))
-            {
-                return c;
-            }
-
-            if (meta.RegexAliases.Count > 0)
-            {
-                foreach (var r in meta.RegexAliases)
-                {
-                    if (r.IsMatch(name))
-                    {
-                        return c;
-                    }
-                }
-            }
+            logger.LogDebug("Unregistered {Count} command(s) for module '{ModuleId}'", removedCount, moduleId);
         }
-
-        return null;
-    }
-    
-    private CommandEntry? GetCommandByIdInternal(string id)
-    {
-        foreach (var c in _commands)
-        {
-            var meta = c.Metadata;
-            if (meta.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
-            {
-                return c;
-            }
-        }
-
-        return null;
     }
 }
