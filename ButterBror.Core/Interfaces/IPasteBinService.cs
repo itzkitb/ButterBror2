@@ -1,8 +1,5 @@
 namespace ButterBror.Core.Interfaces;
 
-/// <summary>
-/// Service for interacting with HasteBin.dev API
-/// </summary>
 public interface IPasteBinService
 {
     /// <summary>

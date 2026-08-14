@@ -181,27 +181,22 @@ using (var scope = host.Services.CreateScope())
     var commandRegistry = scope.ServiceProvider.GetRequiredService<ICommandRegistry>();
 
     commandRegistry.RegisterGlobalCommand(
-        "userinfo",
         () => new UserInfoCommand(),
         new UserInfoMeta()
     );
     commandRegistry.RegisterGlobalCommand(
-        "banphrases",
         () => new BanphrasesCommand(),
         new BanphrasesCommandMeta()
     );
     commandRegistry.RegisterGlobalCommand(
-        "locale",
         () => new LocaleCommand(),
         new LocaleCommandMeta()
     );
     commandRegistry.RegisterGlobalCommand(
-        "reloadmodule",
         () => new ReloadModuleCommand(),
         new ReloadModuleMeta()
     );
     commandRegistry.RegisterGlobalCommand(
-        "block",
         () => new BlockCommand(),
         new BlockCommandMeta()
     );

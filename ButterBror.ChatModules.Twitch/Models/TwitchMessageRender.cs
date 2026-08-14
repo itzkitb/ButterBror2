@@ -1,11 +1,14 @@
 ﻿using System.Text;
+using ButterBror.Core.Interfaces;
 using ButterBror.Core.Messaging;
 using ButterBror.Core.Messaging.Enums;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 
-internal class TwitchMessageRender
+internal class TwitchMessageRender(IPasteBinService pasteBinService, ILocalizationService localization)
 {
+    private const int MaxTwitchMessageLength = 500;
+    
     private const string StandardChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private const string BoldStr = "𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇𝗔𝗕𝗖𝗗𝗘𝗙𝗚𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗";
     private const string ItalicStr = "𝘢𝘣𝘤𝘥𝘦𝘧𝘨𝘩𝘪𝘫𝘬𝘭𝘮𝘯𝘰𝘱𝘲𝘳𝘴𝘵𝘶𝘷𝘸𝘹𝘺𝘻𝘈𝘉𝘊𝘋𝘌𝘍𝘎𝘏𝘐𝘑𝘒𝘓𝘔𝘕𝘖𝘗𝘘𝘙𝘚𝘛𝘜𝘝𝘞𝘟𝘠𝘡0123456789";
@@ -16,8 +19,24 @@ internal class TwitchMessageRender
     private static readonly string[] ItalicChars = SplitToGraphemes(ItalicStr);
     private static readonly string[] BoldItalicChars = SplitToGraphemes(BoldItalicStr);
     private static readonly string[] MonospaceChars = SplitToGraphemes(MonospaceStr);
+
+    public async Task<string> RenderTwitchMessageAsync(Message message, CancellationToken cancellationToken = default)
+    {
+        string twitchText = RenderTwitchMessageInternal(message);
+        
+        if (twitchText.Length <= MaxTwitchMessageLength)
+        {
+            return twitchText;
+        }
+        
+        string markdownText = RenderMarkdownMessage(message);
+        string url = await pasteBinService.UploadTextAsync(markdownText, cancellationToken);
+        
+        return await localization.GetStringAsync("core.bot.twitch.long_text", "EN_US", url);
+    }
     
-    public string RenderTwitchMessage(Message message)
+    // ><> Twitch render
+    public string RenderTwitchMessageInternal(Message message)
     {
         var sb = new StringBuilder();
         foreach (var part in message.Parts)
@@ -90,6 +109,58 @@ internal class TwitchMessageRender
         return baseCharStr;
     }
     
+    // ><> Markdown render
+    private string RenderMarkdownMessage(Message message)
+    {
+        var sb = new StringBuilder();
+        foreach (var part in message.Parts)
+        {
+            sb.Append(FormatForMarkdown(part.Text, part.Styles));
+        }
+        return sb.ToString();
+    }
+
+    private string FormatForMarkdown(string text, MessageStyles styles)
+    {
+        if (string.IsNullOrEmpty(text) || styles == MessageStyles.None)
+            return text;
+
+        string result = text;
+
+        if (styles.HasFlag(MessageStyles.Monospace))
+        {
+            result = $"`{result}`";
+        }
+        else
+        {
+            if (styles.HasFlag(MessageStyles.Bold) && styles.HasFlag(MessageStyles.Italic))
+                result = $"***{result}***";
+            else if (styles.HasFlag(MessageStyles.Bold))
+                result = $"**{result}**";
+            else if (styles.HasFlag(MessageStyles.Italic))
+                result = $"*{result}*";
+        }
+
+        if (styles.HasFlag(MessageStyles.Strikethrough))
+        {
+            result = $"~~{result}~~";
+        }
+
+        if (styles.HasFlag(MessageStyles.Quote))
+        {
+            var lines = result.Split('\n');
+            result = string.Join("\n", lines.Select(l => $"> {l}"));
+        }
+
+        if (styles.HasFlag(MessageStyles.Spoiler))
+        {
+            result = $"||{result}||";
+        }
+
+        return result;
+    }
+    
+    // ><> Extra
     private static string[] SplitToGraphemes(string text)
     {
         var result = new List<string>();

@@ -55,7 +55,6 @@ public class PlatformModuleManager : IPlatformModuleManager
                 foreach (var exportedCommand in module.ExportedCommands)
                 {
                     _commandRegistry.RegisterModuleCommand(
-                        exportedCommand.CommandName,
                         module.ModuleId,
                         exportedCommand.Factory,
                         exportedCommand.Metadata
@@ -88,7 +87,6 @@ public class PlatformModuleManager : IPlatformModuleManager
                 foreach (var exportedCommand in module.ExportedCommands)
                 {
                     _commandRegistry.RegisterModuleCommand(
-                        exportedCommand.CommandName,
                         module.ModuleId,
                         exportedCommand.Factory,
                         exportedCommand.Metadata
@@ -206,7 +204,6 @@ public class PlatformModuleManager : IPlatformModuleManager
                 foreach (var exportedCommand in module.ExportedCommands)
                 {
                     _commandRegistry.RegisterModuleCommand(
-                        exportedCommand.CommandName,
                         module.ModuleId,
                         exportedCommand.Factory,
                         exportedCommand.Metadata
@@ -269,7 +266,6 @@ public class PlatformModuleManager : IPlatformModuleManager
                 foreach (var exportedCommand in module.ExportedCommands)
                 {
                     _commandRegistry.RegisterModuleCommand(
-                        exportedCommand.CommandName,
                         module.ModuleId,
                         exportedCommand.Factory,
                         exportedCommand.Metadata

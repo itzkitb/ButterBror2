@@ -21,7 +21,7 @@ public class TwitchModule : IChatModule
 {
     // ><> Metadata
     public string ModuleId => "sillyapps:twitch";
-    public Version Version { get; } = new(1, 3, 2);
+    public Version Version { get; } = new(1, 3, 3);
     public List<ChatModuleFlags> Flags { get; } = [ChatModuleFlags.CanSendMessages];
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
@@ -29,7 +29,7 @@ public class TwitchModule : IChatModule
 
     // ><> State & Dependencies
     private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
-    private readonly TwitchMessageRender _messageRender = new();
+    private TwitchMessageRender? _messageRender;
 
     private ILogger<TwitchModule> _logger = null!;
     private IBotCore _botCore = null!;
@@ -98,6 +98,9 @@ public class TwitchModule : IChatModule
         _botCore = sp.GetRequiredService<IBotCore>();
         _dashboardBridge = sp.GetService<IDashboardBridge>();
         _localization = sp.GetService<ILocalizationService>();
+        var localization = sp.GetRequiredService<ILocalizationService>();
+        var pastebinService = sp.GetRequiredService<IPasteBinService>();
+        _messageRender = new(pastebinService, localization);
     }
 
     private static async Task<ITwitchChannelManager> RegisterAndGetChannelManagerAsync(IServiceProvider sp)
@@ -206,8 +209,11 @@ public class TwitchModule : IChatModule
     // ><> Message & Command Processing
     public async Task SendMessageAsync(string chatId, Message message, string? replyId = null, dynamic? data = null)
     {
+        if (_messageRender == null)
+            return;
+        
         EnsureInitialized();
-        var msg = _messageRender.RenderTwitchMessage(message);
+        var msg = await _messageRender.RenderTwitchMessageAsync(message);
         
         if (replyId == null)
             await _twitchClient.SendMessageAsync(chatId, msg, false);
@@ -245,7 +251,10 @@ public class TwitchModule : IChatModule
 
     private async Task SendResponseAsync(ChatMessage triggeringMessage, Message responseMessage)
     {
-        var textToSend = _messageRender.RenderTwitchMessage(responseMessage);
+        if (_messageRender == null)
+            return;
+        
+        var textToSend = await _messageRender.RenderTwitchMessageAsync(responseMessage);
         if (string.IsNullOrWhiteSpace(textToSend))
             return;
 

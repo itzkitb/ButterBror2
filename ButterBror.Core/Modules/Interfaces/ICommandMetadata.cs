@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ButterBror.Core.Modules.Enums;
 
 namespace ButterBror.Core.Modules.Interfaces;
@@ -13,9 +14,14 @@ public interface ICommandMetadata
     string Name { get; }
     
     /// <summary>
-    /// Aliases for the command (alternative names to trigger the command)
+    /// Aliases for the command
     /// </summary>
     List<string> Aliases { get; }
+    
+    /// <summary>
+    /// Regex patterns for command aliases
+    /// </summary>
+    IReadOnlyList<Regex> RegexAliases => Array.Empty<Regex>();
     
     /// <summary>
     /// Cooldown period for the command per user in seconds

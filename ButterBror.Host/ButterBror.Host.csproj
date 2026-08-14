@@ -9,13 +9,15 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <ApplicationIcon>logo.ico</ApplicationIcon>
     <Description>A powerful core for chatbots</Description>
-    <Copyright>(C)2026 DumbDev</Copyright>
+    <Copyright>(C)2026 itzkitb</Copyright>
     <PackageProjectUrl>https://github.com/itzkitb/butterbror2</PackageProjectUrl>
     <PackageIcon>logo.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/itzkitb/butterbror2</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>bot, twitch, telegram, telegram-bot, discord, discord-bot, shitty-code, twitch-bot, chat-bot, twitch-chat-bot</PackageTags>
+    <Version>0.2.4</Version>
+    <Authors>itzkitb</Authors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
