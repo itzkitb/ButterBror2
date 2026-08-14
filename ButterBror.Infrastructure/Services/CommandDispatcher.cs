@@ -25,7 +25,7 @@ public class CommandDispatcher(
         try
         {
             // S0: Obtaining the command factory from the registry
-            var factory = commandRegistry.GetCommandFactory(context.CommandName);
+            var factory = commandRegistry.GetCommandFactory(context.CommandName, true);
             if (factory == null)
             {
                 return CommandResult.Failure($"Command not found. name='{context.CommandName}'", sendResult: false);

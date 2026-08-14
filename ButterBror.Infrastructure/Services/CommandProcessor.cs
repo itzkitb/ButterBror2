@@ -39,7 +39,7 @@ public class CommandProcessor(
             logger.LogInformation(unifiedUserId);
 
             // S1. Find a command
-            var commandMeta = commandRegistry.GetCommandMetadata(context.CommandName);
+            var commandMeta = commandRegistry.GetCommandMetadata(context.CommandName, true);
             if (commandMeta == null)
             {
                 return CommandResult.Failure(
@@ -209,7 +209,7 @@ public class CommandProcessor(
 
         // S0: Checking platform compatibility
         var platformId = context.Platform.ToLowerInvariant();
-        if (!commandRegistry.IsCommandCompatibleWithPlatform(commandName, platformId))
+        if (!commandRegistry.IsCommandCompatibleWithPlatform(meta.Id, platformId))
         {
             return CommandResult.Failure(
                 await localization.GetStringAsync("core.bot.command.compatibility", user.PreferredLocale,
@@ -219,7 +219,7 @@ public class CommandProcessor(
         }
 
         // S1: Validating permissions
-        if (!await commandRegistry.UserHasPermissionForCommandAsync(commandName, user.UnifiedId))
+        if (!await commandRegistry.UserHasPermissionForCommandAsync(meta.Id, user.UnifiedId))
         {
             return CommandResult.Failure(
                 await localization.GetStringAsync("core.bot.command.permission", user.PreferredLocale));
