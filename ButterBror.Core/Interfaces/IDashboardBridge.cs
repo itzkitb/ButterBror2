@@ -13,7 +13,7 @@ public interface IDashboardBridge
     void PushLog(LogEntry entry);
 
     /// <summary>
-    /// Increment the processed messages counter (called by chat modules)
+    /// Increment the processed messages counter
     /// </summary>
     void IncrementMessageCount();
 
@@ -23,7 +23,7 @@ public interface IDashboardBridge
     void IncrementCommandCount();
 
     /// <summary>
-    /// Read the most recent N log entries (for initial page load)
+    /// Read the most recent N log entries
     /// </summary>
     IReadOnlyList<LogEntry> GetRecentLogs(int count = 200);
 

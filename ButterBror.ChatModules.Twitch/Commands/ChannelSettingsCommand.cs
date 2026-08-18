@@ -16,7 +16,7 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         // S0: Check permissions
@@ -45,7 +45,7 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
                 await _localization.GetStringAsync("command.channel_settings.value", context.Locale));
         }
 
-        string channelId = context.Channel.Id;
+        string channelId = context.Chat.Id;
 
         // S2: Changing
         var json = await _customRepo.GetDataAsync($"twitch:settings:{channelId}");

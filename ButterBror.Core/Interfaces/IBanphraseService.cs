@@ -20,8 +20,7 @@ public interface IBanphraseService
     /// Check message against all applicable banphrase categories
     /// </summary>
     Task<BanphraseCheckResult> CheckMessageAsync(
-        string channelId,
-        string platform,
+        Guid chatId,
         string message,
         CancellationToken cancellationToken = default);
     
@@ -30,8 +29,7 @@ public interface IBanphraseService
     /// </summary>
     Task<bool> SetCategoryAsync(
         string section,
-        string platform,
-        string channelId,
+        Guid chatId,
         string categoryName,
         string regexPattern);
     
@@ -40,8 +38,7 @@ public interface IBanphraseService
     /// </summary>
     Task<string?> GetCategoryAsync(
         string section,
-        string platform,
-        string channelId,
+        Guid chatId,
         string categoryName);
     
     /// <summary>
@@ -49,16 +46,14 @@ public interface IBanphraseService
     /// </summary>
     Task<IReadOnlyList<string>> ListCategoriesAsync(
         string section,
-        string platform,
-        string channelId);
+        Guid chatId);
     
     /// <summary>
     /// Delete banphrase category
     /// </summary>
     Task<bool> DeleteCategoryAsync(
         string section,
-        string platform,
-        string channelId,
+        Guid chatId,
         string categoryName);
     
     /// <summary>

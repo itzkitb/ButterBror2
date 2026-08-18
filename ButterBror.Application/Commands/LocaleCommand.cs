@@ -16,7 +16,7 @@ public class LocaleCommand : ICommand
 {
     private static string _defaultLocale = "EN_US";
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         try
@@ -51,13 +51,13 @@ public class LocaleCommand : ICommand
                 ex,
                 "Failed to execute LocaleCommand",
                 context.User.UnifiedId,
-                context.Channel.Platform,
+                context.PlatformId,
                 context);
         }
     }
 
     private async Task<CommandResult> HandleSetAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
         IUserRepository userRepository,
@@ -96,7 +96,7 @@ public class LocaleCommand : ICommand
     }
 
     private async Task<CommandResult> HandleAdminSetAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
         ILogger logger,
@@ -165,7 +165,7 @@ public class LocaleCommand : ICommand
     }
 
     private async Task<CommandResult> HandleDeleteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
         ILogger logger)
@@ -207,7 +207,7 @@ public class LocaleCommand : ICommand
     }
 
     private async Task<CommandResult> HandleViewAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
         ILogger logger)
@@ -249,7 +249,7 @@ public class LocaleCommand : ICommand
     }
 
     private async Task<CommandResult> HandleReloadAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider,
         ILocalizationService localization,
         ILogger logger)

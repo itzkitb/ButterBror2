@@ -17,7 +17,7 @@ public class JoinChannelCommand(
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         // S0: Validate arguments

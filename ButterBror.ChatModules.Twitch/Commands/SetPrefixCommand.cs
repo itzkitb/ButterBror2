@@ -15,7 +15,7 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         // S0: Validate argument
@@ -40,19 +40,19 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
         }
         
         // S1: Persist the new prefix in Redis
-        var key = GetPrefixKey(context.Channel.Id);
+        var key = GetPrefixKey(context.Chat.Id);
         await _customRepo.SetDataAsync(key, newPrefix);
 
         // S2: Cache
-        module.InvalidatePrefixCache(context.Channel.Id);
+        module.InvalidatePrefixCache(context.Chat.Id);
 
         _logger.LogInformation(
             "[TW] Channel prefix updated. channel={Channel} ({ChannelId}), newPrefix={Prefix}, by={User}",
-            context.Channel.Name, context.Channel.Id, newPrefix, context.User.DisplayName);
+            context.Chat.Name, context.Chat.Id, newPrefix, context.User.DisplayName);
 
         return CommandResult.Successfully(
             await _localization.GetStringAsync("command.set_prefix.success", context.Locale,
-                context.Channel.Name,
+                context.Chat.Name,
                 newPrefix));
     }
 }

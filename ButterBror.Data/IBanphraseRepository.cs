@@ -12,12 +12,12 @@ public interface IBanphraseRepository
     Task DeleteGlobalCategoryAsync(string categoryName);
     
     // Channel-specific categories
-    Task<IReadOnlyList<string>> GetChannelCategoryNamesAsync(string platform, string channelId);
-    Task<string?> GetChannelCategoryAsync(string platform, string channelId, string categoryName);
-    Task SetChannelCategoryAsync(string platform, string channelId, string categoryName, string regexPattern);
-    Task DeleteChannelCategoryAsync(string platform, string channelId, string categoryName);
+    Task<IReadOnlyList<string>> GetChannelCategoryNamesAsync(Guid chatId);
+    Task<string?> GetChannelCategoryAsync(Guid chatId, string categoryName);
+    Task SetChannelCategoryAsync(Guid chatId, string categoryName, string regexPattern);
+    Task DeleteChannelCategoryAsync(Guid chatId, string categoryName);
     
     // Bulk operations
     Task<IReadOnlyDictionary<string, string>> GetAllGlobalCategoriesAsync();
-    Task<IReadOnlyDictionary<string, string>> GetAllChannelCategoriesAsync(string platform, string channelId);
+    Task<IReadOnlyDictionary<string, string>> GetAllChannelCategoriesAsync(Guid chatId);
 }

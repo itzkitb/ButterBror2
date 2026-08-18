@@ -6,64 +6,61 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class BotCoreService : IBotCore
+public class BotCoreService(
+    IPlatformModuleManager moduleManager,
+    ICommandProcessor commandProcessor,
+    IUserService userService,
+    IChatService chatService,
+    ILogger<BotCoreService> logger)
+    : IBotCore
 {
-    private readonly IPlatformModuleManager _moduleManager;
-    private readonly ICommandProcessor _commandProcessor;
-    private readonly IUserService _userService;
-    private readonly ILogger<BotCoreService> _logger;
     private readonly CancellationTokenSource _cts = new();
     public event EventHandler<ChatMessageReceivedEventArgs>? OnChatMessageReceived;
-
-    public BotCoreService(
-        IPlatformModuleManager moduleManager,
-        ICommandProcessor commandProcessor,
-        IUserService userService,
-        ILogger<BotCoreService> logger)
-    {
-        _moduleManager = moduleManager;
-        _commandProcessor = commandProcessor;
-        _userService = userService;
-        _logger = logger;
-    }
 
     public async Task StartAsync(CancellationToken ct = default)
     {
         await Task.WhenAll(
-            _userService.InitializeAsync(ct),
-            _moduleManager.InitializeAsync(this, ct)
+            userService.InitializeAsync(ct),
+            moduleManager.InitializeAsync(this, ct)
         );
 
-        _logger.LogInformation("Started bot core");
+        logger.LogInformation("Started bot core");
     }
 
-    public async Task<CommandResult> ProcessCommandAsync(ICommandContext context)
+    public async Task<CommandResult> ProcessCommandAsync(CommandContext context)
     {
-        return await _commandProcessor.ProcessCommandAsync(context);
+        return await commandProcessor.ProcessCommandAsync(context);
     }
 
     public async Task StopAsync(CancellationToken ct = default)
     {
-        _cts.Cancel();
-        await _moduleManager.ShutdownAsync(ct);
-        _logger.LogInformation("Stopped bot core");
+        await _cts.CancelAsync();
+        await moduleManager.ShutdownAsync(ct);
+        logger.LogInformation("Stopped bot core");
     }
 
     public async Task RaiseMessageReceivedAsync(
         string moduleId,
-        IncomingChatMessage message,
-        string platform,
+        ChatMessage message,
         CancellationToken ct = default)
     {
-        var user = await _userService.GetOrCreateUserAsync(
+        var user = await userService.GetOrCreateUserAsync(
             message.PlatformUserId,
-            platform,
+            moduleId,
             message.PlatformUserName);
 
+        var chat = await chatService.GetOrCreateChatAsync(
+            message.PlatformChatId,
+            moduleId,
+            message.PlatformChatName);
+        
         OnChatMessageReceived?.Invoke(this, new ChatMessageReceivedEventArgs
         {
             Text = message.Text,
             ModuleId = moduleId,
+            Message = message,
+            User = user,
+            Chat = chat,
             ExtraData = message.ExtraData,
             ReceivedAt = message.ReceivedAt,
             UnifiedUserId = user.UnifiedId,

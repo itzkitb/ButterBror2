@@ -45,66 +45,80 @@ public class PlatformModuleManager : IPlatformModuleManager
 
     private async Task LoadAndInitializeCommandModulesAsync(CancellationToken cancellationToken)
     {
-        var commandModules = await _commandModuleLoader.LoadModulesAsync(cancellationToken);
-        
-        foreach (var module in commandModules)
+        try
         {
-            try
+            var commandModules = await _commandModuleLoader.LoadModulesAsync(cancellationToken);
+
+            foreach (var module in commandModules)
             {
-                // Register exported commands from module
-                foreach (var exportedCommand in module.ExportedCommands)
+                try
                 {
-                    _commandRegistry.RegisterModuleCommand(
+                    // Register exported commands from module
+                    foreach (var exportedCommand in module.ExportedCommands)
+                    {
+                        _commandRegistry.RegisterModuleCommand(
+                            module.ModuleId,
+                            exportedCommand.Factory,
+                            exportedCommand.Metadata
+                        );
+                    }
+
+                    _loadedCommandModules.Add(module);
+                    _logger.LogInformation(
+                        "Initialized command module. id='{ModuleId}', version={Version}, commands={CommandCount}",
                         module.ModuleId,
-                        exportedCommand.Factory,
-                        exportedCommand.Metadata
+                        module.Version,
+                        module.ExportedCommands.Count
                     );
                 }
-                
-                _loadedCommandModules.Add(module);
-                _logger.LogInformation(
-                    "Initialized command module. id='{ModuleId}', version={Version}, commands={CommandCount}",
-                    module.ModuleId,
-                    module.Version,
-                    module.ExportedCommands.Count
-                );
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to initialize command module. id={ModuleId}", module.ModuleId);
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to initialize command module. id={ModuleId}", module.ModuleId);
-            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "failed to load chat modules");
         }
     }
 
     private async Task LoadAndInitializeChatModulesAsync(IBotCore core, CancellationToken cancellationToken)
     {
-        var chatModules = await _chatModuleLoader.LoadModulesAsync(cancellationToken);
-
-        foreach (var module in chatModules)
+        try
         {
-            try
+            var chatModules = await _chatModuleLoader.LoadModulesAsync(cancellationToken);
+
+            foreach (var module in chatModules)
             {
-                foreach (var exportedCommand in module.ExportedCommands)
+                try
                 {
-                    _commandRegistry.RegisterModuleCommand(
+                    foreach (var exportedCommand in module.ExportedCommands)
+                    {
+                        _commandRegistry.RegisterModuleCommand(
+                            module.ModuleId,
+                            exportedCommand.Factory,
+                            exportedCommand.Metadata
+                        );
+                    }
+
+                    _loadedChatModules.Add(module);
+                    _logger.LogInformation(
+                        "Initialized chat module. id='{ModuleId}', version={Version}, commands={CommandCount}",
                         module.ModuleId,
-                        exportedCommand.Factory,
-                        exportedCommand.Metadata
+                        module.Version,
+                        module.ExportedCommands.Count
                     );
                 }
-                
-                _loadedChatModules.Add(module);
-                _logger.LogInformation(
-                    "Initialized chat module. id='{ModuleId}', version={Version}, commands={CommandCount}",
-                    module.ModuleId,
-                    module.Version,
-                    module.ExportedCommands.Count
-                );
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to initialize chat module: {PlatformName}", module.ModuleId);
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to initialize chat module: {PlatformName}", module.ModuleId);
-            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "failed to load chat modules");
         }
     }
 

@@ -9,7 +9,7 @@ namespace ButterBror.Application.Commands;
 public class BlockCommand : ICommand
 {
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         try
@@ -45,13 +45,13 @@ public class BlockCommand : ICommand
                 ex,
                 "Failed to execute BlockCommand",
                 context.User.UnifiedId,
-                context.Channel.Platform,
+                context.ChatInfo.PlatformId,
                 context);
         }
     }
 
     private async Task<CommandResult> HandleUserBlockAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IRestrictionService restriction,
         ILocalizationService localization,
         IUserRepository userRepository,
@@ -61,7 +61,7 @@ public class BlockCommand : ICommand
             return CommandResult.Failure(await localization.GetStringAsync("command.block.user.usage", context.Locale));
 
         var userName = context.Arguments[1];
-        var userEntity = await userRepository.FindUserAsync(context.Channel.Platform, userName);
+        var userEntity = await userRepository.FindUserAsync(context.ChatInfo.PlatformId, userName);
         var user = context.User;
         
         if (userEntity == null)
@@ -87,7 +87,7 @@ public class BlockCommand : ICommand
     }
 
     private async Task<CommandResult> HandleGlobalBlockAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IRestrictionService restriction,
         ILocalizationService localization,
         bool isBlock,
@@ -111,7 +111,7 @@ public class BlockCommand : ICommand
     }
 
     private async Task<CommandResult> HandlePlatformBlockAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IRestrictionService restriction,
         ILocalizationService localization,
         bool isBlock,
@@ -136,7 +136,7 @@ public class BlockCommand : ICommand
     }
 
     private async Task<CommandResult> HandleChatBlockAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IRestrictionService restriction,
         ILocalizationService localization,
         bool isBlock,
@@ -146,8 +146,8 @@ public class BlockCommand : ICommand
             return CommandResult.Failure(await localization.GetStringAsync("command.block.chat.usage", context.Locale));
 
         var commandId = context.Arguments[1];
-        var platform = context.Channel.Platform;
-        var channelId = context.Arguments.Count > 2 ? context.Arguments[2] : context.Channel.Id;
+        var platform = context.ChatInfo.PlatformId;
+        var channelId = context.Arguments.Count > 2 ? context.Arguments[2] : context.ChatInfo.PlatformId;
 
         if (commandId.Equals(blockCommandId, StringComparison.OrdinalIgnoreCase))
             return CommandResult.Failure(await localization.GetStringAsync("command.block.block_ban", context.Locale));

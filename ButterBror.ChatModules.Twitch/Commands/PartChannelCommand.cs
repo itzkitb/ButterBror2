@@ -15,7 +15,7 @@ public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient 
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         // S0: Checking for the presence of an argument

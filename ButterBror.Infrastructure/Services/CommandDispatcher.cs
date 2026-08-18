@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Messaging;
-using ButterBror.Core.Models;
 using ButterBror.Core.Modules.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -18,7 +17,7 @@ public class CommandDispatcher(
 {
     private readonly IDashboardBridge _dashboardBridge = provider.GetRequiredService<IDashboardBridge>();
 
-    public async Task<CommandResult> DispatchAsync(ExtendedCommandContext context)
+    public async Task<CommandResult> DispatchAsync(CommandContext context)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -35,17 +34,9 @@ public class CommandDispatcher(
             var command = factory();
 
             // S2: Create an execution context and service provider
-            var locale = context.Locale;
-            var commandContext = new CommandExecutionContext(
-                context.Channel,
-                context.Arguments.ToList(),
-                context.User,
-                context.UserProfile,
-                locale,
-                context.CommandName);
             var serviceProvider = new CommandServiceProvider(provider);
 
-            var result = await command.ExecuteAsync(commandContext, serviceProvider);
+            var result = await command.ExecuteAsync(context, serviceProvider);
             result.ExecutionTime = stopwatch.Elapsed;
 
             // Notify dashboard about executed command
@@ -58,7 +49,7 @@ public class CommandDispatcher(
             var errorHash = GenerateExceptionHash(ex);
             logger.LogError(ex,
                 "Error dispatching command. name='{CommandName}', uid='{UserId}', error_code='{ErrorCode}'",
-                context.CommandName, context.User.Id, errorHash);
+                context.CommandName, context.PlatformUser.Id, errorHash);
 
             errorTrackingService.LogError(ex, ex.Message, context);
 

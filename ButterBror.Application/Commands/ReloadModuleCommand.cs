@@ -7,7 +7,7 @@ namespace ButterBror.Application.Commands;
 public class ReloadModuleCommand : ICommand
 {
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         var localization = serviceProvider.GetService<ILocalizationService>();
@@ -52,7 +52,7 @@ public class ReloadModuleCommand : ICommand
                 ex,
                 "Failed to execute ReloadModuleCommand",
                 context.User.UnifiedId,
-                context.Channel.Platform,
+                context.PlatformId,
                 context);
         }
     }

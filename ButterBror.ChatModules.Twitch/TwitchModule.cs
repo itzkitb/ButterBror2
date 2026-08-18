@@ -5,6 +5,7 @@ using ButterBror.ChatModules.Twitch.Services;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Messaging;
 using ButterBror.Core.Modules;
+using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Enums;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.Registry;
 using TwitchLib.Client.Events;
+using ChatMessage = ButterBror.Domain.Chat.ChatMessage;
 
 namespace ButterBror.ChatModules.Twitch;
 
@@ -21,7 +23,7 @@ public class TwitchModule : IChatModule
 {
     // ><> Metadata
     public string ModuleId => "sillyapps:twitch";
-    public Version Version { get; } = new(1, 3, 3);
+    public Version Version { get; } = new(1, 4, 0);
     public List<ChatModuleFlags> Flags { get; } = [ChatModuleFlags.CanSendMessages];
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
@@ -221,13 +223,13 @@ public class TwitchModule : IChatModule
             await _twitchClient.SendReplyAsync(chatId, replyId, msg, false);
     }
 
-    private async Task ProcessCommandIfAnyAsync(ChatMessage chatMessage)
+    private async Task ProcessCommandIfAnyAsync(Models.ChatMessage chatMessage)
     {
         var prefix = await GetChannelPrefixAsync(chatMessage.ChannelId);
         if (!TryParseCommand(chatMessage.Message, prefix, out var commandName, out var arguments))
             return;
 
-        var context = CreateCommandContext(chatMessage, commandName, arguments);
+        var context = CreateCommandContext(chatMessage, commandName, arguments.ToList());
         var result = await _botCore.ProcessCommandAsync(context).ConfigureAwait(false);
 
         if (!result.SendResult)
@@ -249,7 +251,7 @@ public class TwitchModule : IChatModule
         }
     }
 
-    private async Task SendResponseAsync(ChatMessage triggeringMessage, Message responseMessage)
+    private async Task SendResponseAsync(Models.ChatMessage triggeringMessage, Message responseMessage)
     {
         if (_messageRender == null)
             return;
@@ -270,7 +272,7 @@ public class TwitchModule : IChatModule
         }
     }
 
-    private async Task DispatchMessageToBotCoreAsync(ChatMessage chatMessage)
+    private async Task DispatchMessageToBotCoreAsync(Models.ChatMessage chatMessage)
     {
         var extra = new TwitchMessageExtra
         {
@@ -286,7 +288,7 @@ public class TwitchModule : IChatModule
 
         await _botCore.RaiseMessageReceivedAsync(
             ModuleId,
-            new IncomingChatMessage(
+            new ChatMessage(
                 Text: chatMessage.Message,
                 ExtraData: extra,
                 ReceivedAt: DateTime.UtcNow,
@@ -294,8 +296,7 @@ public class TwitchModule : IChatModule
                 PlatformUserName: chatMessage.Username,
                 PlatformChatId: chatMessage.ChannelId,
                 PlatformChatName: chatMessage.Channel
-            ),
-            platform: ModuleId
+            )
         );
     }
 
@@ -322,7 +323,7 @@ public class TwitchModule : IChatModule
 
     public void InvalidatePrefixCache(string channelId) => _prefixCache.TryRemove(channelId, out _);
 
-    private bool IsSelfMessage(ChatMessage msg) =>
+    private bool IsSelfMessage(Models.ChatMessage msg) =>
         msg.UserId.Equals(_config.BotUserId, StringComparison.OrdinalIgnoreCase) ||
         msg.Username.Equals(_config.BotUsername, StringComparison.OrdinalIgnoreCase);
 
@@ -351,14 +352,28 @@ public class TwitchModule : IChatModule
         return !string.IsNullOrWhiteSpace(commandName);
     }
 
-    private static ICommandContext CreateCommandContext(ChatMessage msg, string commandName, string[] arguments) =>
-        new TwitchCommandContext(
+    private CommandContext CreateCommandContext(Models.ChatMessage msg, string commandName, List<string> arguments, CancellationToken cancellationToken = default)
+    {
+        var chatMessage = new ChatMessage( 
+            DateTime.UtcNow,
+            msg.Message,
+            msg.UserId,
+            msg.Username,
+            msg.ChannelId,
+            msg.Channel,
+            msg);
+        
+        return new CommandContext(
             commandName,
+            ModuleId,
             arguments,
             new TwitchUser(msg.Username, msg.UserId, msg.IsModerator, msg.IsBroadcaster, msg.IsBot),
             new TwitchChannel(msg.Channel, msg.ChannelId),
-            DateTime.UtcNow
+            chatMessage,
+            cancellationToken
         );
+    }
+        
 
     private void ExecuteSafeBackground(Task task, string errorMessage)
     {

@@ -72,6 +72,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Conn
 // ^ resilience & repos
 builder.Services.RegisterResilienceStrategies();
 builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
+builder.Services.AddScoped<IChatRepository, RedisChatRepository>();
 builder.Services.AddScoped<ICommandUsageRepository, RedisCommandUsageRepository>();
 builder.Services.AddSingleton<ICustomDataRepository, RedisCustomDataRepository>();
 builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
@@ -80,6 +81,9 @@ builder.Services.AddScoped<IErrorReportRepository, ErrorReportRepository>();
 // ^ users
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPermissionManager, PermissionManager>();
+
+// ^ chats
+builder.Services.AddScoped<IChatService, ChatService>();
 
 // ^ commands & modules
 builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();

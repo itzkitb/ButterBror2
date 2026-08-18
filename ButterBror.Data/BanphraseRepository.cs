@@ -5,32 +5,23 @@ using StackExchange.Redis;
 
 namespace ButterBror.Data;
 
-public class BanphraseRepository : IBanphraseRepository
+public class BanphraseRepository(
+    IConnectionMultiplexer redis,
+    ResiliencePipelineProvider<string> pipelineProvider)
+    : IBanphraseRepository
 {
-    private readonly IConnectionMultiplexer _redis;
-    private readonly ResiliencePipeline _redisPipeline;
-    private readonly ILogger<BanphraseRepository> _logger;
+    private readonly ResiliencePipeline _redisPipeline = pipelineProvider.GetPipeline("redis");
     
     private const string GlobalPrefix = "banphrases:global:";
     private const string GlobalSetKey = "banphrases:global:categories";
     private const string ChannelPrefix = "banphrases:";
     private const string ChannelSetKeyPrefix = "banphrases:channels:";
 
-    public BanphraseRepository(
-        IConnectionMultiplexer redis,
-        ILogger<BanphraseRepository> logger,
-        ResiliencePipelineProvider<string> pipelineProvider)
-    {
-        _redis = redis;
-        _logger = logger;
-        _redisPipeline = pipelineProvider.GetPipeline("redis");
-    }
-
     public async Task<IReadOnlyList<string>> GetGlobalCategoryNamesAsync()
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
+            IDatabase db = redis.GetDatabase();
             var members = await db.SetMembersAsync(GlobalSetKey);
             return members.Select(m => m.ToString()).ToList().AsReadOnly();
         });
@@ -38,9 +29,9 @@ public class BanphraseRepository : IBanphraseRepository
 
     public async Task<string?> GetGlobalCategoryAsync(string categoryName)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
+            var db = redis.GetDatabase();
             var value = await db.StringGetAsync($"{GlobalPrefix}{categoryName}");
             return value.HasValue ? value.ToString() : null;
         });
@@ -48,9 +39,9 @@ public class BanphraseRepository : IBanphraseRepository
 
     public async Task SetGlobalCategoryAsync(string categoryName, string regexPattern)
     {
-        await _redisPipeline.ExecuteAsync(async ct =>
+        await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
+            var db = redis.GetDatabase();
             await db.StringSetAsync($"{GlobalPrefix}{categoryName}", regexPattern);
             await db.SetAddAsync(GlobalSetKey, categoryName);
         });
@@ -58,55 +49,55 @@ public class BanphraseRepository : IBanphraseRepository
 
     public async Task DeleteGlobalCategoryAsync(string categoryName)
     {
-        await _redisPipeline.ExecuteAsync(async ct =>
+        await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
+            var db = redis.GetDatabase();
             await db.KeyDeleteAsync($"{GlobalPrefix}{categoryName}");
             await db.SetRemoveAsync(GlobalSetKey, categoryName);
         });
     }
 
-    public async Task<IReadOnlyList<string>> GetChannelCategoryNamesAsync(string platform, string channelId)
+    public async Task<IReadOnlyList<string>> GetChannelCategoryNamesAsync(Guid chatId)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
-            var setKey = $"{ChannelSetKeyPrefix}{platform}:{channelId}:categories";
+            var db = redis.GetDatabase();
+            var setKey = $"{ChannelSetKeyPrefix}{chatId}:categories";
             var members = await db.SetMembersAsync(setKey);
             return members.Select(m => m.ToString()).ToList().AsReadOnly();
         });
     }
 
-    public async Task<string?> GetChannelCategoryAsync(string platform, string channelId, string categoryName)
+    public async Task<string?> GetChannelCategoryAsync(Guid chatId, string categoryName)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
-            var key = $"{ChannelPrefix}{platform}:{channelId}:{categoryName}";
+            var db = redis.GetDatabase();
+            var key = $"{ChannelPrefix}{chatId}:{categoryName}";
             var value = await db.StringGetAsync(key);
             return value.HasValue ? value.ToString() : null;
         });
     }
 
-    public async Task SetChannelCategoryAsync(string platform, string channelId, string categoryName, string regexPattern)
+    public async Task SetChannelCategoryAsync(Guid chatId, string categoryName, string regexPattern)
     {
-        await _redisPipeline.ExecuteAsync(async ct =>
+        await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
-            var key = $"{ChannelPrefix}{platform}:{channelId}:{categoryName}";
-            var setKey = $"{ChannelSetKeyPrefix}{platform}:{channelId}:categories";
+            var db = redis.GetDatabase();
+            var key = $"{ChannelPrefix}{chatId}:{categoryName}";
+            var setKey = $"{ChannelSetKeyPrefix}{chatId}:categories";
             await db.StringSetAsync(key, regexPattern);
             await db.SetAddAsync(setKey, categoryName);
         });
     }
 
-    public async Task DeleteChannelCategoryAsync(string platform, string channelId, string categoryName)
+    public async Task DeleteChannelCategoryAsync(Guid chatId, string categoryName)
     {
-        await _redisPipeline.ExecuteAsync(async ct =>
+        await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
-            var key = $"{ChannelPrefix}{platform}:{channelId}:{categoryName}";
-            var setKey = $"{ChannelSetKeyPrefix}{platform}:{channelId}:categories";
+            var db = redis.GetDatabase();
+            var key = $"{ChannelPrefix}{chatId}:{categoryName}";
+            var setKey = $"{ChannelSetKeyPrefix}{chatId}:categories";
             await db.KeyDeleteAsync(key);
             await db.SetRemoveAsync(setKey, categoryName);
         });
@@ -114,9 +105,8 @@ public class BanphraseRepository : IBanphraseRepository
 
     public async Task<IReadOnlyDictionary<string, string>> GetAllGlobalCategoriesAsync()
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
             var categoryNames = await GetGlobalCategoryNamesAsync();
             var result = new Dictionary<string, string>();
             
@@ -133,17 +123,16 @@ public class BanphraseRepository : IBanphraseRepository
         });
     }
 
-    public async Task<IReadOnlyDictionary<string, string>> GetAllChannelCategoriesAsync(string platform, string channelId)
+    public async Task<IReadOnlyDictionary<string, string>> GetAllChannelCategoriesAsync(Guid chatId)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
-            var categoryNames = await GetChannelCategoryNamesAsync(platform, channelId);
+            var categoryNames = await GetChannelCategoryNamesAsync(chatId);
             var result = new Dictionary<string, string>();
             
             foreach (var categoryName in categoryNames)
             {
-                var pattern = await GetChannelCategoryAsync(platform, channelId, categoryName);
+                var pattern = await GetChannelCategoryAsync(chatId, categoryName);
                 if (!string.IsNullOrEmpty(pattern))
                 {
                     result[categoryName] = pattern;

@@ -1,5 +1,4 @@
 ﻿using ButterBror.Domain.Entities;
-using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Registry;
 using StackExchange.Redis;
@@ -7,41 +6,32 @@ using System.Text.Json;
 
 namespace ButterBror.Data;
 
-public class RedisUserRepository : IUserRepository
+public class RedisUserRepository(
+    IConnectionMultiplexer redis,
+    ResiliencePipelineProvider<string> pipelineProvider)
+    : IUserRepository
 {
-    private readonly IConnectionMultiplexer _redis;
-    private readonly ResiliencePipeline _redisPipeline;
-    private readonly ILogger<RedisUserRepository> _logger;
+    private readonly ResiliencePipeline _redisPipeline = pipelineProvider.GetPipeline("redis");
     private const string UserPrefix = "user:";
     private const string PlatformIndexPrefix = "platform_index:";
     private const string DisplayNameIndexPrefix = "display_name_index:";
-
-    public RedisUserRepository(IConnectionMultiplexer redis, ILogger<RedisUserRepository> logger, ResiliencePipelineProvider<string> pipelineProvider)
-    {
-        _redis = redis;
-        _redisPipeline = pipelineProvider.GetPipeline("redis");
-        _logger = logger;
-    }
 
     public async Task<UserProfile?> GetByUnifiedIdAsync(Guid unifiedId)
     {
         return await _redisPipeline.ExecuteAsync(async ct =>
         {
-            IDatabase db = _redis.GetDatabase();
+            IDatabase db = redis.GetDatabase();
             string key = $"{UserPrefix}{unifiedId}";
             RedisValue json = await db.StringGetAsync(key).WaitAsync(ct);
-            // Logging shit bc shit dont shitting my shit
-            //_logger.LogDebug(json.HasValue.ToString());
-            //_logger.LogDebug(json.ToString());
             return json.HasValue ? JsonSerializer.Deserialize<UserProfile>(json.ToString()) : null;
         });
     }
 
     public async Task<UserProfile?> GetByPlatformIdAsync(string platform, string platformId)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
+            IDatabase db = redis.GetDatabase();
             string indexKey = $"{PlatformIndexPrefix}{platform.ToLowerInvariant()}:{platformId}";
             RedisValue unifiedId = await db.StringGetAsync(indexKey);
             return unifiedId.HasValue ? await GetByUnifiedIdAsync(Guid.Parse(unifiedId.ToString())) : null;
@@ -50,9 +40,9 @@ public class RedisUserRepository : IUserRepository
 
     public async Task<UserProfile> CreateOrUpdateAsync(UserProfile user)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
+            IDatabase db = redis.GetDatabase();
             string key = $"{UserPrefix}{user.UnifiedId}";
             string json = JsonSerializer.Serialize(user);
 
@@ -76,9 +66,9 @@ public class RedisUserRepository : IUserRepository
 
     public async Task<bool> UserExistsAsync(Guid unifiedId)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
+            IDatabase db = redis.GetDatabase();
             string key = $"{UserPrefix}{unifiedId}";
             return await db.KeyExistsAsync(key);
         });
@@ -86,9 +76,9 @@ public class RedisUserRepository : IUserRepository
 
     public async Task<UserProfile?> GetByDisplayNameAsync(string displayName)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = _redis.GetDatabase();
+            IDatabase db = redis.GetDatabase();
             string normalized = NormalizeDisplayName(displayName);
             string indexKey = $"{DisplayNameIndexPrefix}{normalized}";
             RedisValue unifiedId = await db.StringGetAsync(indexKey);
@@ -98,7 +88,7 @@ public class RedisUserRepository : IUserRepository
 
     public async Task<UserProfile?> FindUserAsync(string platform, string identifier)
     {
-        return await _redisPipeline.ExecuteAsync(async ct =>
+        return await _redisPipeline.ExecuteAsync(async _ =>
         {
             // S0: Searching by the platform index (the fastest way)
             var user = await GetByPlatformIdAsync(platform, identifier);

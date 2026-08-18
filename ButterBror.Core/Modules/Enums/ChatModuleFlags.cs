@@ -3,5 +3,7 @@
 public enum ChatModuleFlags
 {
     CanSendMessages,
-    CanEditMessages
+    CanEditMessages,
+    CanAttachFiles,
+    CanAddButtons
 }

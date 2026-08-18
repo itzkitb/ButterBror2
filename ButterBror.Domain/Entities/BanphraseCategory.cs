@@ -9,8 +9,7 @@ public class BanphraseCategory
 {
     public string CategoryName { get; set; } = string.Empty;
     public string Section { get; set; } = string.Empty;
-    public string Platform { get; set; } = string.Empty;
-    public string ChannelId { get; set; } = string.Empty;
+    public Guid ChatId { get; set; }
     public string RegexPattern { get; set; } = string.Empty;
     public Regex? CompiledRegex { get; set; }
     public DateTime LastAccessed { get; set; } = DateTime.UtcNow;

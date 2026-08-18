@@ -6,32 +6,25 @@ using ButterBror.Domain;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class UserService : IUserService
+public class UserService(
+    IUserRepository userRepository,
+    ICommandUsageRepository commandUsageRepository,
+    ILogger<UserService> logger)
+    : IUserService
 {
-    private readonly IUserRepository _userRepository;
-    private readonly ICommandUsageRepository _commandUsageRepository;
-    private readonly ILogger<UserService> _logger;
-
-    public UserService(IUserRepository userRepository, ICommandUsageRepository commandUsageRepository, ILogger<UserService> logger)
-    {
-        _userRepository = userRepository;
-        _commandUsageRepository = commandUsageRepository;
-        _logger = logger;
-    }
-
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
     }
 
     public async Task<UserProfile> GetOrCreateUserAsync(string platformId, string platform, string displayName)
     {
-        var user = await _userRepository.GetByPlatformIdAsync(platform, platformId);
+        var user = await userRepository.GetByPlatformIdAsync(platform, platformId);
 
         if (user != null)
         {
             user.LastActive = DateTime.UtcNow;
             user.DisplayName = displayName;
-            await _userRepository.CreateOrUpdateAsync(user);
+            await userRepository.CreateOrUpdateAsync(user);
             return user;
         }
 
@@ -45,58 +38,47 @@ public class UserService : IUserService
 
         newUser.AddPlatformId(platform, platformId);
 
-        return await _userRepository.CreateOrUpdateAsync(newUser);
+        return await userRepository.CreateOrUpdateAsync(newUser);
     }
-
-    public async Task UpdateUserStatisticsAsync(Guid unifiedUserId, string commandName, bool success)
+    
+    public async Task UpdateUserStatisticsAsync(Guid unifiedUserId, string commandId, bool success)
     {
-        var user = await _userRepository.GetByUnifiedIdAsync(unifiedUserId);
+        var user = await userRepository.GetByUnifiedIdAsync(unifiedUserId);
 
         if (user == null)
         {
-            _logger.LogWarning("User with ID {UnifiedUserId} not found for statistics update", unifiedUserId);
+            logger.LogWarning("User with ID {UnifiedUserId} not found for statistics update", unifiedUserId);
             return;
         }
 
         // Updating team statistics
-        var commandKey = $"commands.{commandName}".ToLower();
-        if (!user.Statistics.ContainsKey(commandKey))
-        {
-            user.Statistics[commandKey] = 0;
-        }
-
+        var commandKey = commandId.ToLower();
+        user.Statistics.TryAdd(commandKey, 0);
         user.Statistics[commandKey] = (int)user.Statistics[commandKey] + 1;
 
         // Updating general statistics
         var totalCommandsKey = "commands.total";
-        if (!user.Statistics.ContainsKey(totalCommandsKey))
-        {
-            user.Statistics[totalCommandsKey] = 0;
-        }
+        user.Statistics.TryAdd(totalCommandsKey, 0);
 
         user.Statistics[totalCommandsKey] = (int)user.Statistics[totalCommandsKey] + 1;
 
         if (success)
         {
             var successfulCommandsKey = "commands.successful";
-            if (!user.Statistics.ContainsKey(successfulCommandsKey))
-            {
-                user.Statistics[successfulCommandsKey] = 0;
-            }
-
+            user.Statistics.TryAdd(successfulCommandsKey, 0);
             user.Statistics[successfulCommandsKey] = (int)user.Statistics[successfulCommandsKey] + 1;
         }
 
-        await _userRepository.CreateOrUpdateAsync(user);
+        await userRepository.CreateOrUpdateAsync(user);
     }
 
-    public async Task<DateTime?> GetCommandLastUsedAsync(string commandName, Guid userId)
+    public async Task<DateTime?> GetCommandLastUsedAsync(string commandId, Guid userId)
     {
-        return await _commandUsageRepository.GetLastUsedAsync(commandName, userId);
+        return await commandUsageRepository.GetLastUsedAsync(commandId, userId);
     }
-
-    public async Task SetCommandLastUseAsync(string commandName, Guid userId, DateTime date)
+    
+    public async Task SetCommandLastUseAsync(string commandId, Guid userId, DateTime date)
     {
-        await _commandUsageRepository.SetLastUsedAsync(commandName, userId, date);
+        await commandUsageRepository.SetLastUsedAsync(commandId, userId, date);
     }
 }

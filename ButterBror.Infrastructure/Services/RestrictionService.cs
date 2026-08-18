@@ -54,7 +54,7 @@ public class RestrictionService(IConnectionMultiplexer redis) : IRestrictionServ
     // ><> Command Checks
     public async Task<CommandBlockStatus> CheckCommandStatusAsync(
         string platform, 
-        string channelId, 
+        string chatId, 
         string commandId, 
         CancellationToken ct = default)
     {
@@ -70,7 +70,7 @@ public class RestrictionService(IConnectionMultiplexer redis) : IRestrictionServ
             return CommandBlockStatus.BlockedOnPlatform;
 
         // S2. Channel
-        if (await _redis.SetContainsAsync($"blocks:cmd:chat:{plat}:{channelId}", id))
+        if (await _redis.SetContainsAsync($"blocks:cmd:chat:{plat}:{chatId}", id))
             return CommandBlockStatus.BlockedInChat;
 
         return CommandBlockStatus.Allowed;
@@ -89,9 +89,9 @@ public class RestrictionService(IConnectionMultiplexer redis) : IRestrictionServ
     public Task<bool> UnblockCommandPlatformAsync(string platform, string commandId, CancellationToken ct = default) =>
         _redis.SetRemoveAsync($"blocks:cmd:platform:{platform.ToLowerInvariant()}", commandId.ToLowerInvariant());
 
-    public Task<bool> BlockCommandChatAsync(string platform, string channelId, string commandId, CancellationToken ct = default) =>
-        _redis.SetAddAsync($"blocks:cmd:chat:{platform.ToLowerInvariant()}:{channelId}", commandId.ToLowerInvariant());
+    public Task<bool> BlockCommandChatAsync(string platform, string chatId, string commandId, CancellationToken ct = default) =>
+        _redis.SetAddAsync($"blocks:cmd:chat:{platform.ToLowerInvariant()}:{chatId}", commandId.ToLowerInvariant());
 
-    public Task<bool> UnblockCommandChatAsync(string platform, string channelId, string commandId, CancellationToken ct = default) =>
-        _redis.SetRemoveAsync($"blocks:cmd:chat:{platform.ToLowerInvariant()}:{channelId}", commandId.ToLowerInvariant());
+    public Task<bool> UnblockCommandChatAsync(string platform, string chatId, string commandId, CancellationToken ct = default) =>
+        _redis.SetRemoveAsync($"blocks:cmd:chat:{platform.ToLowerInvariant()}:{chatId}", commandId.ToLowerInvariant());
 }

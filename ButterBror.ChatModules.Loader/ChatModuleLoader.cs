@@ -172,8 +172,7 @@ public class ChatModuleLoader : IChatModuleLoader, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load module from archive. path='{Path}'", path);
-            throw;
+            _logger.LogError(ex, "failed to load module from archive. path='{Path}'", path);
         }
 
         return modules;

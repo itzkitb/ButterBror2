@@ -8,7 +8,7 @@ namespace ButterBror.Application.Commands;
 public class UserInfoCommand : ICommand
 {
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         try
@@ -16,7 +16,7 @@ public class UserInfoCommand : ICommand
             var localization = serviceProvider.GetService<ILocalizationService>();
             var userRepository = serviceProvider.GetService<IUserRepository>();
 
-            var platform = context.Channel.Platform.ToLowerInvariant();
+            var platform = context.PlatformId.ToLowerInvariant();
             var targetUsername = context.Arguments.Count > 0
                 ? context.Arguments[0]
                 : context.User.DisplayName;
@@ -39,7 +39,7 @@ public class UserInfoCommand : ICommand
                 ex,
                 "Failed to execute UserInfo",
                 context.User.UnifiedId,
-                context.Channel.Platform,
+                context.PlatformId,
                 context);
         }
     }

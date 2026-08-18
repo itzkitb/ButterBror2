@@ -5,16 +5,16 @@ using ButterBror.Domain.Entities;
 
 namespace ButterBror.Core.Models;
 
-public class ExtendedCommandContext : ICommandContext
+/*public class ExtendedCommandContext : ICommandContext
 {
     public ExtendedCommandContext(ICommandContext originalContext, UserProfile user)
     {
         CommandName = originalContext.CommandName;
         Arguments = originalContext.Arguments;
-        User = originalContext.User;
-        Channel = originalContext.Channel;
+        PlatformUser = originalContext.PlatformUser;
+        Chat = originalContext.Chat;
         ExecutedAt = originalContext.ExecutedAt;
-        Platform = originalContext.Platform;
+        PlatformId = originalContext.PlatformId;
         CorrelationId = originalContext.CorrelationId;
         UnifiedUserId = user.UnifiedId;
         Locale = user.PreferredLocale;
@@ -25,13 +25,14 @@ public class ExtendedCommandContext : ICommandContext
 
     public string CommandName { get; }
     public string[] Arguments { get; }
-    public IPlatformUser User { get; }
+    public IPlatformUser PlatformUser { get; }
     public UserProfile UserProfile { get; }
-    public IPlatformChannel Channel { get; }
+    public IPlatformChannel Chat { get; }
     public DateTime ExecutedAt { get; }
-    public string Platform { get; }
+    public string PlatformId { get; }
     public Guid CorrelationId { get; }
     public Guid UnifiedUserId { get; }
     public string Locale { get; }
     public CancellationToken CancellationToken { get; set; }
 }
+*/

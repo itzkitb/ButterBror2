@@ -20,7 +20,8 @@ public record Attachment(
     /// </summary>
     public static Attachment FromFileId(AttachmentType type, string fileId, string? caption = null)
     {
-        if (string.IsNullOrWhiteSpace(fileId)) throw new ArgumentException("FileId cannot be empty.", nameof(fileId));
+        if (string.IsNullOrWhiteSpace(fileId))
+            throw new ArgumentException("FileId cannot be empty.", nameof(fileId));
         return new Attachment(type, FileId: fileId, Caption: caption);
     }
 
@@ -29,7 +30,8 @@ public record Attachment(
     /// </summary>
     public static Attachment FromUrl(AttachmentType type, string url, string? caption = null)
     {
-        if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("URL cannot be empty.", nameof(url));
+        if (string.IsNullOrWhiteSpace(url))
+            throw new ArgumentException("URL cannot be empty.", nameof(url));
         return new Attachment(type, Url: url, Caption: caption);
     }
 
@@ -38,8 +40,10 @@ public record Attachment(
     /// </summary>
     public static Attachment FromStream(AttachmentType type, Stream stream, string fileName, string? caption = null)
     {
-        if (stream == null) throw new ArgumentNullException(nameof(stream));
-        if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("FileName cannot be empty.", nameof(fileName));
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new ArgumentException("FileName cannot be empty.", nameof(fileName));
         return new Attachment(type, FileStream: stream, FileName: fileName, Caption: caption);
     }
 }
