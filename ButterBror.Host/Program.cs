@@ -23,13 +23,13 @@ using ButterBror.Infrastructure.Storage;
 using ButterBror.Localization.Services;
 using ButterBror.Modules.Loader;
 
-// ><> Console setup
+// ><> console setup
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding  = Encoding.UTF8;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// ><> Configs
+// ><> configs
 builder.Logging.ClearProviders();
 
 builder.Logging.AddConsole(options =>
@@ -49,14 +49,14 @@ builder.Services.Configure<CustomConsoleFormatterOptions>(options =>
 
 builder.Logging.AddConsoleFormatter<CustomConsoleFormatter, CustomConsoleFormatterOptions>();
 
-// Log Level Filters
+// log level filters
 builder.Logging.AddFilter("Polly", LogLevel.Warning);
 builder.Logging.AddFilter("Polly.Core", LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 
-// ><> Services
+// ><> services
 
-// ^ Core & Infrastructure
+// ^ core & infrastructure
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IBotCoreInfo, BotCoreInfo>();
 builder.Services.AddSingleton<IBotCore, BotCoreService>();
@@ -65,11 +65,11 @@ builder.Services.AddSingleton<AppDataStorageProvider>();
 builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
 builder.Services.AddSingleton<IDynamicServiceProvider>(sp => new DynamicServiceProvider(sp));
 
-// ^ Database
+// ^ database
 var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,allowAdmin=true,abortConnect=false";
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConfig));
 
-// ^ Resilience & Repos
+// ^ resilience & repos
 builder.Services.RegisterResilienceStrategies();
 builder.Services.AddScoped<IUserRepository, RedisUserRepository>();
 builder.Services.AddScoped<ICommandUsageRepository, RedisCommandUsageRepository>();
@@ -77,11 +77,11 @@ builder.Services.AddSingleton<ICustomDataRepository, RedisCustomDataRepository>(
 builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
 builder.Services.AddScoped<IErrorReportRepository, ErrorReportRepository>();
 
-// ^ Users
+// ^ users
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPermissionManager, PermissionManager>();
 
-// ^ Commands & Modules
+// ^ commands & modules
 builder.Services.AddScoped<ICommandProcessor, CommandProcessor>();
 builder.Services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
 builder.Services.AddSingleton<IPlatformModuleManager, PlatformModuleManager>();
@@ -91,26 +91,26 @@ builder.Services.AddSingleton<ICommandRegistry, CommandRegistry>();
 builder.Services.AddSingleton<IChatModuleLoader, ChatModuleLoader>();
 builder.Services.AddSingleton<ICommandModuleLoader, CommandModuleLoader>();
 
-// ^ Domain & Feature
+// ^ domain & feature
 builder.Services.AddScoped<IFormatterService, FormatterService>();
 builder.Services.AddSingleton<IBotStatsService, BotStatsService>();
 builder.Services.AddSingleton<IBanphraseService, BanphraseService>();
 builder.Services.AddScoped<IErrorTrackingService, ErrorTrackingService>();
 builder.Services.AddSingleton<IRestrictionService, RestrictionService>();
 
-// ^ Localization
+// ^ localization
 builder.Services.AddSingleton<TranslationFileLoader>();
 builder.Services.AddSingleton<LocaleRegistryService>();
 builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
 
-// ^ External Integrations
+// ^ external integrations
 builder.Services.AddHttpClient<IPasteBinService, PasteBinService>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
         AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
     });
 
-// ^ Dashboard
+// ^ dashboard
 builder.Services.Configure<DashboardOptions>(builder.Configuration.GetSection("Dashboard"));
 builder.Services.AddSingleton<IDashboardBridge, DashboardBridge>();
 builder.Services.AddSingleton<MetricsCollector>();
@@ -119,27 +119,27 @@ builder.Services.AddSingleton<RedisExplorerService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<IDeviceStatsService, DeviceStatsService>();
 
-// ^ Hosted
+// ^ hosted
 builder.Services.AddHostedService<DashboardServer>();
 builder.Services.AddHostedService<DeviceStatsHostedService>();
 builder.Services.AddHostedService<BotHostedService>();
 
-// ><> Build & Post-build
+// ><> build & post-build
 var host = builder.Build();
 
-// S0: Logger & Core Info
+// s0: logger & core info
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("· - —==≡ ButterBror is starting ≡==- — ·");
+logger.LogInformation("· - —==≡ butterbror is starting ≡==- — ·");
 
 var coreInfoService = host.Services.GetRequiredService<IBotCoreInfo>();
 coreInfoService.Initialize();
 
-// S1: Dashboard Logger Provider
+// s1: dashboard logger provider
 var bridge = host.Services.GetRequiredService<IDashboardBridge>();
 var loggerFactory = host.Services.GetRequiredService<ILoggerFactory>();
 loggerFactory.AddProvider(new DashboardLoggerProvider(bridge));
 
-// S2: Stats Init & Graceful Shutdown Setup
+// s2: stats init & graceful shutdown setup
 var statsService = host.Services.GetRequiredService<IBotStatsService>();
 await statsService.InitializeAsync(CancellationToken.None);
 
@@ -149,7 +149,7 @@ lifetime.ApplicationStopping.Register(async void () =>
     await statsService.FlushAsync(CancellationToken.None);
 });
 
-// S3: Admin User
+// s3: admin user
 using (var scope = host.Services.CreateScope())
 {
     try
@@ -175,7 +175,7 @@ using (var scope = host.Services.CreateScope())
     }
 }
 
-// S4: Global Commands & Localization Setup
+// s4: global commands & localization setup
 using (var scope = host.Services.CreateScope())
 {
     var commandRegistry = scope.ServiceProvider.GetRequiredService<ICommandRegistry>();
@@ -201,11 +201,11 @@ using (var scope = host.Services.CreateScope())
         new BlockCommandMeta()
     );
 
-    // Load global banphrase categories
+    // global banphrases
     var banphraseService = scope.ServiceProvider.GetRequiredService<IBanphraseService>();
     await banphraseService.ReloadGlobalCategoriesAsync();
 
-    // Init Localization
+    // localization
     var localizationService = scope.ServiceProvider.GetRequiredService<ILocalizationService>();
     if (localizationService is LocalizationService impl)
     {
@@ -214,6 +214,6 @@ using (var scope = host.Services.CreateScope())
     localizationService.RegisterModuleTranslations("butterbror:system", Localization.DefaultTranslations);
 }
 
-// ><> Hello, world!
+// ><> hello, world!
 await host.RunAsync();
-// ><> Bye.
+// ><> bye
