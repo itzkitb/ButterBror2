@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 

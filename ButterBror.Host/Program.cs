@@ -13,7 +13,8 @@ using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Dashboard;
 using ButterBror.Dashboard.Services;
-using ButterBror.Data;
+using ButterBror.Data.Interfaces;
+using ButterBror.Data.Repositories;
 using ButterBror.Domain;
 using ButterBror.Host;
 using ButterBror.Host.Logging;
@@ -185,7 +186,7 @@ using (var scope = host.Services.CreateScope())
     var commandRegistry = scope.ServiceProvider.GetRequiredService<ICommandRegistry>();
 
     commandRegistry.RegisterGlobalCommand(
-        () => new UserInfoCommand(),
+        () => new UserInfoCommand(host.Services),
         new UserInfoMeta()
     );
     commandRegistry.RegisterGlobalCommand(

@@ -1,5 +1,6 @@
 ﻿using ButterBror.Core.Interfaces;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using ButterBror.Domain.Entities;
 
 namespace ButterBror.Infrastructure.Services;

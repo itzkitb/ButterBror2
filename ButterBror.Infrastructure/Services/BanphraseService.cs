@@ -1,35 +1,29 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Models;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using ButterBror.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class BanphraseService : IBanphraseService
+public class BanphraseService(
+    IBanphraseRepository repository,
+    ILogger<BanphraseService> logger)
+    : IBanphraseService
 {
-    private readonly IBanphraseRepository _repository;
-    private readonly ILogger<BanphraseService> _logger;
-    
     // Global categories - always loaded
     private readonly ConcurrentDictionary<string, BanphraseCategory> _globalCategories = new();
     
     // Channel categories - LRU cached with limit
     private readonly ConcurrentDictionary<string, BanphraseCategory> _channelCategories = new();
-    private readonly int _maxChannelCategories = 1000; // Limit to prevent memory overflow
+    private readonly int _maxChannelCategories = 1000;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
     
     private bool _globalCategoriesLoaded = false;
     private readonly object _globalLoadLock = new();
-
-    public BanphraseService(
-        IBanphraseRepository repository,
-        ILogger<BanphraseService> logger)
-    {
-        _repository = repository;
-        _logger = logger;
-    }
 
     public async Task<BanphraseCheckResult> CheckMessageAsync(
         Guid chatId,
@@ -47,7 +41,7 @@ public class BanphraseService : IBanphraseService
                 var matchedPhrase = category.GetMatchedPhrase(message);
                 var matchedPattern = category.GetMatchedPatternPart(message);
 
-                _logger.LogDebug(
+                logger.LogDebug(
                     "Message blocked by global banphrase. Category: {Category}, Pattern: {Pattern}, Phrase: {Phrase}",
                     category.CategoryName,
                     matchedPattern,
@@ -71,7 +65,7 @@ public class BanphraseService : IBanphraseService
                 var matchedPhrase = category.GetMatchedPhrase(message);
                 var matchedPattern = category.GetMatchedPatternPart(message);
 
-                _logger.LogDebug(
+                logger.LogDebug(
                     "message blocked by channel banphrase. chat: {Channel}, cat: {Category}, pattern: {Pattern}, phrase: {Phrase}",
                     chatId,
                     category.CategoryName,
@@ -112,21 +106,21 @@ public class BanphraseService : IBanphraseService
 
     public async Task ReloadGlobalCategoriesAsync()
     {
-        var categories = await _repository.GetAllGlobalCategoriesAsync();
+        var categories = await repository.GetGlobalCategoriesAsync();
         var newCategories = new ConcurrentDictionary<string, BanphraseCategory>();
         
         foreach (var kvp in categories)
         {
             var category = new BanphraseCategory
             {
-                CategoryName = kvp.Key,
+                CategoryName = kvp.Name,
                 Section = "global",
                 ChatId = new Guid(),
-                RegexPattern = kvp.Value,
+                RegexPattern = kvp.Pattern,
                 LastAccessed = DateTime.UtcNow
             };
             category.CompileRegex();
-            newCategories[kvp.Key] = category;
+            newCategories[kvp.Name] = category;
         }
         
         // Atomic swap
@@ -136,7 +130,7 @@ public class BanphraseService : IBanphraseService
             _globalCategories[kvp.Key] = kvp.Value;
         }
         
-        _logger.LogInformation(
+        logger.LogInformation(
             "Loaded global banphrase categories. count={Count}",
             _globalCategories.Count);
     }
@@ -185,25 +179,25 @@ public class BanphraseService : IBanphraseService
                 EvictOldestChannelCategories();
             }
             
-            var categories = await _repository.GetAllChannelCategoriesAsync(chatId);
+            var categories = await repository.GetChannelCategoriesAsync(chatId);
             
             foreach (var kvp in categories)
             {
                 var category = new BanphraseCategory
                 {
-                    CategoryName = kvp.Key,
+                    CategoryName = kvp.Name,
                     Section = chatId.ToString(),
                     ChatId = chatId,
-                    RegexPattern = kvp.Value,
+                    RegexPattern = kvp.Pattern,
                     LastAccessed = DateTime.UtcNow
                 };
                 category.CompileRegex();
                 
-                var key = $"{chatId}:{kvp.Key}";
+                var key = $"{chatId}:{kvp.Name}";
                 _channelCategories[key] = category;
             }
             
-            _logger.LogDebug(
+            logger.LogDebug(
                 "Loaded {Count} channel banphrase categories for {ChatId}",
                 categories.Count,
                 chatId);
@@ -226,7 +220,7 @@ public class BanphraseService : IBanphraseService
             _channelCategories.TryRemove(kvp.Key, out _);
         }
         
-        _logger.LogDebug("Evicted {Count} old channel banphrase categories", oldest.Count);
+        logger.LogDebug("Evicted {Count} old channel banphrase categories", oldest.Count);
     }
 
     public async Task<bool> SetCategoryAsync(
@@ -242,7 +236,7 @@ public class BanphraseService : IBanphraseService
             
             if (section.ToLowerInvariant() == "global")
             {
-                await _repository.SetGlobalCategoryAsync(categoryName, regexPattern);
+                await repository.SetGlobalCategoryAsync(categoryName, regexPattern);
                 
                 // Update cache
                 var category = new BanphraseCategory
@@ -254,11 +248,11 @@ public class BanphraseService : IBanphraseService
                 category.CompileRegex();
                 _globalCategories[categoryName] = category;
                 
-                _logger.LogInformation("Set global banphrase category: {Category}", categoryName);
+                logger.LogInformation("Set global banphrase category: {Category}", categoryName);
             }
             else
             {
-                await _repository.SetChannelCategoryAsync(chatId, categoryName, regexPattern);
+                await repository.SetChannelCategoryAsync(chatId, categoryName, regexPattern);
                 
                 // Update cache
                 var category = new BanphraseCategory
@@ -272,7 +266,7 @@ public class BanphraseService : IBanphraseService
                 var key = $"{chatId}:{categoryName}";
                 _channelCategories[key] = category;
                 
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Set channel banphrase category: {Category} for {ChatId}",
                     categoryName,
                     chatId);
@@ -282,42 +276,42 @@ public class BanphraseService : IBanphraseService
         }
         catch (RegexParseException ex)
         {
-            _logger.LogError(ex, "Invalid regex pattern for category: {Category}", categoryName);
+            logger.LogError(ex, "Invalid regex pattern for category: {Category}", categoryName);
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to set banphrase category: {Category}", categoryName);
+            logger.LogError(ex, "Failed to set banphrase category: {Category}", categoryName);
             return false;
         }
     }
 
-    public async Task<string?> GetCategoryAsync(
+    public async Task<BanphraseRecord?> GetCategoryAsync(
         string section,
         Guid chatId,
         string categoryName)
     {
         if (section.ToLowerInvariant() == "global")
         {
-            return await _repository.GetGlobalCategoryAsync(categoryName);
+            return await repository.GetGlobalCategoryAsync(categoryName);
         }
         else
         {
-            return await _repository.GetChannelCategoryAsync(chatId, categoryName);
+            return await repository.GetChannelCategoryAsync(chatId, categoryName);
         }
     }
 
-    public async Task<IReadOnlyList<string>> ListCategoriesAsync(
+    public async Task<IReadOnlyList<BanphraseRecord>> ListCategoriesAsync(
         string section,
         Guid chatId)
     {
         if (section.ToLowerInvariant() == "global")
         {
-            return await _repository.GetGlobalCategoryNamesAsync();
+            return await repository.GetGlobalCategoriesAsync();
         }
         else
         {
-            return await _repository.GetChannelCategoryNamesAsync(chatId);
+            return await repository.GetChannelCategoriesAsync(chatId);
         }
     }
 
@@ -328,16 +322,16 @@ public class BanphraseService : IBanphraseService
     {
         if (section.ToLowerInvariant() == "global")
         {
-            await _repository.DeleteGlobalCategoryAsync(categoryName);
+            await repository.DeleteGlobalCategoryAsync(categoryName);
             _globalCategories.TryRemove(categoryName, out _);
-            _logger.LogInformation("Deleted global banphrase category: {Category}", categoryName);
+            logger.LogInformation("Deleted global banphrase category: {Category}", categoryName);
         }
         else
         {
-            await _repository.DeleteChannelCategoryAsync(chatId, categoryName);
+            await repository.DeleteChannelCategoryAsync(chatId, categoryName);
             var key = $"{chatId}:{categoryName}";
             _channelCategories.TryRemove(key, out _);
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Deleted channel banphrase category: {Category} for {ChatId}",
                 categoryName,
                 chatId);

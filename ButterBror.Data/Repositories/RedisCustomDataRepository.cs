@@ -1,32 +1,26 @@
-using System;
+using ButterBror.Data.Interfaces;
 using Polly;
 using Polly.Registry;
 using StackExchange.Redis;
 
-namespace ButterBror.Data;
+namespace ButterBror.Data.Repositories;
 
-public class RedisCustomDataRepository : ICustomDataRepository
+public class RedisCustomDataRepository(
+    IConnectionMultiplexer redis,
+    ResiliencePipelineProvider<string> pipelineProvider)
+    : ICustomDataRepository
 {
-    private readonly IConnectionMultiplexer _redis;
-    private readonly ResiliencePipeline _redisPipeline;
+    private readonly ResiliencePipeline _redisPipeline = pipelineProvider.GetPipeline("redis");
     private const string CustomPrefix = "custom:";
-
-    public RedisCustomDataRepository(
-        IConnectionMultiplexer redis, 
-        ResiliencePipelineProvider<string> pipelineProvider)
-    {
-        _redis = redis;
-        _redisPipeline = pipelineProvider.GetPipeline("redis");
-    }
 
     public async Task SetDataAsync(string key, string value, TimeSpan? expiry = null)
     {
-        await _redisPipeline.ExecuteAsync(async ct => 
+        await _redisPipeline.ExecuteAsync(async _ => 
         {
-            var db = _redis.GetDatabase();
+            var db = redis.GetDatabase();
             if (expiry != null)
             {
-                await db.StringSetAsync($"{CustomPrefix}{key}", value, (Expiration)(TimeSpan)expiry);
+                await db.StringSetAsync($"{CustomPrefix}{key}", value, (TimeSpan)expiry);
             }
             else
             {
@@ -37,9 +31,9 @@ public class RedisCustomDataRepository : ICustomDataRepository
 
     public async Task<string?> GetDataAsync(string key)
     {
-        return await _redisPipeline.ExecuteAsync(async ct => 
+        return await _redisPipeline.ExecuteAsync(async _ => 
         {
-            var db = _redis.GetDatabase();
+            var db = redis.GetDatabase();
             var value = await db.StringGetAsync($"{CustomPrefix}{key}");
             return value.HasValue ? value.ToString() : null;
         });
@@ -47,9 +41,9 @@ public class RedisCustomDataRepository : ICustomDataRepository
 
     public async Task<bool> DeleteDataAsync(string key)
     {
-        return await _redisPipeline.ExecuteAsync(async ct => 
+        return await _redisPipeline.ExecuteAsync(async _ => 
         {
-            var db = _redis.GetDatabase();
+            var db = redis.GetDatabase();
             return await db.KeyDeleteAsync($"{CustomPrefix}{key}");
         });
     }
@@ -60,17 +54,17 @@ public class RedisCustomDataRepository : ICustomDataRepository
         {
             var result = new Dictionary<string, string>();
  
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
-            var db = _redis.GetDatabase();
+            var server = redis.GetServer(redis.GetEndPoints().First());
+            var db = redis.GetDatabase();
  
             var fullPattern = $"{CustomPrefix}{pattern}";
  
-            await foreach (var redisKey in server.KeysAsync(pattern: fullPattern))
+            await foreach (var redisKey in server.KeysAsync(pattern: fullPattern).WithCancellation(ct))
             {
                 var val = await db.StringGetAsync(redisKey);
                 if (!val.HasValue) continue;
  
-                var userKey = redisKey.ToString().Substring(CustomPrefix.Length);
+                var userKey = redisKey.ToString()[CustomPrefix.Length..];
                 result[userKey] = val.ToString();
             }
  

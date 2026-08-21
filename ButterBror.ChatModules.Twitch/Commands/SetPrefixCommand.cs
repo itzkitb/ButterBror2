@@ -2,6 +2,7 @@
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

@@ -17,6 +17,7 @@ using TwitchLib.Communication.Clients;
 using TwitchLib.Communication.Models;
 using TwitchLib.EventSub.Websockets;
 using System.Threading.Channels;
+using ButterBror.Data.Interfaces;
 
 namespace ButterBror.ChatModules.Twitch.Services;
 

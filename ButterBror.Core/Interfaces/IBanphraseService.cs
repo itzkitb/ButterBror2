@@ -1,3 +1,5 @@
+using ButterBror.Core.Models;
+
 namespace ButterBror.Core.Interfaces;
 
 /// <summary>
@@ -36,7 +38,7 @@ public interface IBanphraseService
     /// <summary>
     /// Get banphrase category pattern
     /// </summary>
-    Task<string?> GetCategoryAsync(
+    Task<BanphraseRecord?> GetCategoryAsync(
         string section,
         Guid chatId,
         string categoryName);
@@ -44,7 +46,7 @@ public interface IBanphraseService
     /// <summary>
     /// List all categories in section
     /// </summary>
-    Task<IReadOnlyList<string>> ListCategoriesAsync(
+    Task<IReadOnlyList<BanphraseRecord>> ListCategoriesAsync(
         string section,
         Guid chatId);
     

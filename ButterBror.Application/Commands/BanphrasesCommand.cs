@@ -11,44 +11,31 @@ public class BanphrasesCommand : ICommand
         CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        try
+        var logger = serviceProvider.GetService<ILogger<BanphrasesCommand>>();
+        var banphraseService = serviceProvider.GetService<IBanphraseService>();
+        var hasteBinService = serviceProvider.GetService<IPasteBinService>();
+        var localization = serviceProvider.GetService<ILocalizationService>();
+
+        if (context.Arguments.Count < 2)
         {
-            var logger = serviceProvider.GetService<ILogger<BanphrasesCommand>>();
-            var banphraseService = serviceProvider.GetService<IBanphraseService>();
-            var hasteBinService = serviceProvider.GetService<IPasteBinService>();
-            var localization = serviceProvider.GetService<ILocalizationService>();
-            
-            if (context.Arguments.Count < 2)
-            {
-                return CommandResult.Failure(
-                    await localization.GetStringAsync("command.banphrases.usage", context.Locale));
-            }
-            
-            var action = context.Arguments[0].ToLowerInvariant();
-            
-            return action switch
-            {
-                "set" => await HandleSetAsync(context, banphraseService, hasteBinService, logger, localization),
-                "get" => await HandleGetAsync(context, banphraseService, hasteBinService, logger, localization),
-                "list" => await HandleListAsync(context, banphraseService, hasteBinService, logger, localization),
-                "test" => await HandleTestAsync(context, banphraseService, localization),
-                "delete" => await HandleDeleteAsync(context, banphraseService, localization),
-                _ => CommandResult.Failure(
-                        await localization.GetStringAsync("command.banphrases.unknown", context.Locale))
-            };
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.usage", context.Locale));
         }
-        catch (Exception ex)
+
+        var action = context.Arguments[0].ToLowerInvariant();
+
+        return action switch
         {
-            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
-            return await errorTracking.LogErrorAsync(
-                ex,
-                "Failed to execute BanphrasesCommand",
-                context.User.UnifiedId,
-                context.PlatformId,
-                context);
-        }
+            "set" => await HandleSetAsync(context, banphraseService, hasteBinService, logger, localization),
+            "get" => await HandleGetAsync(context, banphraseService, hasteBinService, logger, localization),
+            "list" => await HandleListAsync(context, banphraseService, hasteBinService, logger, localization),
+            "test" => await HandleTestAsync(context, banphraseService, localization),
+            "delete" => await HandleDeleteAsync(context, banphraseService, localization),
+            _ => CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.unknown", context.Locale))
+        };
     }
-    
+
     private async Task<CommandResult> HandleSetAsync(
         CommandContext context,
         IBanphraseService banphraseService,
@@ -189,8 +176,9 @@ public class BanphrasesCommand : ICommand
         var section = context.Arguments[1].ToLowerInvariant();
         var categoryName = context.Arguments[2];
         var channelId = context.ChatInfo.UnifiedId;
-        
-        var pattern = await banphraseService.GetCategoryAsync(section, channelId, categoryName);
+
+        var record = await banphraseService.GetCategoryAsync(section, channelId, categoryName);
+        var pattern = record?.Pattern;
         
         if (string.IsNullOrEmpty(pattern))
         {
@@ -244,7 +232,7 @@ public class BanphrasesCommand : ICommand
         
         foreach (var category in categories)
         {
-            var pattern = await banphraseService.GetCategoryAsync(section, channelId, category);
+            var pattern = category.Pattern;
             var displayPattern = pattern?.Length > 50 ? pattern[..50] + "..." : pattern ?? "(empty)";
             listContent.AppendLine($"- {category}");
             listContent.AppendLine($"  Regex: {displayPattern}");

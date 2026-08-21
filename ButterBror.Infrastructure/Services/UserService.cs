@@ -1,6 +1,7 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Domain.Entities;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using Microsoft.Extensions.Logging;
 using ButterBror.Domain;
 

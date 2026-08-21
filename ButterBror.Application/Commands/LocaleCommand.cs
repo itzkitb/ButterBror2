@@ -3,6 +3,7 @@ using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using ButterBror.Localization.Models;
 using ButterBror.Localization.Services;
 using Microsoft.Extensions.Logging;
@@ -15,45 +16,33 @@ namespace ButterBror.Application.Commands;
 public class LocaleCommand : ICommand
 {
     private static string _defaultLocale = "EN_US";
+
     public async Task<CommandResult> ExecuteAsync(
         CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        try
+        var logger = serviceProvider.GetService<ILogger<LocaleCommand>>();
+        var localization = serviceProvider.GetService<ILocalizationService>();
+        var userRepository = serviceProvider.GetService<IUserRepository>();
+
+        if (context.Arguments.Count == 0)
         {
-            var logger = serviceProvider.GetService<ILogger<LocaleCommand>>();
-            var localization = serviceProvider.GetService<ILocalizationService>();
-            var userRepository = serviceProvider.GetService<IUserRepository>();
-
-            if (context.Arguments.Count == 0)
-            {
-                return CommandResult.Failure(
-                    await localization.GetStringAsync("command.locale.usage", _defaultLocale));
-            }
-
-            var action = context.Arguments[0].ToLowerInvariant();
-
-            return action switch
-            {
-                "set" => await HandleSetAsync(context, serviceProvider, localization, userRepository, logger),
-                "list" => await HandleListAsync(serviceProvider, localization),
-                "delete" => await HandleDeleteAsync(context, serviceProvider, localization, logger),
-                "view" => await HandleViewAsync(context, serviceProvider, localization, logger),
-                "reload" => await HandleReloadAsync(context, serviceProvider, localization, logger),
-                _ => CommandResult.Failure(
-                    await localization.GetStringAsync("command.locale.unknown", _defaultLocale))
-            };
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.locale.usage", _defaultLocale));
         }
-        catch (Exception ex)
+
+        var action = context.Arguments[0].ToLowerInvariant();
+
+        return action switch
         {
-            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
-            return await errorTracking.LogErrorAsync(
-                ex,
-                "Failed to execute LocaleCommand",
-                context.User.UnifiedId,
-                context.PlatformId,
-                context);
-        }
+            "set" => await HandleSetAsync(context, serviceProvider, localization, userRepository, logger),
+            "list" => await HandleListAsync(serviceProvider, localization),
+            "delete" => await HandleDeleteAsync(context, serviceProvider, localization, logger),
+            "view" => await HandleViewAsync(context, serviceProvider, localization, logger),
+            "reload" => await HandleReloadAsync(context, serviceProvider, localization, logger),
+            _ => CommandResult.Failure(
+                await localization.GetStringAsync("command.locale.unknown", _defaultLocale))
+        };
     }
 
     private async Task<CommandResult> HandleSetAsync(

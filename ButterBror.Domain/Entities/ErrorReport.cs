@@ -5,7 +5,7 @@ namespace ButterBror.Domain.Entities;
 /// </summary>
 public class ErrorReport
 {
-    public string ErrorId { get; set; } = string.Empty;
+    public Guid ErrorId { get; set; }
     public string ExceptionType { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string? StackTrace { get; set; }

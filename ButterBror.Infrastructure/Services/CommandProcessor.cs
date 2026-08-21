@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Messaging;
 using ButterBror.Core.Modules.Commands;
@@ -24,7 +22,7 @@ public class CommandProcessor(
     public async Task<CommandResult> ProcessCommandAsync(CommandContext context)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        string unifiedUserId = "unknown";
+        var userId = Guid.Empty;
 
         try
         {
@@ -34,7 +32,7 @@ public class CommandProcessor(
                 context.PlatformId,
                 context.PlatformUser.DisplayName
             );
-            unifiedUserId = user.UnifiedId.ToString();
+            userId = user.UnifiedId;
             
             // s1: getting/creating chat
             var chat = await chatService.GetOrCreateChatAsync(
@@ -154,56 +152,13 @@ public class CommandProcessor(
         catch (Exception ex)
         {
             stopwatch.Stop();
-            var errorHash = GenerateExceptionHash(ex);
+            var errorLog = await errorTrackingService.LogErrorAsync(ex, "command error", userId, context.PlatformId, context);
             logger.LogError(ex,
                 "Error processing command. name='{CommandName}', uid='{UserId}', error_code='{ErrorCode}'",
-                context.CommandName, unifiedUserId, errorHash);
-
-            errorTrackingService.LogError(ex, "The exception was not caught at the command level", context);
-
-            return new CommandResult
-            {
-                Success = false,
-                Message = new Message(
-                    $"🚨 | An internal error has occurred ▹ The developers are already aware of it ▹ Error code: {errorHash}"),
-                ExecutionTime = stopwatch.Elapsed,
-                SendResult = true
-            };
+                context.CommandName, userId, errorLog.Item2.Hash);
+            
+            return errorLog.Item1;
         }
-    }
-
-    public static string GenerateExceptionHash(Exception ex)
-    {
-        // S0: Receive class
-        var targetMethod = ex.TargetSite;
-        string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";
-
-        // S1: Generating an abbreviation
-        string abbreviation = GetPascalCaseAbbreviation(className);
-
-        // S2: Calculate a hash
-        string input = $"{ex.GetType().FullName}\n{ex.StackTrace}";
-        using var sha256 = SHA256.Create();
-        byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
-        string hash = Convert.ToHexString(bytes)[..8];
-
-        // S3: Final
-        return $"{abbreviation}:{hash}";
-    }
-
-    private static string GetPascalCaseAbbreviation(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return "UNK";
-        
-        string cleanName = new string(input.Where(char.IsLetterOrDigit).ToArray());
-        var upperLetters = cleanName.Where(char.IsUpper).ToArray();
-
-        if (upperLetters.Length > 0)
-        {
-            return new string(upperLetters);
-        }
-        
-        return cleanName.Length >= 3 ? cleanName[..3].ToUpper() : cleanName.ToUpper();
     }
     
     private async Task<CommandResult> ValidateCommand(CommandContext context, ICommandMetadata meta, UserProfile user)

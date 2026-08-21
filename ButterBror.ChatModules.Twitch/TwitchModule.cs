@@ -9,6 +9,7 @@ using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Enums;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using ButterBror.Domain.Chat;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

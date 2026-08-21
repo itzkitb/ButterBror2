@@ -3,6 +3,7 @@ using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 
 namespace ButterBror.Application.Commands;
 
@@ -12,42 +13,32 @@ public class BlockCommand : ICommand
         CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        try
-        {
-            var restrictionService = serviceProvider.GetService<IRestrictionService>();
-            var localization = serviceProvider.GetService<ILocalizationService>();
-            var userRepository = serviceProvider.GetService<IUserRepository>();
-            var blockCommandId = new BlockCommandMeta().Id;
+        var restrictionService = serviceProvider.GetService<IRestrictionService>();
+        var localization = serviceProvider.GetService<ILocalizationService>();
+        var userRepository = serviceProvider.GetService<IUserRepository>();
+        var blockCommandId = new BlockCommandMeta().Id;
 
-            if (context.Arguments.Count < 1)
-            {
-                return CommandResult.Failure(
-                    await localization.GetStringAsync("command.block.usage", context.Locale));
-            }
-            
-            var isBlock = !context.CommandName.Equals("unblock", StringComparison.OrdinalIgnoreCase) 
-                          && !context.CommandName.Equals("unban", StringComparison.OrdinalIgnoreCase);
-            var targetType = context.Arguments[0].ToLowerInvariant(); // user / global / platform / chat
-
-            return targetType switch
-            {
-                "user" => await HandleUserBlockAsync(context, restrictionService, localization, userRepository, isBlock),
-                "global" => await HandleGlobalBlockAsync(context, restrictionService, localization, isBlock, blockCommandId),
-                "platform" => await HandlePlatformBlockAsync(context, restrictionService, localization, isBlock, blockCommandId),
-                "chat" => await HandleChatBlockAsync(context, restrictionService, localization, isBlock, blockCommandId),
-                _ => CommandResult.Failure(await localization.GetStringAsync("command.block.unknown_target", context.Locale))
-            };
-        }
-        catch (Exception ex)
+        if (context.Arguments.Count < 1)
         {
-            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
-            return await errorTracking.LogErrorAsync(
-                ex,
-                "Failed to execute BlockCommand",
-                context.User.UnifiedId,
-                context.ChatInfo.PlatformId,
-                context);
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.block.usage", context.Locale));
         }
+
+        var isBlock = !context.CommandName.Equals("unblock", StringComparison.OrdinalIgnoreCase)
+                      && !context.CommandName.Equals("unban", StringComparison.OrdinalIgnoreCase);
+        var targetType = context.Arguments[0].ToLowerInvariant(); // user / global / platform / chat
+
+        return targetType switch
+        {
+            "user" => await HandleUserBlockAsync(context, restrictionService, localization, userRepository, isBlock),
+            "global" => await HandleGlobalBlockAsync(context, restrictionService, localization, isBlock,
+                blockCommandId),
+            "platform" => await HandlePlatformBlockAsync(context, restrictionService, localization, isBlock,
+                blockCommandId),
+            "chat" => await HandleChatBlockAsync(context, restrictionService, localization, isBlock, blockCommandId),
+            _ => CommandResult.Failure(
+                await localization.GetStringAsync("command.block.unknown_target", context.Locale))
+        };
     }
 
     private async Task<CommandResult> HandleUserBlockAsync(

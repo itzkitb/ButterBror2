@@ -1,10 +1,11 @@
-﻿using ButterBror.Domain.Entities;
+﻿using System.Text.Json;
+using ButterBror.Data.Interfaces;
+using ButterBror.Domain.Entities;
 using Polly;
 using Polly.Registry;
 using StackExchange.Redis;
-using System.Text.Json;
 
-namespace ButterBror.Data;
+namespace ButterBror.Data.Repositories;
 
 public class RedisUserRepository(
     IConnectionMultiplexer redis,
@@ -20,9 +21,9 @@ public class RedisUserRepository(
     {
         return await _redisPipeline.ExecuteAsync(async ct =>
         {
-            IDatabase db = redis.GetDatabase();
-            string key = $"{UserPrefix}{unifiedId}";
-            RedisValue json = await db.StringGetAsync(key).WaitAsync(ct);
+            var db = redis.GetDatabase();
+            var key = $"{UserPrefix}{unifiedId}";
+            var json = await db.StringGetAsync(key).WaitAsync(ct);
             return json.HasValue ? JsonSerializer.Deserialize<UserProfile>(json.ToString()) : null;
         });
     }
@@ -31,9 +32,9 @@ public class RedisUserRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = redis.GetDatabase();
-            string indexKey = $"{PlatformIndexPrefix}{platform.ToLowerInvariant()}:{platformId}";
-            RedisValue unifiedId = await db.StringGetAsync(indexKey);
+            var db = redis.GetDatabase();
+            var indexKey = $"{PlatformIndexPrefix}{platform.ToLowerInvariant()}:{platformId}";
+            var unifiedId = await db.StringGetAsync(indexKey);
             return unifiedId.HasValue ? await GetByUnifiedIdAsync(Guid.Parse(unifiedId.ToString())) : null;
         });
     }
@@ -42,22 +43,22 @@ public class RedisUserRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = redis.GetDatabase();
-            string key = $"{UserPrefix}{user.UnifiedId}";
-            string json = JsonSerializer.Serialize(user);
+            var db = redis.GetDatabase();
+            var key = $"{UserPrefix}{user.UnifiedId}";
+            var json = JsonSerializer.Serialize(user);
 
             await db.StringSetAsync(key, json);
 
-            // Updating platform indexes
-            foreach (KeyValuePair<string, string> platform in user.PlatformIds)
+            // updating platform indexes
+            foreach (var indexKey in user.PlatformIds.Select(platform => 
+                         $"{PlatformIndexPrefix}{platform.Key}:{platform.Value}"))
             {
-                string indexKey = $"{PlatformIndexPrefix}{platform.Key}:{platform.Value}";
                 await db.StringSetAsync(indexKey, user.UnifiedId.ToString());
             }
 
-            // Updating the index by display name
-            string normalized = NormalizeDisplayName(user.DisplayName);
-            string displayNameIndexKey = $"{DisplayNameIndexPrefix}{normalized}";
+            // updating the index by display name
+            var normalized = NormalizeDisplayName(user.DisplayName);
+            var displayNameIndexKey = $"{DisplayNameIndexPrefix}{normalized}";
             await db.StringSetAsync(displayNameIndexKey, user.UnifiedId.ToString());
 
             return user;
@@ -68,8 +69,8 @@ public class RedisUserRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = redis.GetDatabase();
-            string key = $"{UserPrefix}{unifiedId}";
+            var db = redis.GetDatabase();
+            var key = $"{UserPrefix}{unifiedId}";
             return await db.KeyExistsAsync(key);
         });
     }
@@ -78,10 +79,10 @@ public class RedisUserRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = redis.GetDatabase();
-            string normalized = NormalizeDisplayName(displayName);
-            string indexKey = $"{DisplayNameIndexPrefix}{normalized}";
-            RedisValue unifiedId = await db.StringGetAsync(indexKey);
+            var db = redis.GetDatabase();
+            var normalized = NormalizeDisplayName(displayName);
+            var indexKey = $"{DisplayNameIndexPrefix}{normalized}";
+            var unifiedId = await db.StringGetAsync(indexKey);
             return unifiedId.HasValue ? await GetByUnifiedIdAsync(Guid.Parse(unifiedId.ToString())) : null;
         });
     }
@@ -90,15 +91,7 @@ public class RedisUserRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            // S0: Searching by the platform index (the fastest way)
-            var user = await GetByPlatformIdAsync(platform, identifier);
-
-            // S1: If not found, search by the displayed name
-            if (user == null)
-            {
-                user = await GetByDisplayNameAsync(identifier);
-            }
-
+            var user = await GetByPlatformIdAsync(platform, identifier) ?? await GetByDisplayNameAsync(identifier);
             return user;
         });
     }

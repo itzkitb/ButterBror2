@@ -4,6 +4,7 @@ using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.ChatModules.Twitch.Commands;

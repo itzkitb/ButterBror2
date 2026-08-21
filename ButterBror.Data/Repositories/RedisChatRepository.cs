@@ -1,10 +1,11 @@
 ﻿using System.Text.Json;
+using ButterBror.Data.Interfaces;
 using ButterBror.Domain.Entities;
 using Polly;
 using Polly.Registry;
 using StackExchange.Redis;
 
-namespace ButterBror.Data;
+namespace ButterBror.Data.Repositories;
 
 public class RedisChatRepository(
     IConnectionMultiplexer redis,
@@ -19,9 +20,9 @@ public class RedisChatRepository(
     {
         return await _redisPipeline.ExecuteAsync(async ct =>
         {
-            IDatabase db = redis.GetDatabase();
-            string key = $"{ChatPrefix}{unifiedId}";
-            RedisValue json = await db.StringGetAsync(key).WaitAsync(ct);
+            var db = redis.GetDatabase();
+            var key = $"{ChatPrefix}{unifiedId}";
+            var json = await db.StringGetAsync(key).WaitAsync(ct);
             return json.HasValue ? JsonSerializer.Deserialize<ChatInfo>(json.ToString()) : null;
         });
     }
@@ -30,9 +31,9 @@ public class RedisChatRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = redis.GetDatabase();
-            string indexKey = $"{PlatformIndexPrefix}{platform.ToLowerInvariant()}:{platformId}";
-            RedisValue unifiedId = await db.StringGetAsync(indexKey);
+            var db = redis.GetDatabase();
+            var indexKey = $"{PlatformIndexPrefix}{platform.ToLowerInvariant()}:{platformId}";
+            var unifiedId = await db.StringGetAsync(indexKey);
             return unifiedId.HasValue ? await GetByUnifiedIdAsync(Guid.Parse(unifiedId.ToString())) : null;
         });
     }
@@ -41,14 +42,14 @@ public class RedisChatRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = redis.GetDatabase();
-            string key = $"{ChatPrefix}{chat.UnifiedId}";
-            string json = JsonSerializer.Serialize(chat);
+            var db = redis.GetDatabase();
+            var key = $"{ChatPrefix}{chat.UnifiedId}";
+            var json = JsonSerializer.Serialize(chat);
 
             await db.StringSetAsync(key, json);
 
-            // Updating platform index
-            string indexKey = $"{PlatformIndexPrefix}{chat.Platform}:{chat.PlatformId}";
+            // updating platform index
+            var indexKey = $"{PlatformIndexPrefix}{chat.Platform}:{chat.PlatformId}";
             await db.StringSetAsync(indexKey, chat.UnifiedId.ToString());
 
             return chat;
@@ -59,8 +60,8 @@ public class RedisChatRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            IDatabase db = redis.GetDatabase();
-            string key = $"{ChatPrefix}{unifiedId}";
+            var db = redis.GetDatabase();
+            var key = $"{ChatPrefix}{unifiedId}";
             return await db.KeyExistsAsync(key);
         });
     }
