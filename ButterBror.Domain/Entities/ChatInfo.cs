@@ -1,5 +1,8 @@
 ﻿namespace ButterBror.Domain.Entities;
 
+/// <summary>
+/// Chat information
+/// </summary>
 public class ChatInfo
 {
     public Guid UnifiedId { get; set; }

@@ -1,10 +1,12 @@
 namespace ButterBror.Domain;
 
+/// <summary>
+/// Platform user interface
+/// </summary>
 public interface IPlatformUser
 {
     string Id { get; }
     string DisplayName { get; }
     string Platform { get; }
-    bool IsModerator { get; }
-    bool IsBroadcaster { get; }
+    HashSet<PlatformPermission> Permissions { get; }
 }

@@ -822,7 +822,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
                 IsBroadcaster = e.ChatMessage.IsBroadcaster,
                 IsSubscriber = e.ChatMessage.UserDetail.IsSubscriber,
                 IsVip = e.ChatMessage.UserDetail.IsVip,
-                Badges = e.ChatMessage.BadgeInfo,
+                Badges = e.ChatMessage.Badges,
                 Color = e.ChatMessage.HexColor,
                 MessageId = e.ChatMessage.Id
             };

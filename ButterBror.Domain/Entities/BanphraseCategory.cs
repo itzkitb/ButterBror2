@@ -7,13 +7,12 @@ namespace ButterBror.Domain.Entities;
 /// </summary>
 public class BanphraseCategory
 {
-    public string CategoryName { get; set; } = string.Empty;
+    public string CategoryName { get; init; } = string.Empty;
     public string Section { get; set; } = string.Empty;
-    public Guid ChatId { get; set; }
-    public string RegexPattern { get; set; } = string.Empty;
-    public Regex? CompiledRegex { get; set; }
+    public Guid ChatId { get; init; }
+    public string RegexPattern { get; init; } = string.Empty;
+    private Regex? CompiledRegex { get; set; }
     public DateTime LastAccessed { get; set; } = DateTime.UtcNow;
-    public int MatchCount { get; set; }
     
     public void CompileRegex()
     {
@@ -22,7 +21,7 @@ public class BanphraseCategory
             CompiledRegex = new Regex(
                 RegexPattern, 
                 RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(500) // Timeout for safety
+                TimeSpan.FromMilliseconds(500)
             );
         }
     }
@@ -66,11 +65,11 @@ public class BanphraseCategory
             return matchedAlternative;
         }
     
-        // Fallback: return full pattern
+        // fallback: return full pattern
         return RegexPattern.Length > 50 ? RegexPattern[..50] + "..." : RegexPattern;
     }
 
-    public string? GetMatchedAlternative(string message)
+    private string? GetMatchedAlternative(string message)
     {
         if (CompiledRegex == null)
         {
@@ -83,7 +82,7 @@ public class BanphraseCategory
             return null;
         }
     
-        // Split pattern by top-level | and test each alternative
+        // split pattern by top-level and test each alternative
         var alternatives = SplitRegexAlternatives(RegexPattern);
     
         foreach (var alternative in alternatives)
@@ -95,39 +94,34 @@ public class BanphraseCategory
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
                     TimeSpan.FromMilliseconds(100)
                 );
-            
-                if (testRegex.IsMatch(match.Value))
-                {
-                    // Truncate long patterns for display
-                    var display = alternative.Trim();
-                    return display.Length > 50 ? display[..50] + "..." : display;
-                }
+
+                if (!testRegex.IsMatch(match.Value))
+                    continue;
+                
+                // truncate long patterns for display
+                var display = alternative.Trim();
+                return display.Length > 50 ? display[..50] + "..." : display;
             }
             catch
             {
-                // Skip invalid patterns
+                // skip invalid patterns
             }
         }
     
-        // Fallback: return matched text
+        // fallback: return matched text
         return match.Value.Length > 50 ? match.Value[..50] + "..." : match.Value;
     }
-
-    /// <summary>
-    /// Splits regex pattern by top-level | (not inside groups)
-    /// </summary>
+    
     private static List<string> SplitRegexAlternatives(string pattern)
     {
         var alternatives = new List<string>();
         var current = new System.Text.StringBuilder();
-        int groupDepth = 0;
-        bool inCharacterClass = false;
-        bool escaped = false;
+        var groupDepth = 0;
+        var inCharacterClass = false;
+        var escaped = false;
     
-        for (int i = 0; i < pattern.Length; i++)
+        foreach (var c in pattern)
         {
-            char c = pattern[i];
-        
             if (escaped)
             {
                 current.Append(c);
@@ -135,55 +129,46 @@ public class BanphraseCategory
                 continue;
             }
         
-            if (c == '\\')
+            switch (c)
             {
-                current.Append(c);
-                escaped = true;
-                continue;
+                case '\\':
+                    current.Append(c);
+                    escaped = true;
+                    continue;
+                case '[' when !inCharacterClass:
+                    inCharacterClass = true;
+                    current.Append(c);
+                    continue;
+                case ']' when inCharacterClass:
+                    inCharacterClass = false;
+                    current.Append(c);
+                    continue;
             }
-        
-            if (c == '[' && !inCharacterClass)
-            {
-                inCharacterClass = true;
-                current.Append(c);
-                continue;
-            }
-        
-            if (c == ']' && inCharacterClass)
-            {
-                inCharacterClass = false;
-                current.Append(c);
-                continue;
-            }
-        
+
             if (inCharacterClass)
             {
                 current.Append(c);
                 continue;
             }
         
-            if (c == '(')
+            switch (c)
             {
-                groupDepth++;
-                current.Append(c);
-                continue;
+                case '(':
+                    groupDepth++;
+                    current.Append(c);
+                    continue;
+                case ')':
+                    groupDepth--;
+                    current.Append(c);
+                    continue;
+                case '|' when groupDepth == 0:
+                    alternatives.Add(current.ToString());
+                    current.Clear();
+                    continue;
+                default:
+                    current.Append(c);
+                    break;
             }
-        
-            if (c == ')')
-            {
-                groupDepth--;
-                current.Append(c);
-                continue;
-            }
-        
-            if (c == '|' && groupDepth == 0)
-            {
-                alternatives.Add(current.ToString());
-                current.Clear();
-                continue;
-            }
-        
-            current.Append(c);
         }
     
         if (current.Length > 0)

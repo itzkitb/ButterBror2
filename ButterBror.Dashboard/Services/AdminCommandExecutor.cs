@@ -48,7 +48,7 @@ public class AdminCommandExecutor(
             commandName, string.Join("', '", args), commandPlatform);
 
         var user = new DashboardAdminUser();
-        var channel = new DashboardAdminChannel(commandPlatform);
+        var channel = new DashboardAdminChat(commandPlatform);
         var message = new ChatMessage(
             DateTime.UtcNow,
             string.Join(" ", args),
@@ -64,6 +64,7 @@ public class AdminCommandExecutor(
             args,
             user,
             channel,
+            user.Permissions,
             message,
             ct);
         var result = await core.ProcessCommandAsync(context);
@@ -77,11 +78,27 @@ internal class DashboardAdminUser : IPlatformUser
     public string Id => "dashboard-admin";
     public string DisplayName => "Dashboard Admin";
     public string Platform => "dashboard";
-    public bool IsModerator => true;
-    public bool IsBroadcaster => true;
+
+    public HashSet<PlatformPermission> Permissions =>
+    [
+        PlatformPermission.CanDeleteOwnMessages,
+        PlatformPermission.CanEditOwnMessages,
+        PlatformPermission.CanDeleteOtherMessages,
+        PlatformPermission.CanEditOtherMessages,
+        PlatformPermission.Moderator,
+        PlatformPermission.Owner,
+        PlatformPermission.Vip,
+        PlatformPermission.CanBanUser,
+        PlatformPermission.CanUnbanUser,
+        PlatformPermission.CanEditChatData,
+        PlatformPermission.CanAddModerators,
+        PlatformPermission.CanRemoveModerators,
+        PlatformPermission.CanUseBotCommands,
+        PlatformPermission.Bot
+    ];
 }
 
-internal class DashboardAdminChannel(string platform) : IPlatformChannel
+internal class DashboardAdminChat(string platform) : IPlatformChat
 {
     public string Id => "dashboard";
     public string Name => "Dashboard";

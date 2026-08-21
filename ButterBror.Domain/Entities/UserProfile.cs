@@ -7,7 +7,7 @@ public class UserProfile
     public string DisplayName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public DateTime LastActive { get; set; }
-    public Dictionary<string, Int64> Statistics { get; set; } = new();
+    public Dictionary<string, long> Statistics { get; set; } = new();
     public List<string> Permissions { get; set; } = new();
     public string PreferredLocale { get; set; } = "EN_US";
 

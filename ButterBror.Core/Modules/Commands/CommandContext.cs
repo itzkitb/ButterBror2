@@ -10,7 +10,8 @@ public class CommandContext(
     string platformId,
     List<string> arguments,
     IPlatformUser platformUser,
-    IPlatformChannel chat,
+    IPlatformChat chat,
+    HashSet<PlatformPermission> platformPermissions,
     ChatMessage originalMessage,
     CancellationToken cancellationToken)
 {
@@ -18,8 +19,9 @@ public class CommandContext(
     public string PlatformId { get; } = platformId;
     public string Locale { get; private set; } = "EN_US";
     public List<string> Arguments { get; } = arguments;
+    public HashSet<PlatformPermission> PlatformPermissions { get; } = platformPermissions;
     public IPlatformUser PlatformUser { get; } = platformUser;
-    public IPlatformChannel Chat { get; } = chat;
+    public IPlatformChat Chat { get; } = chat;
     public UserProfile User { get; private set; } = null!;
     public ChatInfo ChatInfo { get; private set; } = null!;
     public ChatMessage OriginalMessage { get; } = originalMessage;

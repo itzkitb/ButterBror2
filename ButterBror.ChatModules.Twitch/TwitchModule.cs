@@ -10,6 +10,7 @@ using ButterBror.Core.Modules.Enums;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
 using ButterBror.Data.Interfaces;
+using ButterBror.Domain;
 using ButterBror.Domain.Chat;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -363,13 +364,66 @@ public class TwitchModule : IChatModule
             msg.ChannelId,
             msg.Channel,
             msg);
+
+        var permissions = new HashSet<PlatformPermission>();
+        if (msg.IsModerator)
+            permissions.UnionWith([
+                PlatformPermission.Moderator,
+                PlatformPermission.CanBanUser,
+                PlatformPermission.CanUnbanUser,
+                PlatformPermission.CanDeleteOtherMessages,
+                PlatformPermission.CanDeleteOwnMessages,
+                PlatformPermission.CanUseBotCommands
+            ]);
+        if (msg.IsBroadcaster)
+            permissions.UnionWith([
+                PlatformPermission.Moderator,
+                PlatformPermission.Owner,
+                PlatformPermission.CanBanUser,
+                PlatformPermission.CanUnbanUser,
+                PlatformPermission.CanDeleteOtherMessages,
+                PlatformPermission.CanDeleteOwnMessages,
+                PlatformPermission.CanUseBotCommands,
+                PlatformPermission.CanAddModerators,
+                PlatformPermission.CanRemoveModerators,
+                PlatformPermission.CanEditChatData
+            ]);
+        if (msg.IsBot)
+            permissions.UnionWith([
+                PlatformPermission.Moderator,
+                PlatformPermission.CanBanUser,
+                PlatformPermission.CanUnbanUser,
+                PlatformPermission.CanDeleteOtherMessages,
+                PlatformPermission.CanDeleteOwnMessages,
+                PlatformPermission.CanUseBotCommands
+            ]);
+        if (msg.IsSubscriber)
+            permissions.UnionWith([
+                PlatformPermission.Vip
+            ]);
+        if (msg.IsVip)
+            permissions.UnionWith([
+                PlatformPermission.Vip
+            ]);
+        if (msg.Badges.Any(b => b.Key == "lead_moderator"))
+            permissions.UnionWith([
+                PlatformPermission.Moderator,
+                PlatformPermission.CanBanUser,
+                PlatformPermission.CanUnbanUser,
+                PlatformPermission.CanDeleteOtherMessages,
+                PlatformPermission.CanDeleteOwnMessages,
+                PlatformPermission.CanUseBotCommands,
+                PlatformPermission.CanAddModerators,
+                PlatformPermission.CanRemoveModerators
+            ]);
         
         return new CommandContext(
             commandName,
             ModuleId,
             arguments,
-            new TwitchUser(msg.Username, msg.UserId, msg.IsModerator, msg.IsBroadcaster, msg.IsBot),
-            new TwitchChannel(msg.Channel, msg.ChannelId),
+            new TwitchUser(msg.Username, msg.UserId, permissions),
+            new TwitchChat(msg.Channel, msg.ChannelId),
+            permissions,
             chatMessage,
             cancellationToken
         );
