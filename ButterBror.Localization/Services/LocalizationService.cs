@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Globalization;
 using ButterBror.Core.Interfaces;
+using ButterBror.Infrastructure;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Localization.Services;
@@ -41,21 +41,19 @@ public class LocalizationService(
             {
                 return;
             }
-
-            var sw = Stopwatch.StartNew();
-            logger.LogInformation("[init] localization service");
-
+            
+            await using var _ = new InitializationScope(logger, "bot core");
+            
             await registry.InitializeAsync(ct);
             _defaultLocale = registry.GetDefaultLocale();
             await LoadAllTranslationsAsync(ct);
 
             _isInitialized = true;
-            sw.Stop();
-            logger.LogInformation("[init:ok] localization service in {Time}ms", sw.Elapsed);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "failed to initialize localization service");
+            throw;
         }
         finally
         {

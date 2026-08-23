@@ -60,7 +60,7 @@ builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 // ^ core & infrastructure
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IBotCoreInfo, BotCoreInfo>();
-builder.Services.AddSingleton<IBotCore, BotCoreService>();
+builder.Services.AddSingleton<IBotCore, BotCore>();
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
 builder.Services.AddSingleton<AppDataStorageProvider>();
 builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
