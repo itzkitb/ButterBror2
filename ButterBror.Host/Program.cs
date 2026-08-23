@@ -212,10 +212,7 @@ using (var scope = host.Services.CreateScope())
 
     // localization
     var localizationService = scope.ServiceProvider.GetRequiredService<ILocalizationService>();
-    if (localizationService is LocalizationService impl)
-    {
-        await impl.InitializeAsync(CancellationToken.None);
-    }
+    await localizationService.InitializeAsync(CancellationToken.None);
     localizationService.RegisterModuleTranslations("butterbror:system", Localization.DefaultTranslations);
 }
 

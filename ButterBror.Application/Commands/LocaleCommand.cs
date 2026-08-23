@@ -115,7 +115,7 @@ public class LocaleCommand : ICommand
                 await localization.GetStringAsync("command.locale.set.admin.invalid", context.Locale));
 
         var fileName = $"{resolvedLocale}.json";
-        await fileLoader.SaveTranslationAsync(fileName, translation, context.CancellationToken);
+        await fileLoader.SaveLocalizationAsync(fileName, translation, context.CancellationToken);
         
         var aliases = new[] { resolvedLocale.ToLower(), resolvedLocale.ToLowerInvariant() }.Distinct().ToList();
         await registry.RegisterLocaleAsync(resolvedLocale, fileName, aliases, context.CancellationToken);
@@ -220,7 +220,7 @@ public class LocaleCommand : ICommand
         var pasteBinService = serviceProvider.GetService<IPasteBinService>();
 
         var fileName = $"{resolved}.json";
-        var path = fileLoader.GetTranslationFilePath(fileName);
+        var path = fileLoader.GetLocalizationFilePath(fileName);
         
         if (!File.Exists(path))
             return CommandResult.Failure(

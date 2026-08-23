@@ -6,6 +6,13 @@ namespace ButterBror.Core.Interfaces;
 public interface ILocalizationService
 {
     /// <summary>
+    /// Initialize service
+    /// </summary>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns></returns>
+    Task InitializeAsync(CancellationToken ct = default);
+    
+    /// <summary>
     /// Gets a localized string by key
     /// </summary>
     /// <param name="key">Translation key in dot notation, e.g. "commands.userinfo.not_found"</param>
