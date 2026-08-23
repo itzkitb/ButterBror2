@@ -1,6 +1,7 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
+using ButterBror.Core.Scopes;
 using ButterBror.Domain.Chat;
 using Microsoft.Extensions.Logging;
 
@@ -9,6 +10,11 @@ namespace ButterBror.Infrastructure.Services;
 public class BotCore(
     IPlatformModuleManager moduleManager,
     ICommandProcessor commandProcessor,
+    IBotStatsService statsService,
+    ILocalizationService localizationService,
+    IBanphraseService banphraseService,
+    ICommandRegistry commandRegistry,
+    IPermissionManager permissionManager,
     IUserService userService,
     IChatService chatService,
     ILogger<BotCore> logger)
@@ -19,11 +25,33 @@ public class BotCore(
 
     public async Task StartAsync(CancellationToken ct = default)
     {
-        await using var _ = new InitializationScope(logger, "bot core");
+        await using var _ = new InitializationScope(logger, "bot core", true);
+
+        try
+        {
+            await using (new InitializationScope(logger, "dashboard admin"))
+            {
+                var adminUser = await userService.GetOrCreateUserAsync(
+                    platformId: "admin",
+                    platform: "dashboard",
+                    displayName: "Admin"
+                );
+
+                await permissionManager.AddPermissionAsync(adminUser.UnifiedId, "su:*");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "failed to init dashboard admin user");
+        }
         
         await Task.WhenAll(
             userService.InitializeAsync(ct),
-            moduleManager.InitializeAsync(this, ct)
+            moduleManager.InitializeAsync(this, ct),
+            commandRegistry.InitializeAsync(ct),
+            statsService.InitializeAsync(ct),
+            localizationService.InitializeAsync(ct),
+            banphraseService.ReloadGlobalCategoriesAsync()
         );
     }
 
@@ -32,10 +60,13 @@ public class BotCore(
 
     public async Task StopAsync(CancellationToken ct = default)
     {
-        await using var _ = new StopScope(logger, "bot core");
-        
+        await using var _ = new StopScope(logger, "bot core", true);
+
         await _cts.CancelAsync();
-        await moduleManager.ShutdownAsync(ct);
+        await Task.WhenAll(
+            moduleManager.ShutdownAsync(ct),
+            statsService.FlushAsync(ct)
+        );
     }
 
     public async Task RaiseMessageReceivedAsync(

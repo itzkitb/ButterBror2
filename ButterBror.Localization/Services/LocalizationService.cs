@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using ButterBror.Core.Interfaces;
-using ButterBror.Infrastructure;
+using ButterBror.Core.Scopes;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Localization.Services;

@@ -5,12 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-using ButterBror.Application;
-using ButterBror.Application.Commands;
-using ButterBror.Application.Commands.Meta;
 using ButterBror.Core;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Interfaces;
+using ButterBror.Core.Storage;
 using ButterBror.Dashboard;
 using ButterBror.Dashboard.Services;
 using ButterBror.Data.Interfaces;
@@ -20,7 +18,6 @@ using ButterBror.Host;
 using ButterBror.Host.Logging;
 using ButterBror.Infrastructure.Resilience;
 using ButterBror.Infrastructure.Services;
-using ButterBror.Infrastructure.Storage;
 using ButterBror.Localization.Services;
 using ButterBror.Modules.Loader;
 
@@ -143,78 +140,6 @@ coreInfoService.Initialize();
 var bridge = host.Services.GetRequiredService<IDashboardBridge>();
 var loggerFactory = host.Services.GetRequiredService<ILoggerFactory>();
 loggerFactory.AddProvider(new DashboardLoggerProvider(bridge));
-
-// s2: stats init & graceful shutdown setup
-var statsService = host.Services.GetRequiredService<IBotStatsService>();
-await statsService.InitializeAsync(CancellationToken.None);
-
-var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
-lifetime.ApplicationStopping.Register(async void () =>
-{
-    await statsService.FlushAsync(CancellationToken.None);
-});
-
-// s3: admin user
-using (var scope = host.Services.CreateScope())
-{
-    try
-    {
-        var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-        var permManager = scope.ServiceProvider.GetRequiredService<IPermissionManager>();
-
-        var adminUser = await userService.GetOrCreateUserAsync(
-            platformId: "dashboard-admin",
-            platform: "dashboard",
-            displayName: "Dashboard Admin"
-        );
-
-        await permManager.AddPermissionAsync(adminUser.UnifiedId, "su:*");
-
-        logger.LogInformation(
-            "Initialized dashboard admin. unified_uid='{UserId}'",
-            adminUser.UnifiedId);
-    }
-    catch (Exception ex)
-    {
-        logger.LogWarning(ex, "Failed to initialize dashboard admin user (Redis may not be ready yet)");
-    }
-}
-
-// s4: global commands & localization setup
-using (var scope = host.Services.CreateScope())
-{
-    var commandRegistry = scope.ServiceProvider.GetRequiredService<ICommandRegistry>();
-
-    commandRegistry.RegisterGlobalCommand(
-        () => new UserInfoCommand(host.Services),
-        new UserInfoMeta()
-    );
-    commandRegistry.RegisterGlobalCommand(
-        () => new BanphrasesCommand(),
-        new BanphrasesCommandMeta()
-    );
-    commandRegistry.RegisterGlobalCommand(
-        () => new LocaleCommand(),
-        new LocaleCommandMeta()
-    );
-    commandRegistry.RegisterGlobalCommand(
-        () => new ReloadModuleCommand(),
-        new ReloadModuleMeta()
-    );
-    commandRegistry.RegisterGlobalCommand(
-        () => new BlockCommand(),
-        new BlockCommandMeta()
-    );
-
-    // global banphrases
-    var banphraseService = scope.ServiceProvider.GetRequiredService<IBanphraseService>();
-    await banphraseService.ReloadGlobalCategoriesAsync();
-
-    // localization
-    var localizationService = scope.ServiceProvider.GetRequiredService<ILocalizationService>();
-    await localizationService.InitializeAsync(CancellationToken.None);
-    localizationService.RegisterModuleTranslations("butterbror:system", Localization.DefaultTranslations);
-}
 
 // ><> hello, world!
 await host.RunAsync();

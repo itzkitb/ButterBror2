@@ -9,6 +9,13 @@ namespace ButterBror.Core.Interfaces;
 /// </summary>
 public interface ICommandRegistry
 {
+    /// <summary>
+    /// Initialize service
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns></returns>
+    Task InitializeAsync(CancellationToken cancellationToken = default);
+    
     // ><> registration methods
     
     /// <summary>

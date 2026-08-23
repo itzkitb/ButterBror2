@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using ButterBror.Application.Commands;
+using ButterBror.Application.Commands.Meta;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Enums;
 using ButterBror.Core.Modules.Interfaces;
@@ -25,6 +27,30 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
         Regex Pattern,
         CommandEntry Entry
     );
+
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        RegisterGlobalCommand(
+            () => new UserInfoCommand(serviceProvider),
+            new UserInfoMeta()
+        );
+        RegisterGlobalCommand(
+            () => new BanphrasesCommand(),
+            new BanphrasesCommandMeta()
+        );
+        RegisterGlobalCommand(
+            () => new LocaleCommand(),
+            new LocaleCommandMeta()
+        );
+        RegisterGlobalCommand(
+            () => new ReloadModuleCommand(),
+            new ReloadModuleMeta()
+        );
+        RegisterGlobalCommand(
+            () => new BlockCommand(),
+            new BlockCommandMeta()
+        );
+    }
 
     public void RegisterGlobalCommand(Func<ICommand> factory, ICommandMetadata metadata)
     {

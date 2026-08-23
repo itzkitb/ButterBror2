@@ -1,26 +1,26 @@
 ﻿using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.Infrastructure;
+namespace ButterBror.Core.Scopes;
 
 /// <summary>
-/// Encapsulates initialization logging and timing logic
+/// Encapsulates stop logging and timing logic
 /// </summary>
-public readonly struct InitializationScope : IAsyncDisposable
+public readonly struct StopScope : IAsyncDisposable
 {
     private readonly ILogger _logger;
     private readonly Stopwatch _stopwatch;
     private readonly string _scopeName;
     private readonly bool _isMain;
 
-    public InitializationScope(ILogger logger, string scopeName, bool isMain = false)
+    public StopScope(ILogger logger, string scopeName, bool isMain = false)
     {
         _logger = logger;
         _scopeName = scopeName;
         _stopwatch = Stopwatch.StartNew();
         _isMain = isMain;
 
-        var message = _isMain ? "><> [init] {ScopeName}" : "[init] {ScopeName}";
+        var message = _isMain ? "><> [stop] {ScopeName}" : "[stop] {ScopeName}";
         _logger.LogInformation(message, _scopeName);
     }
 
@@ -28,7 +28,7 @@ public readonly struct InitializationScope : IAsyncDisposable
     {
         _stopwatch.Stop();
 
-        var message = _isMain ? "><> [init:ok] {ScopeName} in {Time}ms" : "[init:ok] {ScopeName} in {Time}ms";
+        var message = _isMain ? "><> [stop:ok] {ScopeName} in {Time}ms" : "[stop:ok] {ScopeName} in {Time}ms";
         _logger.LogInformation(message, _scopeName, _stopwatch.ElapsedMilliseconds);
         
         return ValueTask.CompletedTask;
