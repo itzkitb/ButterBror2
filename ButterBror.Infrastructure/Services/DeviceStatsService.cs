@@ -4,69 +4,80 @@ using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
 using System.Globalization;
-using Polly.Fallback;
-#if WINDOWS
 using System.Management;
 using LibreHardwareMonitor.Hardware;
-#endif
 
 namespace ButterBror.Infrastructure.Services;
 
-public class DeviceStatsService : IDeviceStatsService, IDisposable
+// 
+// i fucking hate this piece of code.
+// 
+
+public class DeviceStatsService(ILogger<DeviceStatsService> logger) : IDeviceStatsService, IDisposable
 {
-    private ILogger<DeviceStatsService> _logger;
+    private readonly ILogger<DeviceStatsService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private CpuTemperatureReader? _cpuTempReader;
+    private CancellationTokenSource? _cts;
+    private Task? _updateTask;
 
-    // Public
-    public double CpuLoad => _cpuLoad;
-    public double CpuTemperature => _cpuTemp;
-    public double TotalMemory => _totalMem;
-    public double MemoryUsed => _memUsed;
-    public double NetworkIn => _netIn;
-    public double NetworkOut => _netOut;
-    public double DiskIn => _diskIn;
-    public double DiskOut => _diskOut;
+    // ><> public properties for metrics
+    public double CpuLoad { get; private set; }
+    public double CpuTemperature { get; private set; }
+    public double TotalMemory { get; private set; }
+    public double MemoryUsed { get; private set; }
+    public double NetworkIn { get; private set; }
+    public double NetworkOut { get; private set; }
+    public double DiskIn { get; private set; }
+    public double DiskOut { get; private set; }
 
-    // Private
-    private double _cpuLoad, _cpuTemp, _totalMem, _memUsed, _netIn, _netOut, _diskIn, _diskOut;
-
-    // Tracking previous values for delta calculation
+    // ><> tracking previous values for delta calculation
     private long _prevNetSent, _prevNetRecv;
     private long _prevDiskRead, _prevDiskWrite;
-    private DateTime _prevSampleTime = DateTime.UtcNow;
-#if !WINDOWS
     private long _prevCpuTotal, _prevCpuIdle;
-#endif
 
-    // Task
-    private Task _updateTask = Task.CompletedTask;
-    private Task _startupTask = Task.CompletedTask;
-    private CancellationTokenSource _cts = null!;
-
-    public DeviceStatsService(
-        ILogger<DeviceStatsService> logger)
-    {
-        _logger = logger;
-        _updateTask = Task.Run(() =>
-        {
-            _cpuTempReader = new CpuTemperatureReader(logger);
-        });
-    }
-
-    public void Start()
+    public Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         _cts = new CancellationTokenSource();
-        _updateTask = Task.Run(() => MetricsLoopAsync(_cts.Token), _cts.Token);
-        _logger.LogInformation("Started device status service");
+        _cpuTempReader = new CpuTemperatureReader(_logger);
+        _updateTask = Task.Run(() => MetricsLoopAsync(_cts.Token), cancellationToken);
+        
+        _logger.LogInformation("[init:ok] device status service");
+        return Task.CompletedTask;
     }
-
-    public void Stop()
+    
+    public async Task ShutdownAsync(CancellationToken cancellationToken = default)
     {
-        _cts.Cancel();
-        _updateTask.GetAwaiter().GetResult();
-        _logger.LogInformation("Stopped device status service");
-    }
+        if (_cts == null || _updateTask == null)
+        {
+            _logger.LogWarning("[stop:skip] service not initialized");
+            return;
+        }
 
+        try
+        {
+            await _cts.CancelAsync();
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(5));
+            
+            await _updateTask.WaitAsync(linkedCts.Token);
+            
+            _logger.LogInformation("[stop:ok] device status service");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("[stop:timeout] device status service shutdown timed out");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "error during device status service shutdown");
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+    
     private async Task MetricsLoopAsync(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -75,56 +86,82 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
             {
                 await Task.Delay(2_000, ct);
 
-                // System CPU
-                _cpuLoad = GetSystemCpuPercent();
+                // s0: cpu
+                CpuLoad = GetSystemCpuPercent();
                 if (_cpuTempReader != null)
                 {
-                    _cpuTemp = _cpuTempReader.Read() ?? 0;
+                    CpuTemperature = _cpuTempReader.Read() ?? 0;
                 }
 
-                // System RAM
+                // s1: ram
                 var gcInfo = GC.GetGCMemoryInfo();
-                _totalMem = gcInfo.TotalAvailableMemoryBytes / 1024.0 / 1024.0;
-                _memUsed = GetSystemUsedRamMb();
+                TotalMemory = gcInfo.TotalAvailableMemoryBytes / 1024.0 / 1024.0;
+                MemoryUsed = GetSystemUsedRamMb();
                 
-                var (sentBytes, recvBytes) = GetNetworkBytes();
-                _netOut = (sentBytes - _prevNetSent) / 2.0 / 1024.0;
-                _netIn  = (recvBytes - _prevNetRecv) / 2.0 / 1024.0;
+                var (sentBytes, receiveBytes) = GetNetworkBytes();
+                NetworkOut = (sentBytes - _prevNetSent) / 2.0 / 1024.0;
+                NetworkIn  = (receiveBytes - _prevNetRecv) / 2.0 / 1024.0;
                 _prevNetSent = sentBytes;
-                _prevNetRecv = recvBytes;
+                _prevNetRecv = receiveBytes;
 
-                // Disk
+                // s2: disk
                 var (diskRead, diskWrite) = GetDiskBytes();
-                _diskIn  = (diskRead  - _prevDiskRead)  / 2.0 / 1024.0;
-                _diskOut = (diskWrite - _prevDiskWrite) / 2.0 / 1024.0;
+                DiskIn  = (diskRead  - _prevDiskRead)  / 2.0 / 1024.0;
+                DiskOut = (diskWrite - _prevDiskWrite) / 2.0 / 1024.0;
                 _prevDiskRead  = diskRead;
                 _prevDiskWrite = diskWrite;
             }
-            catch (OperationCanceledException) { break; }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("metrics loop cancelled");
+                break;
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Metrics receive error");
+                _logger.LogError(ex, "metrics receive error");
             }
         }
     }
 
     private double GetSystemCpuPercent()
     {
-#if !WINDOWS
+        return OperatingSystem.IsWindows() ? GetSystemCpuPercentWindows() : GetSystemCpuPercentLinux();
+    }
+
+    private double GetSystemCpuPercentWindows()
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+                return 0;
+            
+            using var counter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+            counter.NextValue();
+            Thread.Sleep(100);
+            return counter.NextValue();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "failed to read CPU stats on Windows");
+            return 0;
+        }
+    }
+
+    private double GetSystemCpuPercentLinux()
+    {
         try
         {
             var line = File.ReadLines("/proc/stat").First();
             var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            long user = long.Parse(parts[1]);
-            long nice = long.Parse(parts[2]);
-            long system = long.Parse(parts[3]);
-            long idle = long.Parse(parts[4]);
-            long iowait = parts.Length > 5 ? long.Parse(parts[5]) : 0;
-            long irq = parts.Length > 6 ? long.Parse(parts[6]) : 0;
-            long softirq = parts.Length > 7 ? long.Parse(parts[7]) : 0;
+            var user = long.Parse(parts[1]);
+            var nice = long.Parse(parts[2]);
+            var system = long.Parse(parts[3]);
+            var idle = long.Parse(parts[4]);
+            var iowait = parts.Length > 5 ? long.Parse(parts[5]) : 0;
+            var irq = parts.Length > 6 ? long.Parse(parts[6]) : 0;
+            var softirq = parts.Length > 7 ? long.Parse(parts[7]) : 0;
 
-            long total = user + nice + system + idle + iowait + irq + softirq;
-            long active = total - idle - iowait;
+            var total = user + nice + system + idle + iowait + irq + softirq;
 
             if (_prevCpuTotal == 0)
             {
@@ -143,27 +180,41 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to read /proc/stat");
+            _logger.LogDebug(ex, "failed to read CPU stats on Linux");
             return 0;
         }
-#else
+    }
+
+    private static double GetSystemUsedRamMb()
+    {
+        return OperatingSystem.IsWindows() ? GetSystemUsedRamMbWindows() : GetSystemUsedRamMbLinux();
+    }
+
+    private static double GetSystemUsedRamMbWindows()
+    {
         try
         {
-            using var counter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-            return counter.NextValue();
+            if (!OperatingSystem.IsWindows())
+                return 0;
+            
+            using var ramCounter = new PerformanceCounter("Memory", "% Committed Bytes In Use");
+            var totalMb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024.0 / 1024.0;
+            return totalMb * ramCounter.NextValue() / 100.0;
+
         }
         catch
         {
             return 0;
         }
-#endif
     }
 
-    private static double GetSystemUsedRamMb()
+    private static double GetSystemUsedRamMbLinux()
     {
-#if !WINDOWS
         try
         {
+            if (!OperatingSystem.IsLinux())
+                return 0;
+            
             var lines = File.ReadAllLines("/proc/meminfo");
             long total = 0, available = 0;
             foreach (var line in lines)
@@ -180,23 +231,11 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
         {
             return 0;
         }
-#else
-        try
-        {
-            using var ramCounter = new PerformanceCounter("Memory", "% Committed Bytes In Use");
-            var totalMb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024.0 / 1024.0;
-            return totalMb * ramCounter.NextValue() / 100.0;
-        }
-        catch
-        {
-            return 0;
-        }
-#endif
     }
 
     private static (long sent, long recv) GetNetworkBytes()
     {
-        long sent = 0, recv = 0;
+        long sent = 0, receive = 0;
         try
         {
             foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
@@ -204,19 +243,24 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
                 if (ni.OperationalStatus != OperationalStatus.Up) continue;
                 var stats = ni.GetIPv4Statistics();
                 sent += stats.BytesSent;
-                recv += stats.BytesReceived;
+                receive += stats.BytesReceived;
             }
         }
         catch
         {
-            //
+            // ignored
         }
-        return (sent, recv);
+
+        return (sent, receive);
     }
 
     private static (long read, long write) GetDiskBytes()
     {
-#if !WINDOWS
+        return OperatingSystem.IsWindows() ? GetDiskBytesWindows() : GetDiskBytesLinux();
+    }
+
+    private static (long read, long write) GetDiskBytesLinux()
+    {
         long read = 0, write = 0;
         try
         {
@@ -233,15 +277,28 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
         }
         catch
         {
-            //
+            // ignored
         }
 
         return (read, write);
-#else
+    }
+
+    private static (long read, long write) GetDiskBytesWindows()
+    {
         try
         {
-            using var readCounter = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
-            using var writeCounter = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
+            if (!OperatingSystem.IsWindows())
+                return (0, 0);
+            
+            using var readCounter = new PerformanceCounter(
+                "PhysicalDisk",
+                "Disk Read Bytes/sec",
+                "_Total");
+            
+            using var writeCounter = new PerformanceCounter(
+                "PhysicalDisk",
+                "Disk Write Bytes/sec",
+                "_Total");
 
             return (readCounter.RawValue, writeCounter.RawValue);
         }
@@ -249,23 +306,26 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
         {
             return (0, 0);
         }
-#endif
     }
 
     public void Dispose()
     {
-        Stop();
-        _cts.Dispose();
+        _ = ShutdownAsync(CancellationToken.None);
+        GC.SuppressFinalize(this);
     }
 }
 
-// ┌──────────────────────────────────────────────┐
-// │ Through me the way is to the city dolent;    │
-// │ Through me the way is to the eternal dolour; │
-// │ Through me the way is to the race condemned. │
-// │                                              │
-// │ Abandon all hope, ye who enter here.         │
-// └──────────────────────────────────────────────┘
+
+/*
+┌──────────────────────────────────────────────┐
+│ Through me the way is to the city dolent;    │
+│ Through me the way is to the eternal dolor;  │
+│ Through me the way is to the race condemned. │
+│                                              │
+│ Abandon all hope, ye who enter here.         │
+└──────────────────────────────────────────────┘
+*/
+
 
 /// <summary>
 /// Contract for CPU temperature readers
@@ -281,28 +341,27 @@ public interface ICpuTemperatureReader
 /// <summary>
 /// Cross-platform CPU temperature reader
 /// </summary>
-public sealed class CpuTemperatureReader
+public sealed class CpuTemperatureReader(ILogger<DeviceStatsService>? logger = null)
 {
     private static readonly TimeSpan MinReadInterval = TimeSpan.FromSeconds(1);
 
-    private readonly ILogger<DeviceStatsService>? _logger;
-    private readonly ICpuTemperatureReader _platformReader;
+    private readonly ICpuTemperatureReader _platformReader = CreatePlatformReader(logger);
     
     private double? _cachedValue;
     private DateTime _lastReadTime;
-    private bool _isInitialized = false;
 
-    public CpuTemperatureReader(ILogger<DeviceStatsService>? logger = null)
+    private static ICpuTemperatureReader CreatePlatformReader(ILogger<DeviceStatsService>? logger)
     {
-        _logger = logger;
-        _platformReader = new CpuTemperatureReaderInstance(logger);
-        _isInitialized = true;
+        if (OperatingSystem.IsWindows())
+        {
+            return new WindowsCpuTemperatureReader(logger);
+        }
+
+        return new LinuxCpuTemperatureReader(logger);
     }
 
     public double? Read()
     {
-        if (!_isInitialized) return 0;
-
         // Return cached value if read too recently
         if (_cachedValue.HasValue && 
             DateTime.UtcNow - _lastReadTime < MinReadInterval)
@@ -316,46 +375,37 @@ public sealed class CpuTemperatureReader
             _cachedValue = temperature;
             _lastReadTime = DateTime.UtcNow;
             
-            _logger?.LogDebug("CPU temperature read: {Temperature}°C", temperature);
             return temperature;
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to read CPU temperature");
+            logger?.LogError(ex, "failed to read cpu temp");
             _cachedValue = null;
             return null;
         }
     }
 }
 
-#if !WINDOWS
-internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
+internal sealed partial class LinuxCpuTemperatureReader(ILogger? logger) : ICpuTemperatureReader
 {
     private static readonly string[] KnownCpuDrivers =
         ["k10temp", "coretemp", "cpu_thermal", "acpitz", "k8temp", "zenpower"];
 
-    private readonly ILogger? _logger;
-
-    public CpuTemperatureReaderInstance(ILogger? logger)
-    {
-        _logger = logger;
-    }
-
     public double? Read()
     {
-        // S0. hwmon
+        // s0: hwmon
         var temp = TryReadHwmon();
         if (temp.HasValue) return temp;
 
-        // S1. ACPI
+        // s1: acpi
         temp = TryReadThermalZones();
         if (temp.HasValue) return temp;
 
-        // S2. Fallback to sensors CLI
+        // s2: fallback to sensors cli
         return TryReadViaSensorsCli();
     }
 
-    private double? TryReadHwmon()
+    private static double? TryReadHwmon()
     {
         const string hwmonPath = "/sys/class/hwmon";
         
@@ -369,19 +419,21 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
         foreach (var hwmonDir in Directory.GetDirectories(hwmonPath))
         {
             var nameFile = Path.Combine(hwmonDir, "name");
-            if (!File.Exists(nameFile)) continue;
+            if (!File.Exists(nameFile))
+                continue;
 
             var driverName = File.ReadAllText(nameFile).Trim();
-            if (!KnownCpuDrivers.Contains(driverName)) continue;
+            if (!KnownCpuDrivers.Contains(driverName))
+                continue;
 
-            // Read temp1_input
-            for (int i = 1; i <= 8; i++)
+            // temp1_input
+            for (var i = 1; i <= 8; i++)
             {
                 var inputFile = Path.Combine(hwmonDir, $"temp{i}_input");
                 if (!File.Exists(inputFile)) continue;
 
                 var labelFile = Path.Combine(hwmonDir, $"temp{i}_label");
-                string label = "";
+                var label = "";
                 
                 if (File.Exists(labelFile))
                 {
@@ -398,30 +450,27 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
                     if (!isCpuLabel && i > 1) continue;
                 }
 
-                if (File.ReadAllText(inputFile).Trim() is { } raw &&
-                    int.TryParse(raw, out int milli) && milli > 0)
-                {
-                    var celsius = milli / 1000.0;
-                    
-                    // Validate (If you cool your processor with
-                    // liquid nitrogen, then use a different software
-                    // to check the processor temperature)
-                    if (celsius is >= 20 and <= 100)
-                    {
-                        cpuTemp = celsius;
-                        _logger?.LogDebug(
-                            "Read CPU temp from hwmon {Driver}/{Label}: {Temp}°C",
-                            driverName, label, celsius);
-                        return cpuTemp;
-                    }
-                }
+                if (File.ReadAllText(inputFile).Trim() is not { } raw ||
+                    !int.TryParse(raw, out var milli) || milli <= 0)
+                    continue;
+                
+                var celsius = milli / 1000.0;
+                
+                // validate (if you cool your processor with
+                // liquid nitrogen, then use a different software
+                // to check the processor temperature)
+                if (celsius is < 20 or > 100)
+                    continue;
+                
+                cpuTemp = celsius;
+                return cpuTemp;
             }
         }
 
         return cpuTemp;
     }
 
-    private double? TryReadThermalZones()
+    private static double? TryReadThermalZones()
     {
         const string thermalPath = "/sys/class/thermal";
         
@@ -442,26 +491,24 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
 
             var celsius = milli / 1000.0;
 
-            // Validate temperature (If you cool your processor with
-            // liquid nitrogen, then use a different software
-            // to check the processor temperature)
-            if (celsius is < 20 or > 100) continue;
+            // validate temperature (if you cool your processor with
+            // liquid nitrogen bla bla bla)
+            if (celsius is < 20 or > 100)
+                continue;
             
             // 16.8°C is a common fake value
-            if (Math.Abs(celsius - 16.8) < 0.5) continue;
+            if (Math.Abs(celsius - 16.8) < 0.5)
+                continue;
 
-            string type = "";
+            var type = "";
             if (File.Exists(typeFile))
             {
                 type = File.ReadAllText(typeFile).Trim().ToLowerInvariant();
             }
 
-            // Prefer CPU-related zones
+            // prefer CPU-related zones
             if (type.Contains("cpu") || type.Contains("package") || type.Contains("x86"))
             {
-                _logger?.LogDebug(
-                    "Read CPU temp from thermal zone {Type}: {Temp}°C",
-                    type, celsius);
                 return celsius;
             }
         }
@@ -469,7 +516,7 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
         return null;
     }
 
-    private double? TryReadViaSensorsCli()
+    private static double? TryReadViaSensorsCli()
     {
         try
         {
@@ -487,42 +534,42 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader
             var output = proc.StandardOutput.ReadToEnd();
             proc.WaitForExit();
 
-            // Parse lines
-            var regex = new Regex(
-                @"^(?<label>Core\s*\d+|Tdie|Tctl|Package|CPU):\s+\+?(?<temp>\d+\.\d+)\s*°?C",
-                RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            // parse
+            var regex = LinesRegex();
 
             foreach (Match m in regex.Matches(output))
             {
                 if (double.TryParse(m.Groups["temp"].Value,
                     NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out double t) && t is >= 20 and <= 100)
+                    CultureInfo.InvariantCulture, out var t) && t is >= 20 and <= 100)
                 {
-                    _logger?.LogDebug("Read CPU temp from sensors CLI: {Temp}°C", t);
                     return t;
                 }
             }
         }
-        catch (Exception ex)
+        catch
         {
-            _logger?.LogDebug(ex, "sensors CLI not available");
+            // ignored
         }
 
         return null;
     }
+
+    [GeneratedRegex(@"^(?<label>Core\s*\d+|Tdie|Tctl|Package|CPU):\s+\+?(?<temp>\d+\.\d+)\s*°?C", RegexOptions.IgnoreCase | RegexOptions.Multiline, "ru-RU")]
+    private static partial Regex LinesRegex();
 }
-#else
-internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDisposable
+
+internal sealed class WindowsCpuTemperatureReader : ICpuTemperatureReader, IDisposable
 {
     private readonly ILogger? _logger;
     private readonly Computer? _lhmComputer;
-    private bool _lhmStarted = false;
-    private bool _canGetTemp = true;
+    private readonly bool _lhmStarted;
+    private readonly bool _canGetTemp = true;
 
-    public CpuTemperatureReaderInstance(ILogger? logger)
+    public WindowsCpuTemperatureReader(ILogger? logger)
     {
         _logger = logger;
-
+        
         var sw = Stopwatch.StartNew();
         try
         {
@@ -540,52 +587,55 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDis
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "LHM initialization failed");
+            _logger?.LogWarning(ex, "[cpu:temp] lhm init failed");
         }
 
-        logger?.LogInformation("LHM Open() took {Ms}ms", sw.ElapsedMilliseconds);
+        logger?.LogInformation("[cpu:temp] lhm open took {Ms}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
         try
         {
             var result = Read();
-            if (!result.HasValue || result == 0)
+            if (result is null or 0)
             {
                 _canGetTemp = false;
             }
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Temperature read failed");
+            _logger?.LogWarning(ex, "[cpu:temp] temperature read failed");
         }
 
-        logger?.LogInformation("Initial Read() took {Ms}ms", sw.ElapsedMilliseconds);
+        logger?.LogInformation("[cpu:temp] initial read took {Ms}ms", sw.ElapsedMilliseconds);
     }
 
     public double? Read()
     {
         if (!_canGetTemp) return 0;
-
-        // S0. WMI
+        
+        // s0: wmi
         var temp = TryReadWmiAcpi();
         if (temp.HasValue) return temp;
 
-        // S1. Performance Counters
+        // s1: performance counters
         temp = TryReadPerformanceCounter();
         if (temp.HasValue) return temp;
 
-        // S2. WMI Probe
+        // s2: wmi probe
         temp = TryReadWmiProbe();
         if (temp.HasValue) return temp;
 
-        // S3. LibreHardwareMonitor
+        // s3: libre
         return TryReadLibreHardwareMonitor();
     }
-
-    private double? TryReadWmiAcpi()
+    
+    private static double? TryReadWmiAcpi()
     {
         try
         {
+            if (!OperatingSystem.IsWindows())
+                return 0;
+            
             using var searcher = new ManagementObjectSearcher(@"root\wmi", "SELECT * FROM MSAcpi_ThermalZoneTemperature");
             foreach (var obj in searcher.Get())
             {
@@ -601,12 +651,19 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDis
         return null;
     }
 
-    private double? TryReadPerformanceCounter()
+    private static double? TryReadPerformanceCounter()
     {
         try
         {
-            using var pc = new PerformanceCounter("Thermal Zone Information", "Temperature", @"\_TZ.THM0", true);
-            float kelvin = pc.NextValue();
+            if (!OperatingSystem.IsWindows())
+                return 0;
+            
+            using var pc = new PerformanceCounter(
+                "Thermal Zone Information",
+                "Temperature",
+                @"\_TZ.THM0",
+                true);
+            var kelvin = pc.NextValue();
             if (kelvin <= 0) return null;
             
             return kelvin - 273.15;
@@ -617,10 +674,13 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDis
         }
     }
 
-    private double? TryReadWmiProbe()
+    private static double? TryReadWmiProbe()
     {
         try
         {
+            if (!OperatingSystem.IsWindows())
+                return 0;
+            
             using var searcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_TemperatureProbe");
             foreach (var obj in searcher.Get())
             {
@@ -643,30 +703,29 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDis
         {
             foreach (var hardware in _lhmComputer.Hardware)
             {
-                if (hardware.HardwareType == HardwareType.Cpu)
-                {
-                    hardware.Update();
+                if (hardware.HardwareType != HardwareType.Cpu)
+                    continue;
+                hardware.Update();
                     
-                    foreach (var sensor in hardware.Sensors)
+                foreach (var sensor in hardware.Sensors)
+                {
+                    if (sensor.SensorType !=
+                        SensorType.Temperature ||
+                        (!sensor.Name.Contains("Core") &&
+                         !sensor.Name.Contains("Package") &&
+                         !sensor.Name.Contains("Tdie")))
+                        continue;
+                    
+                    if (sensor.Value is { } value and >= 20 and <= 100)
                     {
-                        if (sensor.SensorType == 
-                            SensorType.Temperature &&
-                            sensor.Name.Contains("Core") || 
-                            sensor.Name.Contains("Package") ||
-                            sensor.Name.Contains("Tdie"))
-                        {
-                            if (sensor.Value is float value && value is >= 20 and <= 100)
-                            {
-                                return value;
-                            }
-                        }
+                        return value;
                     }
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger?.LogDebug(ex, "LibreHardwareMonitor read failed");
+            _logger?.LogDebug(ex, "librehardwaremonitor read failed");
         }
 
         return 0;
@@ -684,4 +743,3 @@ internal sealed class CpuTemperatureReaderInstance : ICpuTemperatureReader, IDis
         }
     }
 }
-#endif

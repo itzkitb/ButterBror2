@@ -2,7 +2,7 @@
 
 namespace ButterBror.Core.Messaging;
 
-public interface IBBCodeParser
+public interface IBbCodeParser
 {
     /// <summary>
     /// Parses a BBCode formatted string into a list of MessageParts

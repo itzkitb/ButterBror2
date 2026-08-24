@@ -5,29 +5,30 @@ using ButterBror.ChatModules.Twitch.Services;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Messaging;
 using ButterBror.Core.Modules;
+using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Enums;
-using ButterBror.Core.Modules.Interfaces;
-using ButterBror.Data;
-using ButterBror.Domain.Chat;
+using ButterBror.Data.Interfaces;
+using ButterBror.Domain;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.Registry;
 using TwitchLib.Client.Events;
+using ChatMessage = ButterBror.Domain.Chat.ChatMessage;
 
 namespace ButterBror.ChatModules.Twitch;
 
 public class TwitchModule : IChatModule
 {
-    // ><> Metadata
+    // ><> metadata
     public string ModuleId => "sillyapps:twitch";
-    public Version Version { get; } = new(1, 3, 3);
+    public Version Version { get; } = new(1, 4, 1);
     public List<ChatModuleFlags> Flags { get; } = [ChatModuleFlags.CanSendMessages];
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
         Services.Localization.DefaultTranslations;
 
-    // ><> State & Dependencies
+    // ><> state & dependencies
     private readonly ConcurrentDictionary<string, string> _prefixCache = new(StringComparer.Ordinal);
     private TwitchMessageRender? _messageRender;
 
@@ -46,23 +47,24 @@ public class TwitchModule : IChatModule
     public bool IsConnected => _twitchClient.IsConnected;
     public IReadOnlyList<ModuleCommandExport> ExportedCommands => _commandFactories.Export;
 
-    // ><> Lifecycle
+    // ><> lifecycle
     public async Task InitializeAsync(IServiceProvider serviceProvider)
     {
-        if (IsInitialized) return;
+        if (IsInitialized)
+            return;
 
         var config = await LoadConfigurationAsync(serviceProvider);
         if (!config.IsEnabled || string.IsNullOrWhiteSpace(config.OauthToken))
         {
             var logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
-            logger.LogWarning("[TW] Module is disabled or OAuth token is missing. Module will not start!");
+            logger.LogError("[tw] module is disabled or oauth token is missing");
             return;
         }
 
         ResolveCoreDependencies(serviceProvider, config);
         
         var channelManager = await RegisterAndGetChannelManagerAsync(serviceProvider);
-        InitializeModuleServices(serviceProvider, config, channelManager);
+        await InitializeModuleServices(serviceProvider, config, channelManager);
 
         SubscribeEvents();
         await ConnectAsync();
@@ -79,11 +81,11 @@ public class TwitchModule : IChatModule
         await _twitchClient.DisconnectAsync();
         
         IsInitialized = false;
-        _logger.LogInformation("[TW] Module shutdown complete");
+        _logger.LogInformation("[tw] module shutdown complete");
     }
 
-    // ><> Initialization
-    private async Task<TwitchConfiguration> LoadConfigurationAsync(IServiceProvider sp)
+    // ><> init
+    private static async Task<TwitchConfiguration> LoadConfigurationAsync(IServiceProvider sp)
     {
         var configurationService = sp.GetRequiredService<IConfigurationService>();
         return await configurationService.LoadConfigurationAsync<TwitchConfiguration>("Twitch") 
@@ -100,21 +102,28 @@ public class TwitchModule : IChatModule
         _localization = sp.GetService<ILocalizationService>();
         var localization = sp.GetRequiredService<ILocalizationService>();
         var pastebinService = sp.GetRequiredService<IPasteBinService>();
-        _messageRender = new(pastebinService, localization);
+        _messageRender = new TwitchMessageRender(pastebinService, localization);
     }
 
-    private static async Task<ITwitchChannelManager> RegisterAndGetChannelManagerAsync(IServiceProvider sp)
+    private static Task<ITwitchChannelManager> RegisterAndGetChannelManagerAsync(IServiceProvider sp)
     {
-        var dynamicSp = sp.GetRequiredService<IDynamicServiceProvider>();
-        dynamicSp.AddSingleton<ITwitchChannelManager, TwitchChannelManager>();
-        return dynamicSp.GetRequiredService<ITwitchChannelManager>();
+        try
+        {
+            var dynamicSp = sp.GetRequiredService<IDynamicServiceProvider>();
+            dynamicSp.AddSingleton<ITwitchChannelManager, TwitchChannelManager>();
+            return Task.FromResult(dynamicSp.GetRequiredService<ITwitchChannelManager>());
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException<ITwitchChannelManager>(exception);
+        }
     }
 
-    private void InitializeModuleServices(IServiceProvider sp, TwitchConfiguration config, ITwitchChannelManager channelManager)
+    private async Task InitializeModuleServices(IServiceProvider sp, TwitchConfiguration config, ITwitchChannelManager channelManager)
     {
         var options = Options.Create(config);
         
-        _twitchClient = new TwitchClient(
+        _twitchClient = await TwitchClient.CreateAsync(
             options,
             sp.GetRequiredService<ResiliencePipelineProvider<string>>(),
             sp.GetRequiredService<ILogger<TwitchClient>>(),
@@ -132,7 +141,7 @@ public class TwitchModule : IChatModule
         _commandFactories = new CommandFactories(this, _twitchClient, options, channelManager, sp);
     }
 
-    // ><> Events
+    // ><> events
     private void SubscribeEvents()
     {
         _twitchClient.OnMessageReceived += OnMessageReceived;
@@ -140,10 +149,10 @@ public class TwitchModule : IChatModule
         _twitchClient.OnDisconnected += OnDisconnected;
         _twitchClient.OnBroadcasterAuthReceived += _broadcasterService.OnBroadcasterAuthReceived;
 
-        _twitchClient.OnNewSubscriber += (_, e) => _logger.LogInformation("[TW] New sub in #{Channel}: {User} ({Plan})", e.Channel, e.Username, e.SubscriptionPlan);
-        _twitchClient.OnGiftedSubscription += (_, e) => _logger.LogInformation("[TW] Gifted sub in #{Channel}: {Gifter} -> {Recipient}", e.Channel, e.GifterUsername, e.RecipientUsername);
-        _twitchClient.OnRaidNotification += (_, e) => _logger.LogInformation("[TW] Raid in #{Channel}: {Raider} ({Viewers} viewers)", e.Channel, e.RaiderUsername, e.ViewerCount);
-        _twitchClient.OnBitsReceived += (_, e) => _logger.LogInformation("[TW] Bits in #{Channel}: {User} ({Bits} bits)", e.Channel, e.Username, e.Bits);
+        _twitchClient.OnNewSubscriber += (_, e) => _logger.LogInformation("[tw:event] new sub in #{Channel}: {User} ({Plan})", e.Channel, e.Username, e.SubscriptionPlan);
+        _twitchClient.OnGiftedSubscription += (_, e) => _logger.LogInformation("[tw:event] gifted sub in #{Channel}: {Gifter} -> {Recipient}", e.Channel, e.GifterUsername, e.RecipientUsername);
+        _twitchClient.OnRaidNotification += (_, e) => _logger.LogInformation("[tw:event] raid in #{Channel}: {Raider} ({Viewers} viewers)", e.Channel, e.RaiderUsername, e.ViewerCount);
+        _twitchClient.OnBitsReceived += (_, e) => _logger.LogInformation("[tw:event] bits in #{Channel}: {User} ({Bits} bits)", e.Channel, e.Username, e.Bits);
     }
 
     private void UnsubscribeEvents()
@@ -154,7 +163,7 @@ public class TwitchModule : IChatModule
         _twitchClient.OnBroadcasterAuthReceived -= _broadcasterService.OnBroadcasterAuthReceived;
     }
 
-    // ><> Connection
+    // ><> connection
     private async Task ConnectAsync()
     {
         try
@@ -167,20 +176,20 @@ public class TwitchModule : IChatModule
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TW] Failed to initialize module connection");
+            _logger.LogError(ex, "[tw] failed to init module connection");
             throw;
         }
     }
 
-    // ><> Event Handlers
+    // ><> event handlers
     private void OnConnected(object? sender, OnConnectedEventArgs e) =>
-        ExecuteSafeBackground(SafeHandleConnectAsync(e), "[TW] Unhandled exception in connect handler");
+        ExecuteSafeBackground(SafeHandleConnectAsync(e), "[tw] unhandled exception in connect handler");
 
     private void OnDisconnected(object? sender, OnDisconnectedArgs e) =>
-        _logger.LogWarning("[TW] Disconnected");
+        _logger.LogWarning("[tw] disconnected");
 
     private void OnMessageReceived(object? sender, Events.OnMessageReceivedArgs e) =>
-        ExecuteSafeBackground(SafeHandleMessageAsync(e), "[TW] Unhandled exception in message handler");
+        ExecuteSafeBackground(SafeHandleMessageAsync(e), "[tw] unhandled exception in message handler");
 
     private async Task SafeHandleConnectAsync(OnConnectedEventArgs _)
     {
@@ -198,7 +207,7 @@ public class TwitchModule : IChatModule
 
         if (IsSelfMessage(chatMessage))
         {
-            _logger.LogDebug("[TW] Ignoring self-message in #{Channel}", chatMessage.Channel);
+            _logger.LogDebug("[tw] ignore self-message in #{Channel}", chatMessage.Channel);
             return;
         }
 
@@ -206,7 +215,7 @@ public class TwitchModule : IChatModule
         await ProcessCommandIfAnyAsync(chatMessage);
     }
 
-    // ><> Message & Command Processing
+    // ><> message & command processing
     public async Task SendMessageAsync(string chatId, Message message, string? replyId = null, dynamic? data = null)
     {
         if (_messageRender == null)
@@ -221,18 +230,18 @@ public class TwitchModule : IChatModule
             await _twitchClient.SendReplyAsync(chatId, replyId, msg, false);
     }
 
-    private async Task ProcessCommandIfAnyAsync(ChatMessage chatMessage)
+    private async Task ProcessCommandIfAnyAsync(Models.ChatMessage chatMessage)
     {
         var prefix = await GetChannelPrefixAsync(chatMessage.ChannelId);
         if (!TryParseCommand(chatMessage.Message, prefix, out var commandName, out var arguments))
             return;
 
-        var context = CreateCommandContext(chatMessage, commandName, arguments);
+        var context = CreateCommandContext(chatMessage, commandName, arguments.ToList());
         var result = await _botCore.ProcessCommandAsync(context).ConfigureAwait(false);
 
         if (!result.SendResult)
         {
-            _logger.LogInformation("[TW] Not sent due to reply flag: {result}", result.Message?.RawText ?? "[]");
+            _logger.LogInformation("[tw] not sent due to reply flag: '{result}'", result.Message?.RawText ?? "[empty]");
             return;
         }
 
@@ -244,12 +253,12 @@ public class TwitchModule : IChatModule
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[TW] Failed to send command result back to #{Channel}", chatMessage.Channel);
+                _logger.LogError(ex, "[tw] failed to send command result back to #{Channel}", chatMessage.Channel);
             }
         }
     }
 
-    private async Task SendResponseAsync(ChatMessage triggeringMessage, Message responseMessage)
+    private async Task SendResponseAsync(Models.ChatMessage triggeringMessage, Message responseMessage)
     {
         if (_messageRender == null)
             return;
@@ -270,7 +279,7 @@ public class TwitchModule : IChatModule
         }
     }
 
-    private async Task DispatchMessageToBotCoreAsync(ChatMessage chatMessage)
+    private async Task DispatchMessageToBotCoreAsync(Models.ChatMessage chatMessage)
     {
         var extra = new TwitchMessageExtra
         {
@@ -286,7 +295,7 @@ public class TwitchModule : IChatModule
 
         await _botCore.RaiseMessageReceivedAsync(
             ModuleId,
-            new IncomingChatMessage(
+            new ChatMessage(
                 Text: chatMessage.Message,
                 ExtraData: extra,
                 ReceivedAt: DateTime.UtcNow,
@@ -294,12 +303,11 @@ public class TwitchModule : IChatModule
                 PlatformUserName: chatMessage.Username,
                 PlatformChatId: chatMessage.ChannelId,
                 PlatformChatName: chatMessage.Channel
-            ),
-            platform: ModuleId
+            )
         );
     }
 
-    // ><> Prefix & Helpers
+    // ><> prefix & helpers
     private async ValueTask<string> GetChannelPrefixAsync(string channelId)
     {
         if (_prefixCache.TryGetValue(channelId, out var cached))
@@ -314,7 +322,7 @@ public class TwitchModule : IChatModule
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[TW] Failed to load prefix from Redis for #{ChannelId}, using default '{Default}'",
+            _logger.LogWarning(ex, "[tw] failed to load prefix from Redis for #{ChannelId}, using default '{Default}'",
                 channelId, _config.CommandPrefix);
             return _config.CommandPrefix;
         }
@@ -322,7 +330,7 @@ public class TwitchModule : IChatModule
 
     public void InvalidatePrefixCache(string channelId) => _prefixCache.TryRemove(channelId, out _);
 
-    private bool IsSelfMessage(ChatMessage msg) =>
+    private bool IsSelfMessage(Models.ChatMessage msg) =>
         msg.UserId.Equals(_config.BotUserId, StringComparison.OrdinalIgnoreCase) ||
         msg.Username.Equals(_config.BotUsername, StringComparison.OrdinalIgnoreCase);
 
@@ -351,15 +359,81 @@ public class TwitchModule : IChatModule
         return !string.IsNullOrWhiteSpace(commandName);
     }
 
-    private static ICommandContext CreateCommandContext(ChatMessage msg, string commandName, string[] arguments) =>
-        new TwitchCommandContext(
-            commandName,
-            arguments,
-            new TwitchUser(msg.Username, msg.UserId, msg.IsModerator, msg.IsBroadcaster, msg.IsBot),
-            new TwitchChannel(msg.Channel, msg.ChannelId),
-            DateTime.UtcNow
-        );
+    private CommandContext CreateCommandContext(Models.ChatMessage msg, string commandName, List<string> arguments, CancellationToken cancellationToken = default)
+    {
+        var chatMessage = new ChatMessage( 
+            DateTime.UtcNow,
+            msg.Message,
+            msg.UserId,
+            msg.Username,
+            msg.ChannelId,
+            msg.Channel,
+            msg);
 
+        var permissions = new HashSet<PlatformPermission>();
+        if (msg.IsModerator)
+            permissions.UnionWith([
+                PlatformPermission.Moderator,
+                PlatformPermission.CanBanUser,
+                PlatformPermission.CanUnbanUser,
+                PlatformPermission.CanDeleteOtherMessages,
+                PlatformPermission.CanDeleteOwnMessages,
+                PlatformPermission.CanUseBotCommands
+            ]);
+        if (msg.IsBroadcaster)
+            permissions.UnionWith([
+                PlatformPermission.Moderator,
+                PlatformPermission.Owner,
+                PlatformPermission.CanBanUser,
+                PlatformPermission.CanUnbanUser,
+                PlatformPermission.CanDeleteOtherMessages,
+                PlatformPermission.CanDeleteOwnMessages,
+                PlatformPermission.CanUseBotCommands,
+                PlatformPermission.CanAddModerators,
+                PlatformPermission.CanRemoveModerators,
+                PlatformPermission.CanEditChatData
+            ]);
+        if (msg.IsBot)
+            permissions.UnionWith([
+                PlatformPermission.Moderator,
+                PlatformPermission.CanBanUser,
+                PlatformPermission.CanUnbanUser,
+                PlatformPermission.CanDeleteOtherMessages,
+                PlatformPermission.CanDeleteOwnMessages,
+                PlatformPermission.CanUseBotCommands
+            ]);
+        if (msg.IsSubscriber)
+            permissions.UnionWith([
+                PlatformPermission.Vip
+            ]);
+        if (msg.IsVip)
+            permissions.UnionWith([
+                PlatformPermission.Vip
+            ]);
+        if (msg.Badges.Any(b => b.Key == "lead_moderator"))
+            permissions.UnionWith([
+                PlatformPermission.Moderator,
+                PlatformPermission.CanBanUser,
+                PlatformPermission.CanUnbanUser,
+                PlatformPermission.CanDeleteOtherMessages,
+                PlatformPermission.CanDeleteOwnMessages,
+                PlatformPermission.CanUseBotCommands,
+                PlatformPermission.CanAddModerators,
+                PlatformPermission.CanRemoveModerators
+            ]);
+        
+        return new CommandContext(
+            commandName,
+            ModuleId,
+            arguments,
+            new TwitchUser(msg.Username, msg.UserId, permissions),
+            new TwitchChat(msg.Channel, msg.ChannelId),
+            permissions,
+            chatMessage,
+            cancellationToken
+        );
+    }
+    
     private void ExecuteSafeBackground(Task task, string errorMessage)
     {
         _ = task.ContinueWith(
@@ -371,6 +445,6 @@ public class TwitchModule : IChatModule
     private void EnsureInitialized()
     {
         if (!IsInitialized)
-            throw new InvalidOperationException("[TW] Module is not initialized.");
+            throw new InvalidOperationException("module is not initialized");
     }
 }

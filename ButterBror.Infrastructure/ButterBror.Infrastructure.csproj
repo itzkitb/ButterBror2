@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+    <TargetFrameworks>net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Version>1.0.0.0</Version>
@@ -16,22 +16,17 @@
     <PackageReference Include="Polly.Core" Version="8.7.0" />
     <PackageReference Include="StackExchange.Redis" Version="3.0.17" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
-  </ItemGroup>
-
-  <ItemGroup Condition="$(TargetFramework.Contains('windows'))">
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+	<PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.10" />
+    <PackageReference Include="System.Management" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../ButterBror.ChatModules.Loader/ButterBror.Modules.Loader.csproj" />
+    <ProjectReference Include="..\ButterBror.Application\ButterBror.Application.csproj" />
     <ProjectReference Include="..\ButterBror.Core\ButterBror.Core.csproj" />
     <ProjectReference Include="..\ButterBror.Data\ButterBror.Data.csproj" />
     <ProjectReference Include="..\ButterBror.Domain\ButterBror.Domain.csproj" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
-    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.10" />
-    <PackageReference Include="System.Management" Version="10.0.10" />
   </ItemGroup>
 
 </Project>

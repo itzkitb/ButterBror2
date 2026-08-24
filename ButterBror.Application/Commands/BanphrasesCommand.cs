@@ -8,49 +8,36 @@ namespace ButterBror.Application.Commands;
 public class BanphrasesCommand : ICommand
 {
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        try
+        var logger = serviceProvider.GetService<ILogger<BanphrasesCommand>>();
+        var banphraseService = serviceProvider.GetService<IBanphraseService>();
+        var hasteBinService = serviceProvider.GetService<IPasteBinService>();
+        var localization = serviceProvider.GetService<ILocalizationService>();
+
+        if (context.Arguments.Count < 2)
         {
-            var logger = serviceProvider.GetService<ILogger<BanphrasesCommand>>();
-            var banphraseService = serviceProvider.GetService<IBanphraseService>();
-            var hasteBinService = serviceProvider.GetService<IPasteBinService>();
-            var localization = serviceProvider.GetService<ILocalizationService>();
-            
-            if (context.Arguments.Count < 2)
-            {
-                return CommandResult.Failure(
-                    await localization.GetStringAsync("command.banphrases.usage", context.Locale));
-            }
-            
-            var action = context.Arguments[0].ToLowerInvariant();
-            
-            return action switch
-            {
-                "set" => await HandleSetAsync(context, banphraseService, hasteBinService, logger, localization),
-                "get" => await HandleGetAsync(context, banphraseService, hasteBinService, logger, localization),
-                "list" => await HandleListAsync(context, banphraseService, hasteBinService, logger, localization),
-                "test" => await HandleTestAsync(context, banphraseService, localization),
-                "delete" => await HandleDeleteAsync(context, banphraseService, localization),
-                _ => CommandResult.Failure(
-                        await localization.GetStringAsync("command.banphrases.unknown", context.Locale))
-            };
+            return CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.usage", context.Locale));
         }
-        catch (Exception ex)
+
+        var action = context.Arguments[0].ToLowerInvariant();
+
+        return action switch
         {
-            var errorTracking = serviceProvider.GetService<IErrorTrackingService>();
-            return await errorTracking.LogErrorAsync(
-                ex,
-                "Failed to execute BanphrasesCommand",
-                context.User.UnifiedId,
-                context.Channel.Platform,
-                context);
-        }
+            "set" => await HandleSetAsync(context, banphraseService, hasteBinService, logger, localization),
+            "get" => await HandleGetAsync(context, banphraseService, hasteBinService, logger, localization),
+            "list" => await HandleListAsync(context, banphraseService, hasteBinService, logger, localization),
+            "test" => await HandleTestAsync(context, banphraseService, localization),
+            "delete" => await HandleDeleteAsync(context, banphraseService, localization),
+            _ => CommandResult.Failure(
+                await localization.GetStringAsync("command.banphrases.unknown", context.Locale))
+        };
     }
-    
+
     private async Task<CommandResult> HandleSetAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IBanphraseService banphraseService,
         IPasteBinService pasteBinService,
         ILogger logger,
@@ -89,12 +76,10 @@ public class BanphrasesCommand : ICommand
             regexPattern = patternOrUrl;
         }
         
-        var platform = context.Channel.Platform;
-        var channelId = context.Channel.Id;
+        var channelId = context.ChatInfo.UnifiedId;
         
         var success = await banphraseService.SetCategoryAsync(
             section,
-            platform,
             channelId,
             categoryName,
             regexPattern);
@@ -176,7 +161,7 @@ public class BanphrasesCommand : ICommand
     }
 
     private async Task<CommandResult> HandleGetAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IBanphraseService banphraseService,
         IPasteBinService pasteBinService,
         ILogger logger,
@@ -190,10 +175,10 @@ public class BanphrasesCommand : ICommand
         
         var section = context.Arguments[1].ToLowerInvariant();
         var categoryName = context.Arguments[2];
-        var platform = context.Channel.Platform;
-        var channelId = context.Channel.Id;
-        
-        var pattern = await banphraseService.GetCategoryAsync(section, platform, channelId, categoryName);
+        var channelId = context.ChatInfo.UnifiedId;
+
+        var record = await banphraseService.GetCategoryAsync(section, channelId, categoryName);
+        var pattern = record?.Pattern;
         
         if (string.IsNullOrEmpty(pattern))
         {
@@ -221,17 +206,16 @@ public class BanphrasesCommand : ICommand
     }
     
     private async Task<CommandResult> HandleListAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IBanphraseService banphraseService,
         IPasteBinService pasteBinService,
         ILogger logger,
         ILocalizationService localization)
     {
         var section = context.Arguments.Count > 1 ? context.Arguments[1].ToLowerInvariant() : "global";
-        var platform = context.Channel.Platform;
-        var channelId = context.Channel.Id;
+        var channelId = context.ChatInfo.UnifiedId;
         
-        var categories = await banphraseService.ListCategoriesAsync(section, platform, channelId);
+        var categories = await banphraseService.ListCategoriesAsync(section, channelId);
         
         if (categories.Count == 0)
         {
@@ -248,7 +232,7 @@ public class BanphrasesCommand : ICommand
         
         foreach (var category in categories)
         {
-            var pattern = await banphraseService.GetCategoryAsync(section, platform, channelId, category);
+            var pattern = category.Pattern;
             var displayPattern = pattern?.Length > 50 ? pattern[..50] + "..." : pattern ?? "(empty)";
             listContent.AppendLine($"- {category}");
             listContent.AppendLine($"  Regex: {displayPattern}");
@@ -273,7 +257,7 @@ public class BanphrasesCommand : ICommand
     }
 
     private async Task<CommandResult> HandleTestAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IBanphraseService banphraseService,
         ILocalizationService localization)
     {
@@ -285,25 +269,21 @@ public class BanphrasesCommand : ICommand
 
         var section = context.Arguments[1].ToLowerInvariant();
         var message = string.Join(" ", context.Arguments.Skip(2));
-        var platform = context.Channel.Platform;
-        var channelId = context.Channel.Id;
+        var channelId = context.ChatInfo.UnifiedId;
 
         // For testing, we need to determine which section to check
-        string testPlatform, testChannelId;
+        Guid testChannelId;
 
         if (section == "global")
         {
-            testPlatform = platform;
-            testChannelId = channelId;
+            testChannelId = new Guid(context.Arguments[2]);
         }
         else
         {
-            testPlatform = platform;
             testChannelId = channelId;
         }
 
-        var result =
-            await banphraseService.CheckMessageAsync(testChannelId, testPlatform, message, context.CancellationToken);
+        var result = await banphraseService.CheckMessageAsync(testChannelId, message, context.CancellationToken);
 
         if (result.Passed)
         {
@@ -337,7 +317,7 @@ public class BanphrasesCommand : ICommand
     }
 
     private async Task<CommandResult> HandleDeleteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         IBanphraseService banphraseService,
         ILocalizationService localization)
     {
@@ -349,10 +329,9 @@ public class BanphrasesCommand : ICommand
         
         var section = context.Arguments[1].ToLowerInvariant();
         var categoryName = context.Arguments[2];
-        var platform = context.Channel.Platform;
-        var channelId = context.Channel.Id;
+        var channelId = context.ChatInfo.UnifiedId;
         
-        var success = await banphraseService.DeleteCategoryAsync(section, platform, channelId, categoryName);
+        var success = await banphraseService.DeleteCategoryAsync(section, channelId, categoryName);
         
         if (!success)
         {

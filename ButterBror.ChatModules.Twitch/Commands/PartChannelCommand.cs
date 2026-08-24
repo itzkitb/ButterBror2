@@ -15,10 +15,10 @@ public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient 
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        // S0: Checking for the presence of an argument
+        // s0: checking for the presence of an argument
         if (context.Arguments.Count == 0)
         {
             return CommandResult.Failure(
@@ -26,11 +26,9 @@ public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient 
         }
 
         var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
-
-        // S1: Get the user profile to obtain the unifiedUserId
         var user = context.User;
 
-        // S2: Checking user permission
+        // s1: checking user permission
         var hasPermission = await _permissionManager.HasPermissionAsync(
             user.UnifiedId,
             "su:twitch:part"
@@ -42,10 +40,10 @@ public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient 
                 await _localization.GetStringAsync("command.part.permission", context.Locale));
         }
 
-        // S3: Trying to disconnect from the channel
+        // s3: trying to disconnect from the channel
         await twitchClient.LeaveChannelAsync(channelName);
 
-        _logger.LogInformation("Parted channel '{Channel}' by user '{User}'",
+        _logger.LogInformation("[tw] parted channel. chat={Channel}, user={User}",
             channelName, context.User.DisplayName);
 
         return CommandResult.Successfully(

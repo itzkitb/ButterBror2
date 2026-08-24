@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
+using ButterBror.Core.Scopes;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
@@ -8,57 +9,50 @@ namespace ButterBror.Infrastructure.Services;
 /// <summary>
 /// Bot statistics service providing live metrics and persistent counters
 /// </summary>
-public class BotStatsService : IBotStatsService
+public class BotStatsService(
+    IAppDataPathProvider pathProvider,
+    ILogger<BotStatsService> logger,
+    JsonSerializerOptions jsonOptions)
+    : IBotStatsService
 {
-    private readonly IAppDataPathProvider _pathProvider;
-    private readonly ILogger<BotStatsService> _logger;
-
-    // Minute counters for CpM/MpM
+    // ><> private
+    // ^ minute counters for cpc/mpm
     private readonly Queue<(DateTime At, int Count)> _commandTicks = new();
     private readonly Queue<(DateTime At, int Count)> _messageTicks = new();
-    private readonly object _tickLock = new();
+    private readonly Lock _tickLock = new();
 
-    // Redis ops rolling windows
+    // ^ db ops rolling
     private readonly Queue<(DateTime At, long Ops)> _opsMinQueue = new();
     private readonly Queue<(DateTime At, long Ops)> _opsHourQueue = new();
-    private readonly object _opsLock = new();
+    private readonly Lock _opsLock = new();
 
-    // Redis live stats
+    // ^ db live stats
     private long _redisMemoryUsedBytes;
     private long _redisConnectedClients;
     private long _redisOpsPerSecond;
     private long _redisKeys;
-    private readonly object _redisLock = new();
+    private readonly Lock _redisLock = new();
 
-    // Session tracking
-    private DateTime _startedAt;
+    // ^ session tracking
+    private DateTime _startedAt = DateTime.UtcNow;
 
-    // Persistent stats
+    // ^ persistent stats
     private PersistentBotStats _persistent = new();
     private long _commandsAtStart;
     private long _repliesAtStart;
     private TimeSpan _uptimeAtStart;
 
-    // In-memory counters
+    // ^ in-memory counters
     private long _currentSessionCommands;
     private long _currentSessionReplies;
 
-    // Flush timer
+    // ^ flush timer
     private Timer? _flushTimer;
     private readonly SemaphoreSlim _flushLock = new(1, 1);
 
     private bool _initialized;
 
-    public BotStatsService(
-        IAppDataPathProvider pathProvider,
-        ILogger<BotStatsService> logger)
-    {
-        _pathProvider = pathProvider;
-        _logger = logger;
-        _startedAt = DateTime.UtcNow;
-    }
-
-    // Live
+    // ><> public
 
     public double CommandsPerMinute
     {
@@ -84,7 +78,7 @@ public class BotStatsService : IBotStatsService
         }
     }
 
-    // Redis
+    // ^ db
 
     public long RedisMemoryUsedBytes
     {
@@ -146,19 +140,19 @@ public class BotStatsService : IBotStatsService
         }
     }
     
-    // Uptime
+    // ^ uptime
 
     public TimeSpan CurrentSessionUptime => DateTime.UtcNow - _startedAt;
 
     public TimeSpan TotalUptime => _persistent.TotalUptime + CurrentSessionUptime;
 
-    // Persistent
+    // ^ persistent
 
     public long TotalCommandsExecuted => _persistent.TotalCommandsExecuted + _currentSessionCommands;
 
     public long TotalRepliesSent => _persistent.TotalRepliesSent + _currentSessionReplies;
 
-    // Methods
+    // ><> methods
 
     public void IncrementCommandCount()
     {
@@ -196,13 +190,15 @@ public class BotStatsService : IBotStatsService
         }
     }
 
-    // Inititialize
+    // ><> init
 
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         if (_initialized)
             return;
 
+        await using var _ = new InitializationScope(logger, "bot statistics");
+        
         _startedAt = DateTime.UtcNow;
 
         var statsPath = GetStatsFilePath();
@@ -211,7 +207,7 @@ public class BotStatsService : IBotStatsService
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
-            _logger.LogDebug("Created directory. path='{Directory}'", directory);
+            logger.LogDebug("created directory. path='{Directory}'", directory);
         }
 
         if (File.Exists(statsPath))
@@ -219,22 +215,17 @@ public class BotStatsService : IBotStatsService
             try
             {
                 var json = await File.ReadAllTextAsync(statsPath, cancellationToken);
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                };
-                _persistent = JsonSerializer.Deserialize<PersistentBotStats>(json, options) ?? new PersistentBotStats();
-                _logger.LogInformation("Loaded bot statistics");
+                _persistent = JsonSerializer.Deserialize<PersistentBotStats>(json, jsonOptions) ?? new PersistentBotStats();
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to load stats, starting with defaults. path='{Path}', message='{Message}'", statsPath, ex.Message);
+                logger.LogWarning(ex, "failed to load stats, starting with defaults. path='{Path}', message='{Message}'", statsPath, ex.Message);
                 _persistent = new PersistentBotStats();
             }
         }
         else
         {
-            _logger.LogInformation("No persistent stats found, starting with defaults. path='{Path}'", statsPath);
+            logger.LogInformation("no persistent stats found, starting with defaults. path='{Path}'", statsPath);
             _persistent = new PersistentBotStats();
         }
 
@@ -247,6 +238,14 @@ public class BotStatsService : IBotStatsService
         _initialized = true;
     }
 
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        await FlushAsync(cancellationToken);
+        if (_flushTimer != null)
+            await _flushTimer.DisposeAsync();
+        _flushLock.Dispose();
+    }
+    
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
         if (!_initialized)
@@ -266,20 +265,15 @@ public class BotStatsService : IBotStatsService
             _persistent.TotalCommandsExecuted = _commandsAtStart + _currentSessionCommands;
             _persistent.TotalRepliesSent = _repliesAtStart + _currentSessionReplies;
             _persistent.TotalUptime = _uptimeAtStart + CurrentSessionUptime;
-
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            };
-            var json = JsonSerializer.Serialize(_persistent, options);
+            
+            var json = JsonSerializer.Serialize(_persistent, jsonOptions);
 
             await File.WriteAllTextAsync(statsPath, json, cancellationToken);
-            _logger.LogDebug("Statistics have been written to a file. path='{Path}'", statsPath);
+            logger.LogDebug("statistics have been written to a file. path='{Path}'", statsPath);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to flush stats");
+            logger.LogWarning(ex, "failed to flush stats");
         }
         finally
         {
@@ -294,7 +288,7 @@ public class BotStatsService : IBotStatsService
 
     private string GetStatsFilePath()
     {
-        var appDataPath = _pathProvider.GetAppDataPath();
+        var appDataPath = pathProvider.GetAppDataPath();
         return Path.Combine(appDataPath, "Stats.json");
     }
 
@@ -310,11 +304,5 @@ public class BotStatsService : IBotStatsService
         var cutoff = DateTime.UtcNow - window;
         while (queue.TryPeek(out var head) && head.At < cutoff)
             queue.Dequeue();
-    }
-
-    public void Dispose()
-    {
-        _flushTimer?.Dispose();
-        _flushLock.Dispose();
     }
 }

@@ -16,10 +16,10 @@ public class AddChannelCommand(
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        // S0: Validate arguments
+        // s0: validate arguments
         if (context.Arguments.Count < 1)
         {
             return CommandResult.Failure(
@@ -28,7 +28,7 @@ public class AddChannelCommand(
 
         var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
-        // S2: Check permissions
+        // s2: check permissions
         var user = context.User;
         var hasPermission = await _permissionManager.HasPermissionAsync(
             user.UnifiedId,

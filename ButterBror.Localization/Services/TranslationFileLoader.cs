@@ -1,5 +1,6 @@
 using System.Text.Json;
-using ButterBror.Infrastructure.Storage;
+using ButterBror.Core.Interfaces;
+using ButterBror.Core.Storage;
 using ButterBror.Localization.Models;
 using Microsoft.Extensions.Logging;
 
@@ -8,34 +9,26 @@ namespace ButterBror.Localization.Services;
 /// <summary>
 /// Handles loading and parsing of translation files
 /// </summary>
-public class TranslationFileLoader
+public class TranslationFileLoader(
+    IAppDataPathProvider storageProvider,
+    ILogger<TranslationFileLoader> logger)
 {
-    private readonly AppDataStorageProvider _storageProvider;
-    private readonly ILogger<TranslationFileLoader> _logger;
-    private static readonly JsonSerializerOptions _jsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         AllowTrailingCommas = true
     };
 
-    public TranslationFileLoader(
-        AppDataStorageProvider storageProvider,
-        ILogger<TranslationFileLoader> logger)
+    public string GetLocalizationFilePath(string fileName)
     {
-        _storageProvider = storageProvider;
-        _logger = logger;
-    }
-
-    public string GetTranslationFilePath(string fileName)
-    {
-        var basePath = Path.Combine(_storageProvider.GetAppDataPath(), "Localization");
+        var basePath = Path.Combine(storageProvider.GetAppDataPath(), "Localization");
         Directory.CreateDirectory(basePath);
         return Path.Combine(basePath, fileName);
     }
 
-    public string GetAvailableLocalesPath()
+    private string GetAvailableLocalesPath()
     {
-        return GetTranslationFilePath("Available.json");
+        return GetLocalizationFilePath("Available.json");
     }
 
     public async Task<AvailableLocales?> LoadAvailableLocalesAsync(CancellationToken ct = default)
@@ -44,9 +37,9 @@ public class TranslationFileLoader
         return await LoadJsonAsync<AvailableLocales>(path, ct);
     }
 
-    public async Task<TranslationFile?> LoadTranslationAsync(string fileName, CancellationToken ct = default)
+    public async Task<TranslationFile?> LoadLocalizationAsync(string fileName, CancellationToken ct = default)
     {
-        var path = GetTranslationFilePath(fileName);
+        var path = GetLocalizationFilePath(fileName);
         return await LoadJsonAsync<TranslationFile>(path, ct);
     }
 
@@ -56,28 +49,28 @@ public class TranslationFileLoader
         await SaveJsonAsync(path, locales, ct);
     }
 
-    public async Task SaveTranslationAsync(string fileName, TranslationFile translation, CancellationToken ct = default)
+    public async Task SaveLocalizationAsync(string fileName, TranslationFile translation, CancellationToken ct = default)
     {
-        var path = GetTranslationFilePath(fileName);
+        var path = GetLocalizationFilePath(fileName);
         await SaveJsonAsync(path, translation, ct);
     }
 
-    public bool DeleteTranslationFile(string fileName)
+    public bool DeleteLocalizationFile(string fileName)
     {
         try
         {
-            var path = GetTranslationFilePath(fileName);
+            var path = GetLocalizationFilePath(fileName);
             if (File.Exists(path))
             {
                 File.Delete(path);
-                _logger.LogInformation("Deleted translation file: {FileName}", fileName);
+                logger.LogInformation("deleted localization file: {FileName}", fileName);
                 return true;
             }
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete translation file: {FileName}", fileName);
+            logger.LogError(ex, "failed to delete localization. file={FileName}", fileName);
             return false;
         }
     }
@@ -88,7 +81,7 @@ public class TranslationFileLoader
         {
             if (!File.Exists(path))
             {
-                _logger.LogWarning("File not found: {Path}", path);
+                logger.LogWarning("file not found. path={Path}", path);
                 return null;
             }
 
@@ -96,11 +89,11 @@ public class TranslationFileLoader
                 path, FileMode.Open, FileAccess.Read, FileShare.Read, 
                 bufferSize: 4096, useAsync: true);
             
-            return await JsonSerializer.DeserializeAsync<T>(stream, _jsonOptions, ct);
+            return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load JSON from {Path}", path);
+            logger.LogError(ex, "failed to load json. path={Path}", path);
             return null;
         }
     }
@@ -113,12 +106,12 @@ public class TranslationFileLoader
                 path, FileMode.Create, FileAccess.Write, FileShare.None, 
                 bufferSize: 4096, useAsync: true);
             
-            await JsonSerializer.SerializeAsync(stream, data, _jsonOptions, ct);
+            await JsonSerializer.SerializeAsync(stream, data, JsonOptions, ct);
             await stream.FlushAsync(ct);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save JSON to {Path}", path);
+            logger.LogError(ex, "failed to save json. path={Path}", path);
             throw;
         }
     }

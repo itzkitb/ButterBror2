@@ -4,6 +4,8 @@ using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
+using ButterBror.Domain;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
@@ -16,60 +18,56 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        // S0: Check permissions
-        var user = context.User;
-        var hasPermission = await _permissionManager.HasPermissionAsync(
-            user.UnifiedId,
-            "su:twitch:settings");
-
+        // s0: check permissions
+        var hasPermission = context.PlatformPermissions.Contains(PlatformPermission.Owner) |
+                            context.PlatformPermissions.Contains(PlatformPermission.Moderator);
         if (!hasPermission)
         {
             return CommandResult.Failure(
                 await _localization.GetStringAsync("command.channel_settings.permission", context.Locale));
         }
 
-        // S1: Check args
+        // s1: check args
         if (context.Arguments.Count < 2)
         {
             return CommandResult.Failure(
                 await _localization.GetStringAsync("command.channel_settings.usage", context.Locale));
         }
 
-        string target = context.Arguments[0].ToLowerInvariant();
-        if (!bool.TryParse(context.Arguments[1], out bool value))
+        var target = context.Arguments[0].ToLowerInvariant();
+        if (!bool.TryParse(context.Arguments[1], out var value))
         {
             return CommandResult.Failure(
                 await _localization.GetStringAsync("command.channel_settings.value", context.Locale));
         }
 
-        string channelId = context.Channel.Id;
+        var channelId = context.Chat.Id;
 
-        // S2: Changing
+        // s2: changing
         var json = await _customRepo.GetDataAsync($"twitch:settings:{channelId}");
         var settings = !string.IsNullOrWhiteSpace(json)
             ? JsonSerializer.Deserialize<TwitchChannelSettings>(json)
             : new TwitchChannelSettings();
 
-        if (target == "online")
+        switch (target)
         {
-            settings!.AllowOnline = value;
-        }
-        else if (target == "offline")
-        {
-            settings!.AllowOffline = value;
-        }
-        else
-        {
-            return CommandResult.Failure(
-                await _localization.GetStringAsync("command.channel_settings.unknown", context.Locale));
+            case "online":
+                settings!.AllowOnline = value;
+                break;
+            case "offline":
+                settings!.AllowOffline = value;
+                break;
+            default:
+                return CommandResult.Failure(
+                    await _localization.GetStringAsync("command.channel_settings.unknown", context.Locale));
         }
 
         await _customRepo.SetDataAsync($"twitch:settings:{channelId}", JsonSerializer.Serialize(settings));
 
-        // S3: Reset cache
+        // s3: reset cache
         twitchClient.InvalidateChannelSettingsCache(channelId);
 
         return CommandResult.Successfully(

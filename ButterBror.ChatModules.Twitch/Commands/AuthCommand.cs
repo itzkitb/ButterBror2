@@ -16,7 +16,7 @@ public class AuthCommand(IServiceProvider serviceProvider, IOptions<TwitchConfig
     private ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
         if (string.IsNullOrWhiteSpace(_config.ClientId))

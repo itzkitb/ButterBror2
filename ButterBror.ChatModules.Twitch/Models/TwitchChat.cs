@@ -2,7 +2,7 @@ using ButterBror.Domain;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 
-public class TwitchChannel(string channelName, string channelId) : IPlatformChannel
+public class TwitchChat(string channelName, string channelId) : IPlatformChat
 {
     public string Id { get; } = channelId;
     public string Name { get; } = channelName;

@@ -2,6 +2,7 @@
 using System.Text.Json;
 using ButterBror.ChatModules.Twitch.Events;
 using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.ChatModules.Twitch.Models;

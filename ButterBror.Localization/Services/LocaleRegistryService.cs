@@ -6,35 +6,25 @@ namespace ButterBror.Localization.Services;
 /// <summary>
 /// Manages locale registry and alias resolution
 /// </summary>
-public class LocaleRegistryService
+public class LocaleRegistryService(
+    TranslationFileLoader fileLoader,
+    ILogger<LocaleRegistryService> logger)
 {
-    private readonly TranslationFileLoader _fileLoader;
-    private readonly ILogger<LocaleRegistryService> _logger;
-    
     private AvailableLocales? _registry;
     private readonly SemaphoreSlim _lock = new(1, 1);
-
-    public LocaleRegistryService(
-        TranslationFileLoader fileLoader,
-        ILogger<LocaleRegistryService> logger)
-    {
-        _fileLoader = fileLoader;
-        _logger = logger;
-    }
 
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct);
         try
         {
-            _registry = await _fileLoader.LoadAvailableLocalesAsync(ct);
+            _registry = await fileLoader.LoadAvailableLocalesAsync(ct);
             
             if (_registry == null)
             {
-                // Create default registry if not exists
                 _registry = CreateDefaultRegistry();
-                await _fileLoader.SaveAvailableLocalesAsync(_registry, ct);
-                _logger.LogInformation("Created default Available.json");
+                await fileLoader.SaveAvailableLocalesAsync(_registry, ct);
+                logger.LogInformation("created default Available.json");
             }
         }
         finally
@@ -52,11 +42,11 @@ public class LocaleRegistryService
 
         var normalized = input.Trim().ToUpperInvariant();
 
-        // Direct match
+        // direct match
         if (_registry?.Locales.ContainsKey(normalized) == true)
             return normalized;
 
-        // Alias match
+        // alias match
         foreach (var (localeCode, metadata) in _registry?.Locales ?? new Dictionary<string, LocaleMetadata>())
         {
             if (metadata.Aliases.Any(a => 
@@ -98,7 +88,7 @@ public class LocaleRegistryService
             
             if (_registry!.Locales.ContainsKey(normalized))
             {
-                _logger.LogWarning("Locale {Locale} already registered", normalized);
+                logger.LogWarning("locale {Locale} already registered", normalized);
                 return false;
             }
 
@@ -108,8 +98,8 @@ public class LocaleRegistryService
                 Aliases = aliases.Select(a => a.Trim()).ToList()
             };
 
-            await _fileLoader.SaveAvailableLocalesAsync(_registry, ct);
-            _logger.LogInformation("Registered locale: {Locale}", normalized);
+            await fileLoader.SaveAvailableLocalesAsync(_registry, ct);
+            logger.LogInformation("registered locale. locale={Locale}", normalized);
             return true;
         }
         finally
@@ -127,10 +117,10 @@ public class LocaleRegistryService
             if (resolved == null || _registry?.Locales.Remove(resolved) != true)
                 return false;
 
-            await _fileLoader.SaveAvailableLocalesAsync(_registry!, ct);
-            _fileLoader.DeleteTranslationFile(_registry.Locales[resolved].FilePath);
+            await fileLoader.SaveAvailableLocalesAsync(_registry!, ct);
+            fileLoader.DeleteLocalizationFile(_registry.Locales[resolved].FilePath);
             
-            _logger.LogInformation("Unregistered locale: {Locale}", resolved);
+            logger.LogInformation("unregistered locale. locale={Locale}", resolved);
             return true;
         }
         finally
@@ -144,8 +134,8 @@ public class LocaleRegistryService
         await _lock.WaitAsync(ct);
         try
         {
-            _registry = await _fileLoader.LoadAvailableLocalesAsync(ct);
-            _logger.LogInformation("Locale registry reloaded");
+            _registry = await fileLoader.LoadAvailableLocalesAsync(ct);
+            logger.LogInformation("locale registry reloaded");
         }
         finally
         {

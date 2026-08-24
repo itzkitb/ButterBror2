@@ -1,3 +1,5 @@
+using ButterBror.Core.Models;
+
 namespace ButterBror.Core.Interfaces;
 
 /// <summary>
@@ -20,8 +22,7 @@ public interface IBanphraseService
     /// Check message against all applicable banphrase categories
     /// </summary>
     Task<BanphraseCheckResult> CheckMessageAsync(
-        string channelId,
-        string platform,
+        Guid chatId,
         string message,
         CancellationToken cancellationToken = default);
     
@@ -30,35 +31,31 @@ public interface IBanphraseService
     /// </summary>
     Task<bool> SetCategoryAsync(
         string section,
-        string platform,
-        string channelId,
+        Guid chatId,
         string categoryName,
         string regexPattern);
     
     /// <summary>
     /// Get banphrase category pattern
     /// </summary>
-    Task<string?> GetCategoryAsync(
+    Task<BanphraseRecord?> GetCategoryAsync(
         string section,
-        string platform,
-        string channelId,
+        Guid chatId,
         string categoryName);
     
     /// <summary>
     /// List all categories in section
     /// </summary>
-    Task<IReadOnlyList<string>> ListCategoriesAsync(
+    Task<IReadOnlyList<BanphraseRecord>> ListCategoriesAsync(
         string section,
-        string platform,
-        string channelId);
+        Guid chatId);
     
     /// <summary>
     /// Delete banphrase category
     /// </summary>
     Task<bool> DeleteCategoryAsync(
         string section,
-        string platform,
-        string channelId,
+        Guid chatId,
         string categoryName);
     
     /// <summary>

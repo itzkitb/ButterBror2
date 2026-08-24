@@ -4,26 +4,29 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Host;
 
-public class BotHostedService : IHostedService
+public class BotHostedService(IBotCore botCore, ILogger<BotHostedService> logger) : IHostedService
 {
-    private readonly IBotCore _botCore;
-    private readonly ILogger<BotHostedService> _logger;
-
-    public BotHostedService(IBotCore botCore, ILogger<BotHostedService> logger)
-    {
-        _botCore = botCore;
-        _logger = logger;
-    }
-
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await _botCore.StartAsync(cancellationToken);
-        _logger.LogInformation("Started bot hosted service");
+        try
+        {
+            await botCore.StartAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "core failed to start :(");
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await _botCore.StopAsync(cancellationToken);
-        _logger.LogInformation("Stopped bot hosted service");
+        try
+        {
+            await botCore.StopAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "core failed to stop :(");
+        }
     }
 }

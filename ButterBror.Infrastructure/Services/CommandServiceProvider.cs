@@ -1,32 +1,8 @@
-using System.Text.Json.Serialization;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Interfaces;
-using ButterBror.Domain;
-using ButterBror.Domain.Entities;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ButterBror.Infrastructure.Services;
-
-public class CommandExecutionContext(
-    IPlatformChannel channel,
-    List<string> arguments,
-    IPlatformUser platformUser,
-    UserProfile user,
-    string locale,
-    string commandName,
-    CancellationToken cancellationToken = default)
-    : ICommandExecutionContext
-{
-    public IPlatformChannel Channel { get; } = channel;
-    public List<string> Arguments { get; } = arguments;
-    public IPlatformUser PlatformUser { get; } = platformUser;
-    public UserProfile User { get; } = user;
-    public string Locale { get; } = locale;
-    public string CommandName { get; } = commandName;
-
-    [JsonIgnore]
-    public CancellationToken CancellationToken { get; } = cancellationToken;
-}
 
 public class CommandServiceProvider(IServiceProvider serviceProvider) : ICommandServiceProvider
 {
@@ -38,7 +14,7 @@ public class CommandServiceProvider(IServiceProvider serviceProvider) : ICommand
         
         return service is T typedService 
             ? typedService 
-            : throw new InvalidOperationException($"Service of type {typeof(T).Name} is not registered.");
+            : throw new InvalidOperationException($"service of type {typeof(T).Name} is not registered");
     }
 
     public T? GetService<T>(string? key = null) where T : notnull

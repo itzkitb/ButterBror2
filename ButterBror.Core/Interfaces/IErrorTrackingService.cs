@@ -1,5 +1,4 @@
-
-
+using ButterBror.Core.Models;
 using ButterBror.Core.Modules.Commands;
 
 namespace ButterBror.Core.Interfaces;
@@ -10,14 +9,6 @@ namespace ButterBror.Core.Interfaces;
 public interface IErrorTrackingService
 {
     /// <summary>
-    /// Log error without user context
-    /// </summary>
-    /// <param name="exception">Exception to log</param>
-    /// <param name="message">Custom error message</param>
-    /// <param name="extraData">Additional context data</param>
-    void LogError(Exception exception, string message, params object[] extraData);
-
-    /// <summary>
     /// Log error with user context and return localized CommandResult
     /// </summary>
     /// <param name="exception">Exception to log</param>
@@ -26,7 +17,7 @@ public interface IErrorTrackingService
     /// <param name="platform">Platform id</param>
     /// <param name="extraData">Additional context data</param>
     /// <returns>CommandResult with localized error message</returns>
-    Task<CommandResult> LogErrorAsync(
+    Task<(CommandResult, ErrorLogRecord)> LogErrorAsync(
         Exception exception,
         string message,
         Guid userId,

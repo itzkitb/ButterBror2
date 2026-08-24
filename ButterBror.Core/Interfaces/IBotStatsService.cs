@@ -3,9 +3,10 @@ namespace ButterBror.Core.Interfaces;
 /// <summary>
 /// Bot statistics service providing live metrics and persistent counters
 /// </summary>
-public interface IBotStatsService
+public interface IBotStatsService : IControlledService
 {
-    // Live
+    // ><> properties
+    // ^ live
 
     /// <summary>
     /// Current commands per minute rate
@@ -17,7 +18,7 @@ public interface IBotStatsService
     /// </summary>
     double MessagesPerMinute { get; }
 
-    // Redis
+    // ^ redis
 
     /// <summary>
     /// Last known Redis memory usage in bytes
@@ -35,12 +36,12 @@ public interface IBotStatsService
     long RedisOpsPerSecond { get; }
 
     /// <summary>
-    /// Redis operations per minute (rolling window)
+    /// Redis operations per minute
     /// </summary>
     long RedisOpsPerMinute { get; }
 
     /// <summary>
-    /// Redis operations per hour (rolling window)
+    /// Redis operations per hour
     /// </summary>
     long RedisOpsPerHour { get; }
 
@@ -49,14 +50,14 @@ public interface IBotStatsService
     /// </summary>
     long RedisTotalKeys { get; }
     
-    // Uptime
+    // ^ uptime
 
     /// <summary>
     /// Current session uptime
     /// </summary>
     TimeSpan CurrentSessionUptime { get; }
 
-    // Persistent
+    // ^ persistent
 
     /// <summary>
     /// Total commands executed across all sessions
@@ -69,11 +70,11 @@ public interface IBotStatsService
     long TotalRepliesSent { get; }
 
     /// <summary>
-    /// Total uptime across all sessions (including current)
+    /// Total uptime across all sessions
     /// </summary>
     TimeSpan TotalUptime { get; }
 
-    // Methods
+    // ><> methods
 
     /// <summary>
     /// Increment the command counter
@@ -89,8 +90,8 @@ public interface IBotStatsService
     /// Increment the replies counter
     /// </summary>
     void IncrementRepliesCount();
-
-    // Redis
+    
+    // ^ redis
 
     /// <summary>
     /// Update Redis statistics
@@ -101,12 +102,7 @@ public interface IBotStatsService
     /// <param name="keys">Total number of keys in the database</param>
     void UpdateRedisStats(long memoryUsedBytes, long connectedClients, long opsPerSecond, long keys);
 
-    // Initialize
-
-    /// <summary>
-    /// Initialize the service (load persistent stats)
-    /// </summary>
-    Task InitializeAsync(CancellationToken cancellationToken = default);
+    // ^ init
 
     /// <summary>
     /// Flush persistent stats to disk

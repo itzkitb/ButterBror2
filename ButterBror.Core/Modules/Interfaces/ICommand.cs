@@ -7,7 +7,13 @@ namespace ButterBror.Core.Modules.Interfaces;
 /// </summary>
 public interface ICommand
 {
+    /// <summary>
+    /// Execute command code
+    /// </summary>
+    /// <param name="context">Command execution context</param>
+    /// <param name="serviceProvider">Service provider</param>
+    /// <returns>Result of command execution</returns>
     Task<CommandResult> ExecuteAsync(
-        ICommandExecutionContext context,
+        CommandContext context,
         ICommandServiceProvider serviceProvider);
 }

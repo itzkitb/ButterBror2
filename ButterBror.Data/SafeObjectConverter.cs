@@ -5,7 +5,7 @@ namespace ButterBror.Data;
 
 public class SafeObjectConverter : JsonConverter<object>
 {
-    public override object? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override object Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using var doc = JsonDocument.ParseValue(ref reader);
         return doc.RootElement.Clone();
@@ -23,7 +23,7 @@ public class SafeObjectConverter : JsonConverter<object>
         {
             var cloneOptions = new JsonSerializerOptions(options);
             
-            for (int i = cloneOptions.Converters.Count - 1; i >= 0; i--)
+            for (var i = cloneOptions.Converters.Count - 1; i >= 0; i--)
             {
                 if (cloneOptions.Converters[i] is SafeObjectConverter)
                 {
@@ -36,7 +36,7 @@ public class SafeObjectConverter : JsonConverter<object>
         }
         catch (Exception ex)
         {
-            writer.WriteStringValue($"[Unserializable: {value.GetType().Name}. Error: {ex.Message}]");
+            writer.WriteStringValue($"[unserializable: {value.GetType().Name}. error: {ex.Message}]");
         }
     }
 }

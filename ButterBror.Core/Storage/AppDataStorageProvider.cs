@@ -1,6 +1,6 @@
 ﻿using ButterBror.Core.Interfaces;
 
-namespace ButterBror.Infrastructure.Storage;
+namespace ButterBror.Core.Storage;
 
 public class AppDataStorageProvider : IAppDataPathProvider
 {

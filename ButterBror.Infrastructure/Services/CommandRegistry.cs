@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using ButterBror.Application.Commands;
+using ButterBror.Application.Commands.Meta;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Enums;
 using ButterBror.Core.Modules.Interfaces;
@@ -13,7 +15,7 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
     private readonly Dictionary<string, CommandEntry> _commandsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CommandEntry> _commandsByName = new(StringComparer.OrdinalIgnoreCase);
     
-    private readonly List<RegexCommandEntry> _regexCommands = new();
+    private readonly List<RegexCommandEntry> _regexCommands = [];
 
     private record CommandEntry(
         Func<ICommand> Factory,
@@ -25,6 +27,38 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
         Regex Pattern,
         CommandEntry Entry
     );
+
+    public Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            RegisterGlobalCommand(
+                () => new UserInfoCommand(serviceProvider),
+                new UserInfoMeta()
+            );
+            RegisterGlobalCommand(
+                () => new BanphrasesCommand(),
+                new BanphrasesCommandMeta()
+            );
+            RegisterGlobalCommand(
+                () => new LocaleCommand(),
+                new LocaleCommandMeta()
+            );
+            RegisterGlobalCommand(
+                () => new ReloadModuleCommand(),
+                new ReloadModuleMeta()
+            );
+            RegisterGlobalCommand(
+                () => new BlockCommand(),
+                new BlockCommandMeta()
+            );
+            return Task.CompletedTask;
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException(exception);
+        }
+    }
 
     public void RegisterGlobalCommand(Func<ICommand> factory, ICommandMetadata metadata)
     {
@@ -48,13 +82,13 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
         {
             _commandsByName[alias] = entry;
         }
+
+        if (metadata.RegexAliases.Count <= 0)
+            return;
         
-        if (metadata.RegexAliases.Count > 0)
+        foreach (var regex in metadata.RegexAliases)
         {
-            foreach (var regex in metadata.RegexAliases)
-            {
-                _regexCommands.Add(new RegexCommandEntry(regex, entry));
-            }
+            _regexCommands.Add(new RegexCommandEntry(regex, entry));
         }
     }
 
@@ -65,13 +99,10 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
             return exactMatch;
         }
         
-        foreach (var regexEntry in _regexCommands)
+        foreach (var regexEntry in _regexCommands.Where(regexEntry => regexEntry.Pattern.IsMatch(name)))
         {
-            if (regexEntry.Pattern.IsMatch(name))
-            {
-                _commandsByName[name] = regexEntry.Entry;
-                return regexEntry.Entry;
-            }
+            _commandsByName[name] = regexEntry.Entry;
+            return regexEntry.Entry;
         }
 
         return null;
@@ -111,24 +142,31 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
         if (entry == null) return false;
 
         var metadata = entry.Metadata;
-        switch (metadata.PlatformCompatibilityType)
+        return metadata.PlatformCompatibilityType switch
         {
-            case PlatformCompatibilityType.Whitelist:
-                return metadata.PlatformCompatibilityList.Contains(platformId, StringComparer.OrdinalIgnoreCase);
-            case PlatformCompatibilityType.Blacklist:
-                return !metadata.PlatformCompatibilityList.Contains(platformId, StringComparer.OrdinalIgnoreCase);
-            default:
-                return false;
-        }
+            PlatformCompatibilityType.Whitelist => metadata.PlatformCompatibilityList.Contains(platformId,
+                StringComparer.OrdinalIgnoreCase),
+            PlatformCompatibilityType.Blacklist => !metadata.PlatformCompatibilityList.Contains(platformId,
+                StringComparer.OrdinalIgnoreCase),
+            _ => false
+        };
     }
 
     public async Task<bool> UserHasPermissionForCommandAsync(string id, Guid unifiedUserId, bool idIsName = false)
     {
         var entry = ResolveEntry(id, idIsName);
-        if (entry == null) return false;
+        if (entry == null)
+        {
+            logger.LogDebug("command entry is null. id={id}, idIsName={IdIsName}", id, idIsName);
+            return false;
+        }
 
         var metadata = entry.Metadata;
-        if (metadata.RequiredPermissions.Count == 0) return true;
+        if (metadata.RequiredPermissions.Count == 0)
+        {
+            logger.LogDebug("command permission list is empty. id={id}, idIsName={IdIsName}", id, idIsName);
+            return true;
+        }
 
         using var scope = serviceProvider.CreateScope();
         var permissionManager = scope.ServiceProvider.GetRequiredService<IPermissionManager>();
@@ -141,6 +179,7 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
             }
         }
 
+        logger.LogDebug("user has no permission. id={id}, idIsName={IdIsName}, uid={uid}", id, idIsName, unifiedUserId);
         return false;
     }
 

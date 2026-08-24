@@ -5,7 +5,6 @@ using ButterBror.Core.Interfaces;
 using ButterBror.Dashboard.Models;
 using ButterBror.Dashboard.Services;
 using ButterBror.Dashboard.Sse;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -14,7 +13,7 @@ namespace ButterBror.Dashboard;
 /// <summary>
 /// Dashboard server that serves static HTML pages and SSE streams using HttpListener
 /// </summary>
-public class DashboardServer : IHostedService, IDisposable
+public class DashboardServer : IDashboardService, IDisposable
 {
     private readonly DashboardOptions _opts;
     private readonly IDashboardBridge _bridge;
@@ -24,12 +23,12 @@ public class DashboardServer : IHostedService, IDisposable
     private readonly FileManagerService _fileManager;
     private readonly SseHub _hub;
     private readonly ILogger<DashboardServer> _logger;
+    private readonly JsonSerializerOptions _jsonOptions;
 
     private HttpListener _listener = null!;
     private CancellationTokenSource _cts = null!;
     private Task _listenerTask = Task.CompletedTask;
     private Task _metricsTask = Task.CompletedTask;
-    private Task _startupTask = Task.CompletedTask;
 
     public DashboardServer(
         IOptions<DashboardOptions> opts,
@@ -38,7 +37,8 @@ public class DashboardServer : IHostedService, IDisposable
         AdminCommandExecutor executor,
         RedisExplorerService redisExplorer,
         FileManagerService fileManager,
-        ILogger<DashboardServer> logger)
+        ILogger<DashboardServer> logger,
+        JsonSerializerOptions jsonOptions)
     {
         _opts = opts.Value;
         _bridge = bridge;
@@ -48,6 +48,7 @@ public class DashboardServer : IHostedService, IDisposable
         _fileManager = fileManager;
         _hub = new SseHub();
         _logger = logger;
+        _jsonOptions = jsonOptions;
 
         if (bridge is DashboardBridge impl)
         {
@@ -59,31 +60,36 @@ public class DashboardServer : IHostedService, IDisposable
         }
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!_opts.Enable) return;
-
-        _startupTask = Task.Run(() =>
+        try
         {
+            if (!_opts.Enable)
+                return Task.CompletedTask;
+
             _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _listener = new HttpListener();
             _listener.Prefixes.Add($"http://{_opts.Address}:{_opts.Port}/");
             _listener.Start();
-            _logger.LogInformation("Launched dashboard. url=http://{Address}:{Port}/", _opts.Address, _opts.Port);
+            _logger.LogInformation("launched dashboard. url=http://{Address}:{Port}/", _opts.Address, _opts.Port);
 
             _listenerTask = Task.Run(() => AcceptLoopAsync(_cts.Token), _cts.Token);
             _metricsTask = Task.Run(() => MetricsLoopAsync(_cts.Token), _cts.Token);
-        });
 
-        return;
+            return Task.CompletedTask;
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException(exception);
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        _cts.Cancel();
+        await _cts.CancelAsync();
         _listener.Stop();
         await Task.WhenAll(_listenerTask, _metricsTask).ConfigureAwait(false);
-        _logger.LogInformation("Dashboard stopped");
+        _logger.LogInformation("[stop:ok] dashboard");
     }
 
     private async Task AcceptLoopAsync(CancellationToken ct)
@@ -98,7 +104,7 @@ public class DashboardServer : IHostedService, IDisposable
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dashboard accept error");
+                _logger.LogError(ex, "dashboard accept error");
             }
         }
     }
@@ -154,7 +160,7 @@ public class DashboardServer : IHostedService, IDisposable
                     break;
 
                 case "/api/logs/recent" when req.HttpMethod == "GET":
-                    await ServeJsonAsync(res, _bridge.GetRecentLogs(200));
+                    await ServeJsonAsync(res, _bridge.GetRecentLogs());
                     break;
 
                 case "/api/commands/execute" when req.HttpMethod == "POST":
@@ -261,7 +267,7 @@ public class DashboardServer : IHostedService, IDisposable
                     await HandleFilesRenameAsync(req, res, ct);
                     break;
 
-                case string p when p.StartsWith("/api/files/download") && req.HttpMethod == "GET":
+                case { } p when p.StartsWith("/api/files/download") && req.HttpMethod == "GET":
                     await HandleFilesDownloadAsync(req, res, ct);
                     break;
 
@@ -273,8 +279,12 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Dashboard handler error for {Path}", path);
-            try { res.StatusCode = 500; res.Close(); } catch { }
+            _logger.LogError(ex, "dashboard handler error for {Path}", path);
+            try { res.StatusCode = 500; res.Close(); }
+            catch
+            {
+                // ignored
+            }
         }
     }
 
@@ -294,7 +304,7 @@ public class DashboardServer : IHostedService, IDisposable
         // Send initial data burst
         if (type == "logs")
         {
-            var recent = _bridge.GetRecentLogs(200);
+            var recent = _bridge.GetRecentLogs();
             foreach (var entry in recent)
             {
                 var ok = await conn.SendAsync("log", JsonSerializer.Serialize(entry));
@@ -339,7 +349,7 @@ public class DashboardServer : IHostedService, IDisposable
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Metrics broadcast error");
+                _logger.LogError(ex, "metrics broadcast error");
             }
         }
     }
@@ -374,7 +384,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get Redis databases");
+            _logger.LogError(ex, "failed to get databases");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -397,7 +407,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to scan Redis keys");
+            _logger.LogError(ex, "failed to scan keys");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -432,7 +442,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get Redis key details");
+            _logger.LogError(ex, "failed to get key details");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -460,7 +470,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete Redis key");
+            _logger.LogError(ex, "failed to delete key");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -490,7 +500,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to set Redis string");
+            _logger.LogError(ex, "failed to set string");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -519,7 +529,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to set Redis key TTL");
+            _logger.LogError(ex, "failed to set key ttl");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -548,7 +558,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to persist Redis key");
+            _logger.LogError(ex, "failed to persist key");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -577,7 +587,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to rename Redis key");
+            _logger.LogError(ex, "failed to rename key");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -605,7 +615,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get Redis hash fields");
+            _logger.LogError(ex, "failed to get hash fields");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -634,7 +644,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to set Redis hash field");
+            _logger.LogError(ex, "failed to set hash field");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -663,7 +673,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete Redis hash field");
+            _logger.LogError(ex, "failed to delete hash field");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -691,7 +701,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get Redis list items");
+            _logger.LogError(ex, "failed to get list items");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -720,7 +730,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to push to Redis list");
+            _logger.LogError(ex, "failed to push to db list");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -749,7 +759,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to remove from Redis list");
+            _logger.LogError(ex, "failed to remove from list");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -777,7 +787,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get Redis set members");
+            _logger.LogError(ex, "failed to get set members");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -806,7 +816,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to add to Redis set");
+            _logger.LogError(ex, "failed to add to set");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -835,7 +845,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to remove from Redis set");
+            _logger.LogError(ex, "failed to remove from set");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -863,7 +873,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get Redis sorted set members");
+            _logger.LogError(ex, "failed to get sorted set members");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -892,7 +902,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to add to Redis sorted set");
+            _logger.LogError(ex, "failed to add to sorted set");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -921,7 +931,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to remove from Redis sorted set");
+            _logger.LogError(ex, "failed to remove from sorted set");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -950,7 +960,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read Redis stream");
+            _logger.LogError(ex, "failed to read stream");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -970,7 +980,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "File manager access denied");
+            _logger.LogWarning(ex, "file manager access denied");
             res.StatusCode = 403;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -981,7 +991,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to list directory");
+            _logger.LogError(ex, "failed to list directory");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1000,7 +1010,7 @@ public class DashboardServer : IHostedService, IDisposable
             if (string.IsNullOrWhiteSpace(name))
             {
                 res.StatusCode = 400;
-                await ServeJsonAsync(res, new { error = "File name is required" });
+                await ServeJsonAsync(res, new { error = "file name is required" });
                 return;
             }
 
@@ -1009,7 +1019,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "File manager access denied");
+            _logger.LogWarning(ex, "file manager access denied");
             res.StatusCode = 403;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1020,7 +1030,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to upload file");
+            _logger.LogError(ex, "failed to upload file");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1040,7 +1050,7 @@ public class DashboardServer : IHostedService, IDisposable
             if (request == null || string.IsNullOrEmpty(request.Path))
             {
                 res.StatusCode = 400;
-                await ServeJsonAsync(res, new { error = "Path is required" });
+                await ServeJsonAsync(res, new { error = "path is required" });
                 return;
             }
 
@@ -1049,7 +1059,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "File manager access denied");
+            _logger.LogWarning(ex, "file manager access denied");
             res.StatusCode = 403;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1060,7 +1070,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete file");
+            _logger.LogError(ex, "failed to delete file");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1080,7 +1090,7 @@ public class DashboardServer : IHostedService, IDisposable
             if (request == null || string.IsNullOrEmpty(request.Path))
             {
                 res.StatusCode = 400;
-                await ServeJsonAsync(res, new { error = "Path is required" });
+                await ServeJsonAsync(res, new { error = "path is required" });
                 return;
             }
 
@@ -1089,13 +1099,13 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "File manager access denied");
+            _logger.LogWarning(ex, "file manager access denied");
             res.StatusCode = 403;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create directory");
+            _logger.LogError(ex, "failed to create directory");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1115,7 +1125,7 @@ public class DashboardServer : IHostedService, IDisposable
             if (request == null || string.IsNullOrEmpty(request.Path) || string.IsNullOrEmpty(request.NewName))
             {
                 res.StatusCode = 400;
-                await ServeJsonAsync(res, new { error = "Path and newName are required" });
+                await ServeJsonAsync(res, new { error = "path and newName are required" });
                 return;
             }
 
@@ -1124,7 +1134,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "File manager access denied");
+            _logger.LogWarning(ex, "file manager access denied");
             res.StatusCode = 403;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1135,7 +1145,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to rename file");
+            _logger.LogError(ex, "failed to rename file");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1153,11 +1163,11 @@ public class DashboardServer : IHostedService, IDisposable
             if (string.IsNullOrEmpty(relativePath))
             {
                 res.StatusCode = 400;
-                await ServeJsonAsync(res, new { error = "Path parameter is required" });
+                await ServeJsonAsync(res, new { error = "path parameter is required" });
                 return;
             }
 
-            using var stream = await _fileManager.GetFileStreamAsync(relativePath);
+            await using var stream = await _fileManager.GetFileStreamAsync(relativePath);
             var fileName = Path.GetFileName(relativePath);
             
             res.ContentType = "application/octet-stream";
@@ -1168,7 +1178,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "File manager access denied");
+            _logger.LogWarning(ex, "file manager access denied");
             res.StatusCode = 403;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1179,7 +1189,7 @@ public class DashboardServer : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to download file");
+            _logger.LogError(ex, "failed to download file");
             res.StatusCode = 500;
             await ServeJsonAsync(res, new { error = ex.Message });
         }
@@ -1201,19 +1211,16 @@ public class DashboardServer : IHostedService, IDisposable
             return;
         }
 
-        using var stream = asm.GetManifestResourceStream(name)!;
+        await using var stream = asm.GetManifestResourceStream(name)!;
         res.ContentType = "text/html; charset=utf-8";
         res.ContentLength64 = stream.Length;
         await stream.CopyToAsync(res.OutputStream, ct);
         res.Close();
     }
 
-    private static async Task ServeJsonAsync(HttpListenerResponse res, object data)
+    private async Task ServeJsonAsync(HttpListenerResponse res, object data)
     {
-        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.Serialize(data, _jsonOptions);
         var bytes = Encoding.UTF8.GetBytes(json);
         res.ContentType = "application/json; charset=utf-8";
         res.ContentLength64 = bytes.Length;
@@ -1223,7 +1230,7 @@ public class DashboardServer : IHostedService, IDisposable
 
     public void Dispose()
     {
-        _cts?.Dispose();
-        _listener?.Close();
+        _cts.Dispose();
+        _listener.Close();
     }
 }

@@ -1,7 +1,7 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
-using ButterBror.Core.Modules.Interfaces;
 using ButterBror.Domain;
+using ButterBror.Domain.Chat;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Dashboard.Services;
@@ -9,23 +9,14 @@ namespace ButterBror.Dashboard.Services;
 /// <summary>
 /// Executes admin commands from the dashboard
 /// </summary>
-public class AdminCommandExecutor
+public class AdminCommandExecutor(
+    ICommandProcessor commandProcessor,
+    ILogger<AdminCommandExecutor> logger)
 {
-    private readonly IBotCore _botCore;
-    private readonly ILogger<AdminCommandExecutor> _logger;
-
-    public AdminCommandExecutor(
-        IBotCore core,
-        ILogger<AdminCommandExecutor> logger)
-    {
-        _botCore = core;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Parse and execute a command line from the dashboard
     /// </summary>
-    public async Task<CommandResult> ExecuteAsync(
+    public async Task<string> ExecuteAsync(
         string commandLine,
         CancellationToken ct = default)
     {
@@ -33,57 +24,52 @@ public class AdminCommandExecutor
             .Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         if (tokens.Length == 0)
-            return CommandResult.Failure("Empty command");
+            return "Empty command";
 
         string commandName;
-        string[] args;
+        List<string> args;
         string commandPlatform;
 
         if (tokens[0].Contains(':') && tokens.Length >= 2)
         {
             commandPlatform = tokens[0];
             commandName = tokens[1];
-            args = tokens.Skip(2).ToArray();
+            args = tokens.Skip(2).ToList();
         }
         else
         {
             commandPlatform = "dashboard";
             commandName = tokens[0];
-            args = tokens.Skip(1).ToArray();
+            args = tokens.Skip(1).ToList();
         }
 
-        _logger.LogInformation(
-            "<Dashboard> Executing command. command='{Command}' args=['{Args}'] platform='{Platform}'",
+        logger.LogInformation(
+            "[D:] executing command. command='{Command}', args=['{Args}'], platform='{Platform}'",
             commandName, string.Join("', '", args), commandPlatform);
 
-        var context = new DashboardCommandContext(commandName, args, commandPlatform);
-        context.CancellationToken = ct;
-
-        return await _botCore.ProcessCommandAsync(context);
-    }
-}
-
-/// <summary>
-/// Synthetic command context for dashboard-initiated admin commands
-/// </summary>
-internal class DashboardCommandContext : ICommandContext
-{
-    public string CommandName { get; }
-    public string[] Arguments { get; }
-    public IPlatformUser User { get; }
-    public IPlatformChannel Channel { get; }
-    public DateTime ExecutedAt { get; } = DateTime.UtcNow;
-    public string Platform { get; }
-    public Guid CorrelationId { get; } = Guid.NewGuid();
-    public CancellationToken CancellationToken { get; set; }
-
-    public DashboardCommandContext(string commandName, string[] args, string commandPlatform)
-    {
-        CommandName = commandName;
-        Arguments = args;
-        Platform = commandPlatform;
-        User = new DashboardAdminUser();
-        Channel = new DashboardAdminChannel(commandPlatform);
+        var user = new DashboardAdminUser();
+        var channel = new DashboardAdminChat(commandPlatform);
+        var message = new ChatMessage(
+            DateTime.UtcNow,
+            string.Join(" ", args),
+            user.Id,
+            user.DisplayName,
+            channel.Id,
+            channel.Name,
+            null
+        );
+        var context = new CommandContext(
+            commandName, 
+            commandPlatform,
+            args,
+            user,
+            channel,
+            user.Permissions,
+            message,
+            ct);
+        var result = await commandProcessor.ProcessCommandAsync(context);
+        
+        return result.Message?.RawText ?? "Empty result";
     }
 }
 
@@ -92,15 +78,29 @@ internal class DashboardAdminUser : IPlatformUser
     public string Id => "dashboard-admin";
     public string DisplayName => "Dashboard Admin";
     public string Platform => "dashboard";
-    public bool IsModerator => true;
-    public bool IsBroadcaster => true;
+
+    public HashSet<PlatformPermission> Permissions =>
+    [
+        PlatformPermission.CanDeleteOwnMessages,
+        PlatformPermission.CanEditOwnMessages,
+        PlatformPermission.CanDeleteOtherMessages,
+        PlatformPermission.CanEditOtherMessages,
+        PlatformPermission.Moderator,
+        PlatformPermission.Owner,
+        PlatformPermission.Vip,
+        PlatformPermission.CanBanUser,
+        PlatformPermission.CanUnbanUser,
+        PlatformPermission.CanEditChatData,
+        PlatformPermission.CanAddModerators,
+        PlatformPermission.CanRemoveModerators,
+        PlatformPermission.CanUseBotCommands,
+        PlatformPermission.Bot
+    ];
 }
 
-internal class DashboardAdminChannel : IPlatformChannel
+internal class DashboardAdminChat(string platform) : IPlatformChat
 {
     public string Id => "dashboard";
     public string Name => "Dashboard";
-    public string Platform { get; }
-
-    public DashboardAdminChannel(string platform) => Platform = platform;
+    public string Platform { get; } = platform;
 }

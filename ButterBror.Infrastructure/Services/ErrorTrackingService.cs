@@ -1,94 +1,72 @@
 using System.Security.Cryptography;
 using System.Text;
 using ButterBror.Core.Interfaces;
+using ButterBror.Core.Models;
 using ButterBror.Core.Modules.Commands;
-using ButterBror.Data;
+using ButterBror.Data.Interfaces;
 using ButterBror.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
-/// <summary>
-/// Error tracking service with Redis storage and localization support
-/// </summary>
-public class ErrorTrackingService : IErrorTrackingService
+public class ErrorTrackingService(
+    IErrorReportRepository repository,
+    IUserRepository userRepository,
+    ILocalizationService localizationService,
+    ILogger<ErrorTrackingService> logger)
+    : IErrorTrackingService
 {
-    private readonly IErrorReportRepository _repository;
-    private readonly IUserRepository _userRepository;
-    private readonly ILocalizationService _localizationService;
-    private readonly ILogger<ErrorTrackingService> _logger;
-    private static readonly RandomNumberGenerator Rng = RandomNumberGenerator.Create();
-    private const string Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    private const int IdLength = 10;
-    private const int MaxAttempts = 5;
-
-    public ErrorTrackingService(
-        IErrorReportRepository repository,
-        IUserRepository userRepository,
-        ILocalizationService localizationService,
-        ILogger<ErrorTrackingService> logger)
-    {
-        _repository = repository;
-        _userRepository = userRepository;
-        _localizationService = localizationService;
-        _logger = logger;
-    }
-
-    public void LogError(Exception exception, string message, params object[] extraData)
-    {
-        // Fire-and-forget for non-async calls
-        _ = LogErrorInternalAsync(exception, message, null, null, extraData);
-    }
-
-    public async Task<CommandResult> LogErrorAsync(
+    public async Task<(CommandResult, ErrorLogRecord)> LogErrorAsync(
         Exception exception,
         string message,
         Guid userId,
         string platform,
         params object[] extraData)
     {
-        // Get user's preferred locale
-        var user = await _userRepository.GetByUnifiedIdAsync(userId);
+        var user = await userRepository.GetByUnifiedIdAsync(userId);
         var locale = user?.PreferredLocale ?? "EN_US";
 
         var errorId = await LogErrorInternalAsync(exception, message, user?.UnifiedId, platform, extraData);
         var errorHash = GenerateExceptionHash(exception);
-
-        // Get localized message with error ID
-        var localizedMessage = await _localizationService.GetStringAsync(
+        
+        var localizedMessage = await localizationService.GetStringAsync(
             "core.error.report",
             locale,
             errorHash);
 
-        _logger.LogInformation(
-            "Error reported for user {UserId} with error ID {ErrorId}. error_code={ErrorCode}",
+        logger.LogError(
+            exception,
+            "{message}. uid={UserId}, eid={ErrorId}, ehash={ErrorHash}",
+            message,
             userId,
             errorId,
             errorHash);
 
-        return CommandResult.Failure(localizedMessage);
+        var errorRecord = new ErrorLogRecord(errorId, errorHash);
+        
+        return (CommandResult.Failure(localizedMessage), errorRecord);
     }
 
-    public static string GenerateExceptionHash(Exception ex)
+    private static string GenerateExceptionHash(Exception ex)
     {
-        // S0. Receive class
+        // s0: receive class
         var targetMethod = ex.TargetSite;
         string className = targetMethod?.DeclaringType?.Name ?? "UnknownClass";
 
-        // S1. Generating an abbreviation
-        string abbreviation = GetPascalCaseAbbreviation(className);
+        // s1: generating an abbreviation
+        string abbreviation = GetAbbreviation(className);
 
-        // S2. Calculate a hash
+        // s2: calc a hash
         string input = $"{ex.GetType().FullName}\n{ex.StackTrace}";
         using var sha256 = SHA256.Create();
         byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
         string hash = Convert.ToHexString(bytes)[..8];
 
-        // S3. Final
+        // s3: final
         return $"{abbreviation}:{hash}";
     }
 
-    private static string GetPascalCaseAbbreviation(string input)
+    private static string GetAbbreviation(string input)
     {
         if (string.IsNullOrEmpty(input)) return "UNK";
         
@@ -103,20 +81,14 @@ public class ErrorTrackingService : IErrorTrackingService
         return cleanName.Length >= 3 ? cleanName[..3].ToUpper() : cleanName.ToUpper();
     }
     
-    private async Task<string> LogErrorInternalAsync(
+    private async Task<Guid> LogErrorInternalAsync(
         Exception exception,
         string message,
         Guid? userId,
         string? platform,
         object[] extraData)
     {
-        var errorId = await GenerateErrorIdAsync();
-
-        if (errorId == null)
-        {
-            return "ID_GENERATE_FAIL";
-        }
-
+        var errorId = Guid.CreateVersion7();
         var report = new ErrorReport
         {
             ErrorId = errorId,
@@ -132,63 +104,22 @@ public class ErrorTrackingService : IErrorTrackingService
 
         try
         {
-            await _repository.SaveAsync(report);
-            _logger.LogError(
+            await repository.SaveAsync(report);
+            logger.LogError(
                 exception,
-                "Error logged with ID {ErrorId}: {Message}",
+                "error logged. eid={ErrorId}, msg={Message}",
                 errorId,
                 message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(
+            logger.LogError(
                 ex,
-                "Failed to save error report {ErrorId} to Redis",
+                "failed to save error report. eid={ErrorId}",
                 errorId);
         }
 
         return errorId;
-    }
-
-    /// <summary>
-    /// Generates a unique alphanumeric error ID with collision handling
-    /// </summary>
-    private async Task<string?> GenerateErrorIdAsync()
-    {
-        for (int attempt = 0; attempt < MaxAttempts; attempt++)
-        {
-            var id = GenerateSecureId();
-            var existing = await _repository.GetByIdAsync(id);
-            
-            if (existing == null)
-            {
-                return id;
-            }
-
-            _logger.LogWarning("Collision detected for error ID {Id}, attempt {Attempt}", id, attempt + 1);
-        }
-
-        _logger.LogError("Failed to generate unique error ID after {MaxAttempts} attempts", MaxAttempts);
-        return null;
-    }
-
-    /// <summary>
-    /// Generates a random string using cryptographically strong random number generator
-    /// </summary>
-    private string GenerateSecureId()
-    {
-        var sb = new StringBuilder(IdLength);
-        var data = new byte[IdLength];
-
-        Rng.GetBytes(data);
-
-        foreach (var b in data)
-        {
-            // Map byte value to character set index safely
-            sb.Append(Chars[b % Chars.Length]);
-        }
-
-        return sb.ToString();
     }
 
     /// <summary>
@@ -201,8 +132,7 @@ public class ErrorTrackingService : IErrorTrackingService
         {
             var key = $"param_{i}";
             var value = extraData[i];
-
-            // Try to extract meaningful key from named objects
+            
             if (value is KeyValuePair<string, object?> kvp)
             {
                 dict[kvp.Key] = kvp.Value;

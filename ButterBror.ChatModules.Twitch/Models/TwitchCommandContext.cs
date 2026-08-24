@@ -3,7 +3,7 @@ using ButterBror.Domain;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 
-public class TwitchCommandContext(
+/*public class TwitchCommandContext(
     string commandName,
     string[] arguments,
     IPlatformUser user,
@@ -13,10 +13,11 @@ public class TwitchCommandContext(
 {
     public string CommandName { get; } = commandName;
     public string[] Arguments { get; } = arguments;
-    public IPlatformUser User { get; } = user;
-    public IPlatformChannel Channel { get; } = channel;
+    public IPlatformUser PlatformUser { get; } = user;
+    public IPlatformChannel Chat { get; } = channel;
     public DateTime ExecutedAt { get; } = executedAt;
-    public string Platform { get; } = "sillyapps:twitch";
+    public string PlatformId { get; } = "sillyapps:twitch";
     public Guid CorrelationId { get; } = Guid.NewGuid();
     public CancellationToken CancellationToken { get; set; }
 }
+*/

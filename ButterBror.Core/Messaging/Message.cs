@@ -11,13 +11,13 @@ public class Message
             string rawText,
             IInteractiveMarkup? markup = null,
             IEnumerable<Attachment>? attachments = null)
-        : this(rawText, new BBCodeParser(), markup, attachments)
+        : this(rawText, new BbCodeParser(), markup, attachments)
     {
     }
     
     public Message(
         string rawText,
-        IBBCodeParser parser,
+        IBbCodeParser parser,
         IInteractiveMarkup? markup = null,
         IEnumerable<Attachment>? attachments = null)
     {

@@ -2,6 +2,9 @@
 
 namespace ButterBror.Core.Messaging.Records;
 
+/// <summary>
+/// Part of the message
+/// </summary>
 public record MessagePart
 {
     /// <summary>

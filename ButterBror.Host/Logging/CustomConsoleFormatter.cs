@@ -6,74 +6,46 @@ using System.Text;
 
 namespace ButterBror.Host.Logging;
 
-public class CustomConsoleFormatter : ConsoleFormatter
+public class CustomConsoleFormatter(IOptionsMonitor<CustomConsoleFormatterOptions> options)
+    : ConsoleFormatter(FormatterName)
 {
-    public const string FormatterName = "ButterLog";
-    private readonly CustomConsoleFormatterOptions _options;
-
-    public CustomConsoleFormatter(IOptionsMonitor<CustomConsoleFormatterOptions> options)
-        : base(FormatterName)
-    {
-        _options = options.CurrentValue;
-    }
+    public const string FormatterName = "bb_logger";
+    private readonly CustomConsoleFormatterOptions _options = options.CurrentValue;
 
     public override void Write<TState>(
         in LogEntry<TState> logEntry,
         IExternalScopeProvider? scopeProvider,
         TextWriter textWriter)
     {
-        if (logEntry.Formatter == null)
-            return;
-
-        string message = logEntry.Formatter(logEntry.State, logEntry.Exception);
+        var message = logEntry.Formatter(logEntry.State, logEntry.Exception);
         if (string.IsNullOrEmpty(message) && logEntry.Exception == null)
             return;
 
-        StringBuilder logLine = new StringBuilder();
-
-        // Timestamp
-        logLine.Append(DateTime.Now.ToString(@"dd-MM-yy HH:mm:ss.fff"));
+        var logLine = new StringBuilder();
+        logLine.Append(DateTime.Now.ToString(@"HH:mm:ss"));
         logLine.Append(' ');
-
-        // Log level with color
+        
         AppendColoredLogLevel(logLine, logEntry.LogLevel);
-
+        logLine.Append(' ');
+        
         logLine.Append(message);
-
-        textWriter.Write(logLine.ToString());
-        logLine.Clear();
-
-        // Exception details in red
+        
         if (logEntry.Exception != null)
         {
             if (_options.UseColors)
             {
-                textWriter.Write("\n\x1b[38;2;255;85;85m"); // Soft red (#FF5555)
-                textWriter.WriteLine(logEntry.Exception.ToString());
-                textWriter.Write("\x1b[0m");
+                logLine.Append("\n\e[38;2;255;85;85m");
+                logLine.AppendLine(logEntry.Exception.ToString());
+                logLine.Append("\e[0m");
             }
             else
             {
-                textWriter.Write("\n");
-                textWriter.WriteLine(logEntry.Exception.ToString());
+                logLine.Append('\n');
+                logLine.AppendLine(logEntry.Exception.ToString());
             }
         }
 
-        // Category and message
-        /*logLine.Append(" \x1b[90m- ");
-        logLine.Append(logEntry.Category.Replace("ButterBror.", ""));
-        logLine.Append("");
-
-        if (logEntry.EventId.Id != 0)
-        {
-            logLine.Append('[');
-            logLine.Append(logEntry.EventId.Id);
-            logLine.Append(']');
-        }
-        logLine.Append("\x1b[0m");*/
-
         textWriter.WriteLine(logLine.ToString());
-
         textWriter.Flush();
     }
 
@@ -82,20 +54,18 @@ public class CustomConsoleFormatter : ConsoleFormatter
         if (!_options.UseColors)
         {
             builder.Append(GetLogLevelAbbreviation(logLevel));
-            builder.Append(' ');
             return;
         }
 
-        string colorCode = _options.UseTrueColor
+        var colorCode = _options.UseTrueColor
             ? GetTrueColorCode(logLevel)
             : GetBasicAnsiCode(logLevel);
 
-        string levelText = GetLogLevelAbbreviation(logLevel);
+        var levelText = GetLogLevelAbbreviation(logLevel);
 
         builder.Append(colorCode);
         builder.Append(levelText);
-        builder.Append("\x1b[0m");
-        builder.Append(' ');
+        builder.Append("\e[0m");
     }
 
     private static string GetLogLevelAbbreviation(LogLevel logLevel) => logLevel switch
@@ -111,20 +81,20 @@ public class CustomConsoleFormatter : ConsoleFormatter
 
     private static string GetBasicAnsiCode(LogLevel logLevel) => logLevel switch
     {
-        LogLevel.Trace => "\x1b[90m",       // Dark gray
-        LogLevel.Debug => "\x1b[36m",       // Cyan
-        LogLevel.Information => "\x1b[32m", // Green
-        LogLevel.Warning => "\x1b[33m",     // Yellow
-        LogLevel.Error => "\x1b[31m",       // Red
-        LogLevel.Critical => "\x1b[35m\x1b[1m", // Magenta + bold
-        _ => "\x1b[37m" // White
+        LogLevel.Trace => "\e[90m",       // Dark gray
+        LogLevel.Debug => "\e[36m",       // Cyan
+        LogLevel.Information => "\e[32m", // Green
+        LogLevel.Warning => "\e[33m",     // Yellow
+        LogLevel.Error => "\e[31m",       // Red
+        LogLevel.Critical => "\e[35m\e[1m", // Magenta + bold
+        _ => "\e[37m" // White
     };
 
     private static string GetTrueColorCode(LogLevel logLevel)
     {
-        string hexColor = logLevel switch
+        var hexColor = logLevel switch
         {
-            LogLevel.Trace => "#6272a4",    // Dracula comment (серо-голубой)
+            LogLevel.Trace => "#6272a4",    // Dracula comment
             LogLevel.Debug => "#8be9fd",    // Dracula cyan
             LogLevel.Information => "#50fa7b", // Dracula green
             LogLevel.Warning => "#f1fa8c",  // Dracula yellow
@@ -140,12 +110,12 @@ public class CustomConsoleFormatter : ConsoleFormatter
     {
         hex = hex.TrimStart('#');
 
-        int r = Convert.ToInt32(hex.Substring(0, 2), 16);
-        int g = Convert.ToInt32(hex.Substring(2, 2), 16);
-        int b = Convert.ToInt32(hex.Substring(4, 2), 16);
+        var r = Convert.ToInt32(hex.Substring(0, 2), 16);
+        var g = Convert.ToInt32(hex.Substring(2, 2), 16);
+        var b = Convert.ToInt32(hex.Substring(4, 2), 16);
 
-        string boldPrefix = isBold ? "\x1b[1m" : "";
-        return $"{boldPrefix}\x1b[38;2;{r};{g};{b}m";
+        var boldPrefix = isBold ? "\e[1m" : "";
+        return $"{boldPrefix}\e[38;2;{r};{g};{b}m";
     }
 }
 

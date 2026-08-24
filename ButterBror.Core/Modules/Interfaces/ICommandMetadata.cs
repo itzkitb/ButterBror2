@@ -35,7 +35,7 @@ public interface ICommandMetadata
     
     /// <summary>
     /// Help text showing command arguments and usage
-    /// Example: "[action:clear|models] | [model:<name>] [history:ignore] <query>"
+    /// Example: "[action:clear|models] | [model:&lt;name&gt;] [history:ignore] &lt;query&gt;"
     /// </summary>
     string ArgumentsHelpText { get; }
     

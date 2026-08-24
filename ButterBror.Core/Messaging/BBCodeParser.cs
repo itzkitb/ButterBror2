@@ -4,7 +4,7 @@ using ButterBror.Core.Messaging.Records;
 
 namespace ButterBror.Core.Messaging;
 
-public class BBCodeParser : IBBCodeParser
+public class BbCodeParser : IBbCodeParser
 {
     private record ExtraInfo(string Type, object? Data);
     
@@ -16,7 +16,7 @@ public class BBCodeParser : IBBCodeParser
     {
         if (string.IsNullOrEmpty(bbCodeText))
         {
-            return new List<MessagePart> { new() { Text = string.Empty } };
+            return [new MessagePart { Text = string.Empty }];
         }
 
         var parts = new List<MessagePart>();
@@ -24,17 +24,17 @@ public class BBCodeParser : IBBCodeParser
         var urlStack = new Stack<string?>();
         var extraStack = new Stack<ExtraInfo>();
         
-        int currentIndex = 0;
-        int length = bbCodeText.Length;
+        var currentIndex = 0;
+        var length = bbCodeText.Length;
 
         while (currentIndex < length)
         {
             // S0. Looking for the next opening square bracket
-            int openBracketIndex = bbCodeText.IndexOf('[', currentIndex);
+            var openBracketIndex = bbCodeText.IndexOf('[', currentIndex);
             
             if (openBracketIndex == -1)
             {
-                AddCurrentPart(parts, bbCodeText.Substring(currentIndex), styleStack, urlStack, extraStack);
+                AddCurrentPart(parts, bbCodeText[currentIndex..], styleStack, urlStack, extraStack);
                 break;
             }
             
@@ -43,30 +43,30 @@ public class BBCodeParser : IBBCodeParser
                 AddCurrentPart(parts, bbCodeText.Substring(currentIndex, openBracketIndex - currentIndex), styleStack, urlStack, extraStack);
             }
             
-            int closeBracketIndex = bbCodeText.IndexOf(']', openBracketIndex);
+            var closeBracketIndex = bbCodeText.IndexOf(']', openBracketIndex);
             if (closeBracketIndex == -1)
             {
-                AddCurrentPart(parts, bbCodeText.Substring(openBracketIndex), styleStack, urlStack, extraStack);
+                AddCurrentPart(parts, bbCodeText[openBracketIndex..], styleStack, urlStack, extraStack);
                 break;
             }
             
-            string potentialTag = bbCodeText.Substring(openBracketIndex, closeBracketIndex - openBracketIndex + 1);
+            var potentialTag = bbCodeText.Substring(openBracketIndex, closeBracketIndex - openBracketIndex + 1);
             var match = TagRegex.Match(potentialTag);
             
             if (match.Success)
             {
-                bool isClosing = match.Groups[1].Value == "/";
-                string tagName = match.Groups[2].Value.ToUpperInvariant();
-                string? attrName = match.Groups[3].Value;
-                string? attrValue = match.Groups[4].Value;
+                var isClosing = match.Groups[1].Value == "/";
+                var tagName = match.Groups[2].Value.ToUpperInvariant();
+                var attrName = match.Groups[3].Value;
+                var attrValue = match.Groups[4].Value;
                 
                 if (tagName == "C" && !isClosing)
                 {
-                    int endRawIndex = bbCodeText.IndexOf("[/C]", closeBracketIndex + 1, StringComparison.OrdinalIgnoreCase);
+                    var endRawIndex = bbCodeText.IndexOf("[/C]", closeBracketIndex + 1, StringComparison.OrdinalIgnoreCase);
                     
                     if (endRawIndex != -1)
                     {
-                        string rawText = bbCodeText.Substring(closeBracketIndex + 1, endRawIndex - (closeBracketIndex + 1));
+                        var rawText = bbCodeText.Substring(closeBracketIndex + 1, endRawIndex - (closeBracketIndex + 1));
                         
                         if (!string.IsNullOrEmpty(rawText))
                         {
@@ -83,7 +83,7 @@ public class BBCodeParser : IBBCodeParser
                     }
                     else
                     {
-                        string rawText = bbCodeText.Substring(closeBracketIndex + 1);
+                        var rawText = bbCodeText[(closeBracketIndex + 1)..];
                         if (!string.IsNullOrEmpty(rawText))
                         {
                             parts.Add(new MessagePart
@@ -110,7 +110,7 @@ public class BBCodeParser : IBBCodeParser
         return MergeAdjacentParts(parts);
     }
 
-    private void ProcessTag(string tagName, bool isClosing, string? attrName, string? attrValue,
+    private static void ProcessTag(string tagName, bool isClosing, string? attrName, string? attrValue,
         Stack<MessageStyles> styleStack, Stack<string?> urlStack, Stack<ExtraInfo> extraStack)
     {
         if (isClosing)
@@ -163,22 +163,17 @@ public class BBCodeParser : IBBCodeParser
         parts.Add(part);
     }
 
-    private MessageStyles CombineStyles(Stack<MessageStyles> styleStack)
+    private static MessageStyles CombineStyles(Stack<MessageStyles> styleStack)
     {
-        MessageStyles combined = MessageStyles.None;
-        foreach (var style in styleStack)
-        {
-            combined |= style;
-        }
-        return combined;
+        return styleStack.Aggregate(MessageStyles.None, (current, style) => current | style);
     }
 
-    private List<MessagePart> MergeAdjacentParts(List<MessagePart> parts)
+    private static List<MessagePart> MergeAdjacentParts(List<MessagePart> parts)
     {
         if (parts.Count <= 1) return parts;
 
         var merged = new List<MessagePart> { parts[0] };
-        for (int i = 1; i < parts.Count; i++)
+        for (var i = 1; i < parts.Count; i++)
         {
             var current = parts[i];
             var previous = merged[^1];
