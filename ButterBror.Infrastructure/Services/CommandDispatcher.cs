@@ -12,7 +12,8 @@ public class CommandDispatcher(
     ILogger<CommandDispatcher> logger,
     ICommandRegistry commandRegistry,
     IServiceProvider provider,
-    IErrorTrackingService errorTrackingService)
+    IErrorTrackingService errorTrackingService,
+    ILocalizationService localization)
     : ICommandDispatcher
 {
     private readonly IDashboardBridge _dashboardBridge = provider.GetRequiredService<IDashboardBridge>();
@@ -27,14 +28,16 @@ public class CommandDispatcher(
             var factory = commandRegistry.GetCommandFactory(context.CommandName, true);
             if (factory == null)
             {
-                // TODO: add locale
-                return CommandResult.Failure($"Command not found. name='{context.CommandName}'", sendResult: false);
+                return CommandResult.Failure(
+                    await localization.GetStringAsync("core.bot.command.not_found", context.Locale,
+                        context.CommandName),
+                    sendResult: false);
             }
 
             // s1: create a command instance
             var command = factory();
 
-            // s2: create an context
+            // s2: create a context
             var serviceProvider = new CommandServiceProvider(provider);
 
             var result = await command.ExecuteAsync(context, serviceProvider);

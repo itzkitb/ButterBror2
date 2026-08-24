@@ -15,7 +15,7 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
     private readonly Dictionary<string, CommandEntry> _commandsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CommandEntry> _commandsByName = new(StringComparer.OrdinalIgnoreCase);
     
-    private readonly List<RegexCommandEntry> _regexCommands = new();
+    private readonly List<RegexCommandEntry> _regexCommands = [];
 
     private record CommandEntry(
         Func<ICommand> Factory,
@@ -28,28 +28,36 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
         CommandEntry Entry
     );
 
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        RegisterGlobalCommand(
-            () => new UserInfoCommand(serviceProvider),
-            new UserInfoMeta()
-        );
-        RegisterGlobalCommand(
-            () => new BanphrasesCommand(),
-            new BanphrasesCommandMeta()
-        );
-        RegisterGlobalCommand(
-            () => new LocaleCommand(),
-            new LocaleCommandMeta()
-        );
-        RegisterGlobalCommand(
-            () => new ReloadModuleCommand(),
-            new ReloadModuleMeta()
-        );
-        RegisterGlobalCommand(
-            () => new BlockCommand(),
-            new BlockCommandMeta()
-        );
+        try
+        {
+            RegisterGlobalCommand(
+                () => new UserInfoCommand(serviceProvider),
+                new UserInfoMeta()
+            );
+            RegisterGlobalCommand(
+                () => new BanphrasesCommand(),
+                new BanphrasesCommandMeta()
+            );
+            RegisterGlobalCommand(
+                () => new LocaleCommand(),
+                new LocaleCommandMeta()
+            );
+            RegisterGlobalCommand(
+                () => new ReloadModuleCommand(),
+                new ReloadModuleMeta()
+            );
+            RegisterGlobalCommand(
+                () => new BlockCommand(),
+                new BlockCommandMeta()
+            );
+            return Task.CompletedTask;
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException(exception);
+        }
     }
 
     public void RegisterGlobalCommand(Func<ICommand> factory, ICommandMetadata metadata)
@@ -74,13 +82,13 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
         {
             _commandsByName[alias] = entry;
         }
+
+        if (metadata.RegexAliases.Count <= 0)
+            return;
         
-        if (metadata.RegexAliases.Count > 0)
+        foreach (var regex in metadata.RegexAliases)
         {
-            foreach (var regex in metadata.RegexAliases)
-            {
-                _regexCommands.Add(new RegexCommandEntry(regex, entry));
-            }
+            _regexCommands.Add(new RegexCommandEntry(regex, entry));
         }
     }
 
@@ -91,13 +99,10 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
             return exactMatch;
         }
         
-        foreach (var regexEntry in _regexCommands)
+        foreach (var regexEntry in _regexCommands.Where(regexEntry => regexEntry.Pattern.IsMatch(name)))
         {
-            if (regexEntry.Pattern.IsMatch(name))
-            {
-                _commandsByName[name] = regexEntry.Entry;
-                return regexEntry.Entry;
-            }
+            _commandsByName[name] = regexEntry.Entry;
+            return regexEntry.Entry;
         }
 
         return null;
@@ -137,15 +142,14 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
         if (entry == null) return false;
 
         var metadata = entry.Metadata;
-        switch (metadata.PlatformCompatibilityType)
+        return metadata.PlatformCompatibilityType switch
         {
-            case PlatformCompatibilityType.Whitelist:
-                return metadata.PlatformCompatibilityList.Contains(platformId, StringComparer.OrdinalIgnoreCase);
-            case PlatformCompatibilityType.Blacklist:
-                return !metadata.PlatformCompatibilityList.Contains(platformId, StringComparer.OrdinalIgnoreCase);
-            default:
-                return false;
-        }
+            PlatformCompatibilityType.Whitelist => metadata.PlatformCompatibilityList.Contains(platformId,
+                StringComparer.OrdinalIgnoreCase),
+            PlatformCompatibilityType.Blacklist => !metadata.PlatformCompatibilityList.Contains(platformId,
+                StringComparer.OrdinalIgnoreCase),
+            _ => false
+        };
     }
 
     public async Task<bool> UserHasPermissionForCommandAsync(string id, Guid unifiedUserId, bool idIsName = false)

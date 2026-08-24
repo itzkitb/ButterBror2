@@ -14,7 +14,7 @@ public class CommandServiceProvider(IServiceProvider serviceProvider) : ICommand
         
         return service is T typedService 
             ? typedService 
-            : throw new InvalidOperationException($"Service of type {typeof(T).Name} is not registered.");
+            : throw new InvalidOperationException($"service of type {typeof(T).Name} is not registered");
     }
 
     public T? GetService<T>(string? key = null) where T : notnull

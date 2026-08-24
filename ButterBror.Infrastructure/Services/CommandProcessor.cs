@@ -26,7 +26,7 @@ public class CommandProcessor(
 
         try
         {
-            // S0: Getting/creating user profile
+            // s0: get/create user profile
             var user = await userService.GetOrCreateUserAsync(
                 context.PlatformUser.Id,
                 context.PlatformId,
@@ -34,14 +34,14 @@ public class CommandProcessor(
             );
             userId = user.UnifiedId;
             
-            // s1: getting/creating chat
+            // s1: get/create chat
             var chat = await chatService.GetOrCreateChatAsync(
                 context.Chat.Id,
                 context.Chat.Platform,
                 context.Chat.Name
             );
 
-            // S1. Find a command
+            // s2: find a command
             var commandMeta = commandRegistry.GetCommandMetadata(context.CommandName, true);
             if (commandMeta == null)
             {
@@ -51,7 +51,7 @@ public class CommandProcessor(
                     sendResult: false);
             }
 
-            // S2: Validating command
+            // s3: validating command
             var validationResult = await ValidateCommand(context, commandMeta, user);
             if (!validationResult.Success)
             {
@@ -60,10 +60,10 @@ public class CommandProcessor(
                 return validationResult;
             }
 
-            // S3: Proceed with user management and command execution
+            // s4: proceed with user management and command execution
             context.ExtendContext(user, chat);
 
-            // S4: Checking user block status
+            // s5: checking user block status
             var userStatus = await restrictionService.CheckUserBlockStatusAsync(
                 context.Chat.Platform,
                 context.User.UnifiedId,
@@ -75,7 +75,7 @@ public class CommandProcessor(
                 return CommandResult.Failure(blockMessage, sendResult: userStatus.ShouldNotify);
             }
 
-            // S5. Checking command block status
+            // s6. checking command block status
             var blockStatus = await restrictionService.CheckCommandStatusAsync(
                 context.Chat.Platform,
                 context.Chat.Id,
@@ -96,18 +96,17 @@ public class CommandProcessor(
                 return CommandResult.Failure(message);
             }
 
-            // S6: Command Dispatch
+            // s7: command Dispatch
             var result = await commandDispatcher.DispatchAsync(context);
 
             stopwatch.Stop();
             result.ExecutionTime = stopwatch.Elapsed;
 
             logger.LogInformation(
-                "Command executed by user. name='{CommandName}' uid='{UserId}' execution_time={ExecutionTime} success={Success}",
+                "command executed. name='{CommandName}', uid='{UserId}', time={ExecutionTime}ms, success={Success}",
                 context.CommandName, user.UnifiedId, stopwatch.ElapsedMilliseconds, result.Success);
 
-            // S7: Check banphrases
-            // If any permission start with "su:" skipping check
+            // s8: check banphrases
             var skipCheck = commandMeta.RequiredPermissions.Any((c) => c.StartsWith("su:"));
 
             if (!skipCheck)
@@ -121,7 +120,7 @@ public class CommandProcessor(
                 if (!banphraseResult.Passed)
                 {
                     logger.LogInformation(
-                        "Command result blocked by banphrase. command='{Command}', uid='{UserId}', section='{Section}', category='{Category}', pattern='{Pattern}', phrase='{Phrase}'",
+                        "command result blocked by banphrase. command='{Command}', uid='{UserId}', section='{Section}', category='{Category}', pattern='{Pattern}', phrase='{Phrase}'",
                         context.CommandName,
                         user.UnifiedId,
                         banphraseResult.FailedSection,
@@ -137,10 +136,10 @@ public class CommandProcessor(
             }
             else
             {
-                logger.LogWarning("Skipping the ban phrases check");
+                logger.LogWarning("skipping the ban phrases check. user has 'su:' permission");
             }
 
-            // S8: Updating user statistics
+            // s9: update user statistics
             await userService.UpdateUserStatisticsAsync(
                 user.UnifiedId,
                 commandMeta.Id,
@@ -152,10 +151,11 @@ public class CommandProcessor(
         catch (Exception ex)
         {
             stopwatch.Stop();
-            var errorLog = await errorTrackingService.LogErrorAsync(ex, "command error", userId, context.PlatformId, context);
-            logger.LogError(ex,
-                "Error processing command. name='{CommandName}', uid='{UserId}', error_code='{ErrorCode}'",
-                context.CommandName, userId, errorLog.Item2.Hash);
+            var errorLog = 
+                await errorTrackingService.LogErrorAsync(ex, 
+                    "command error", 
+                    userId, 
+                    context.PlatformId, context);
             
             return errorLog.Item1;
         }
@@ -165,30 +165,42 @@ public class CommandProcessor(
     {
         var commandName = context.CommandName;
 
-        // S0: Checking platform compatibility
+        // s0: checking platform compatibility
         var platformId = context.PlatformId.ToLowerInvariant();
         if (!commandRegistry.IsCommandCompatibleWithPlatform(meta.Id, platformId))
         {
+            logger.LogInformation("command is not compatible. uid='{UserId}', cid='{CommandId}', platform={Platform}",
+                user.UnifiedId,
+                meta.Id,
+                platformId
+            );
+            
             return CommandResult.Failure(
                 await localization.GetStringAsync("core.bot.command.compatibility", user.PreferredLocale,
                     commandName,
                     context.PlatformId),
-                sendResult:false);
+                sendResult: false);
         }
 
-        // S1: Validating permissions
+        // s1: validating permissions
         if (!await commandRegistry.UserHasPermissionForCommandAsync(meta.Id, user.UnifiedId))
         {
+            logger.LogInformation("command is not available for this user. uid='{UserId}', cid='{CommandId}', platform={Platform}",
+                user.UnifiedId,
+                meta.Id,
+                platformId
+            );
+            
             return CommandResult.Failure(
                 await localization.GetStringAsync("core.bot.command.permission", user.PreferredLocale));
         }
 
-        // S2: Cooldown check
+        // s2: cooldown check
         var lastUse = await userService.GetCommandLastUsedAsync(meta.Id, user.UnifiedId);
         var betweenUses = DateTime.UtcNow - lastUse;
         if (betweenUses != null && ((TimeSpan)betweenUses).TotalSeconds < meta.CooldownSeconds)
         {
-            logger.LogDebug("Command cooldown. uid='{UserId}', cid='{CommandId}', remain={Seconds}, cooldown={CooldownSeconds}",
+            logger.LogInformation("command cooldown. uid='{UserId}', cid='{CommandId}', remain={Seconds}, cooldown={CooldownSeconds}",
                 user.UnifiedId,
                 meta.Id,
                 ((TimeSpan)betweenUses).TotalSeconds,
@@ -202,8 +214,7 @@ public class CommandProcessor(
         }
         _ = userService.SetCommandLastUseAsync(meta.Id, user.UnifiedId, DateTime.UtcNow);
         
-        // S3: Yay
-        logger.LogInformation("Command passed all validations. name='{CommandName}'", commandName);
-        return CommandResult.Successfully("Yay");
+        // s3: yay
+        return CommandResult.Successfully("yay");
     }
 }
