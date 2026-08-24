@@ -33,11 +33,10 @@ public class BotCore(
             userService.InitializeAsync(ct),
             moduleManager.InitializeAsync(this, ct),
             commandRegistry.InitializeAsync(ct),
-            statsService.InitializeAsync(ct),
+            statsService.StartAsync(ct),
             localizationService.InitializeAsync(ct),
             banphraseService.ReloadGlobalCategoriesAsync(),
             InitDashboardAdmin(),
-            statsService.InitializeAsync(ct),
             deviceStatsService.InitializeAsync(ct),
             dashboardService.StartAsync(ct)
         );
@@ -74,7 +73,7 @@ public class BotCore(
         await _cts.CancelAsync();
         await Task.WhenAll(
             moduleManager.ShutdownAsync(ct),
-            statsService.FlushAsync(ct),
+            statsService.StopAsync(ct),
             deviceStatsService.ShutdownAsync(ct),
             dashboardService.StopAsync(ct)
         );

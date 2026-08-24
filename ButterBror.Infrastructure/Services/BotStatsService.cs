@@ -15,43 +15,44 @@ public class BotStatsService(
     JsonSerializerOptions jsonOptions)
     : IBotStatsService
 {
-    // Minute counters for CpM/MpM
+    // ><> private
+    // ^ minute counters for cpc/mpm
     private readonly Queue<(DateTime At, int Count)> _commandTicks = new();
     private readonly Queue<(DateTime At, int Count)> _messageTicks = new();
     private readonly Lock _tickLock = new();
 
-    // Redis ops rolling windows
+    // ^ db ops rolling
     private readonly Queue<(DateTime At, long Ops)> _opsMinQueue = new();
     private readonly Queue<(DateTime At, long Ops)> _opsHourQueue = new();
     private readonly Lock _opsLock = new();
 
-    // Redis live stats
+    // ^ db live stats
     private long _redisMemoryUsedBytes;
     private long _redisConnectedClients;
     private long _redisOpsPerSecond;
     private long _redisKeys;
     private readonly Lock _redisLock = new();
 
-    // Session tracking
+    // ^ session tracking
     private DateTime _startedAt = DateTime.UtcNow;
 
-    // Persistent stats
+    // ^ persistent stats
     private PersistentBotStats _persistent = new();
     private long _commandsAtStart;
     private long _repliesAtStart;
     private TimeSpan _uptimeAtStart;
 
-    // In-memory counters
+    // ^ in-memory counters
     private long _currentSessionCommands;
     private long _currentSessionReplies;
 
-    // Flush timer
+    // ^ flush timer
     private Timer? _flushTimer;
     private readonly SemaphoreSlim _flushLock = new(1, 1);
 
     private bool _initialized;
 
-    // Live
+    // ><> public
 
     public double CommandsPerMinute
     {
@@ -77,7 +78,7 @@ public class BotStatsService(
         }
     }
 
-    // Redis
+    // ^ db
 
     public long RedisMemoryUsedBytes
     {
@@ -139,19 +140,19 @@ public class BotStatsService(
         }
     }
     
-    // Uptime
+    // ^ uptime
 
     public TimeSpan CurrentSessionUptime => DateTime.UtcNow - _startedAt;
 
     public TimeSpan TotalUptime => _persistent.TotalUptime + CurrentSessionUptime;
 
-    // Persistent
+    // ^ persistent
 
     public long TotalCommandsExecuted => _persistent.TotalCommandsExecuted + _currentSessionCommands;
 
     public long TotalRepliesSent => _persistent.TotalRepliesSent + _currentSessionReplies;
 
-    // Methods
+    // ><> methods
 
     public void IncrementCommandCount()
     {
@@ -189,9 +190,9 @@ public class BotStatsService(
         }
     }
 
-    // Inititialize
+    // ><> init
 
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         if (_initialized)
             return;
@@ -237,6 +238,14 @@ public class BotStatsService(
         _initialized = true;
     }
 
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        await FlushAsync(cancellationToken);
+        if (_flushTimer != null)
+            await _flushTimer.DisposeAsync();
+        _flushLock.Dispose();
+    }
+    
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
         if (!_initialized)
@@ -260,11 +269,11 @@ public class BotStatsService(
             var json = JsonSerializer.Serialize(_persistent, jsonOptions);
 
             await File.WriteAllTextAsync(statsPath, json, cancellationToken);
-            logger.LogDebug("Statistics have been written to a file. path='{Path}'", statsPath);
+            logger.LogDebug("statistics have been written to a file. path='{Path}'", statsPath);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to flush stats");
+            logger.LogWarning(ex, "failed to flush stats");
         }
         finally
         {
@@ -295,11 +304,5 @@ public class BotStatsService(
         var cutoff = DateTime.UtcNow - window;
         while (queue.TryPeek(out var head) && head.At < cutoff)
             queue.Dequeue();
-    }
-
-    public void Dispose()
-    {
-        _flushTimer?.Dispose();
-        _flushLock.Dispose();
     }
 }

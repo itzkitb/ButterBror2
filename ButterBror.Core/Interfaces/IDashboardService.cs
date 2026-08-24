@@ -1,7 +1,5 @@
 ﻿namespace ButterBror.Core.Interfaces;
 
-public interface IDashboardService
+public interface IDashboardService : IControlledService
 {
-    Task StartAsync(CancellationToken cancellationToken);
-    Task StopAsync(CancellationToken cancellationToken);
 }

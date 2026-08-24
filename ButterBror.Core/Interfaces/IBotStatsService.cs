@@ -3,7 +3,7 @@ namespace ButterBror.Core.Interfaces;
 /// <summary>
 /// Bot statistics service providing live metrics and persistent counters
 /// </summary>
-public interface IBotStatsService
+public interface IBotStatsService : IControlledService
 {
     // ><> properties
     // ^ live
@@ -103,11 +103,6 @@ public interface IBotStatsService
     void UpdateRedisStats(long memoryUsedBytes, long connectedClients, long opsPerSecond, long keys);
 
     // ^ init
-
-    /// <summary>
-    /// Initialize the service
-    /// </summary>
-    Task InitializeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Flush persistent stats to disk
