@@ -1,8 +1,8 @@
 ﻿using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
-using ButterBror.Data;
 using ButterBror.Data.Interfaces;
+using ButterBror.Domain;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +19,17 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
         CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        // S0: Validate argument
+        // s0: checking user permission
+        var hasPermission = context.PlatformPermissions.Contains(PlatformPermission.Owner) |
+                            context.PlatformPermissions.Contains(PlatformPermission.Moderator);
+
+        if (!hasPermission)
+        {
+            return CommandResult.Failure(
+                await _localization.GetStringAsync("command.part.permission", context.Locale));
+        }
+        
+        // s1: validate argument
         if (context.Arguments.Count == 0)
         {
             return CommandResult.Failure(
@@ -40,15 +50,15 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
                 await _localization.GetStringAsync("command.set_prefix.32chars", context.Locale));
         }
         
-        // S1: Persist the new prefix in Redis
+        // s2: persist the new prefix
         var key = GetPrefixKey(context.Chat.Id);
         await _customRepo.SetDataAsync(key, newPrefix);
 
-        // S2: Cache
+        // s3: cache
         module.InvalidatePrefixCache(context.Chat.Id);
 
         _logger.LogInformation(
-            "[TW] Channel prefix updated. channel={Channel} ({ChannelId}), newPrefix={Prefix}, by={User}",
+            "[tw] channel prefix updated. channel={Channel}, cid={ChannelId}, prefix={Prefix}, user={User}",
             context.Chat.Name, context.Chat.Id, newPrefix, context.User.DisplayName);
 
         return CommandResult.Successfully(

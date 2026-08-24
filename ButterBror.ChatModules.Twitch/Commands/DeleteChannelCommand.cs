@@ -19,7 +19,7 @@ public class DeleteChannelCommand(
         CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        // S0: Validate arguments
+        // s0: validate arguments
         if (context.Arguments.Count < 1)
         {
             return CommandResult.Failure(
@@ -28,7 +28,7 @@ public class DeleteChannelCommand(
 
         var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
-        // S2: Check permissions
+        // s2: check permissions
         var user = context.User;
         var hasPermission = await _permissionManager.HasPermissionAsync(
             user.UnifiedId,
@@ -40,10 +40,10 @@ public class DeleteChannelCommand(
                 await _localization.GetStringAsync("command.del_channel.permission", context.Locale));
         }
 
-        // S3: Persist to Redis
+        // s3: persist to Redis
         await channelManager.RemoveChannelAsync(channelName);
 
-        // S4: Connect on the fly
+        // s4: connect on the fly
         await twitchClient.LeaveChannelAsync(channelName);
 
         return CommandResult.Successfully(

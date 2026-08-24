@@ -1,5 +1,6 @@
 ﻿namespace ButterBror.Domain;
 
+[Flags]
 public enum PlatformPermission
 {
     CanDeleteOwnMessages,

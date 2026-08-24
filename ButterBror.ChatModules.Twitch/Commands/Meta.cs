@@ -3,8 +3,8 @@ using ButterBror.Core.Modules.Interfaces;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
 
-// Commands metadata
-// ><> Join
+// commands metadata
+// ><> join
 internal class JoinChannelCommandMetadata : ICommandMetadata
 {
     public string Name => "join";
@@ -17,7 +17,7 @@ internal class JoinChannelCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// ><> Part
+// ><> part
 internal class PartChannelCommandMetadata : ICommandMetadata
 {
     public string Name => "part";
@@ -30,20 +30,20 @@ internal class PartChannelCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// ><> SetPrefix
+// ><> set prefix
 internal class SetPrefixCommandMetadata : ICommandMetadata
 {
     public string Name => "setprefix";
     public List<string> Aliases => ["prefix", "sp"];
     public int CooldownSeconds => 2;
-    public List<string> RequiredPermissions => ["su:twitch:prefix"];
+    public List<string> RequiredPermissions => [];
     public string ArgumentsHelpText => "<prefix>";
     public string Id => "sillyapps:twitch:setprefix";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// ><> Auth
+// ><> auth
 internal class AuthCommandMetadata : ICommandMetadata
 {
     public string Name => "auth";
@@ -56,7 +56,7 @@ internal class AuthCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// ><> AddChannel
+// ><> add channel
 internal class AddChannelCommandMetadata : ICommandMetadata
 {
     public string Name => "addchannel";
@@ -69,7 +69,7 @@ internal class AddChannelCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// ><> DeleteChannel
+// ><> delete channel
 internal class DeleteChannelCommandMetadata : ICommandMetadata
 {
     public string Name => "deletechannel";
@@ -82,13 +82,13 @@ internal class DeleteChannelCommandMetadata : ICommandMetadata
     public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
 }
 
-// ><> Twitch settings
+// ><> twitch settings
 internal class ChannelSettingsCommandMetadata : ICommandMetadata
 {
     public string Name => "twitchset";
     public List<string> Aliases => ["ts"];
     public int CooldownSeconds => 1;
-    public List<string> RequiredPermissions => ["su:twitch:settings"];
+    public List<string> RequiredPermissions => [];
     public string ArgumentsHelpText => "<online|offline> <true|false>";
     public string Id => "sillyapps:twitch:settings";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;

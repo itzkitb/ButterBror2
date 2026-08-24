@@ -20,19 +20,19 @@ public class JoinChannelCommand(
         CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        // S0: Validate arguments
+        // s0: validate arguments
         if (context.Arguments.Count == 0)
         {
             return CommandResult.Failure(
                 await _localization.GetStringAsync("command.join.usage", context.Locale));
         }
 
-        string channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
+        var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
 
-        // S1: Resolve user
+        // s1: resolve user
         var user = context.User;
 
-        // S2: Check permissions
+        // s2: check permissions
         var hasPermission = await _permissionManager.HasPermissionAsync(
             user.UnifiedId,
             "su:twitch:join");
@@ -43,9 +43,9 @@ public class JoinChannelCommand(
                 await _localization.GetStringAsync("command.join.permission", context.Locale));
         }
 
-        // S3: Join
+        // s3: join
         await twitchClient.JoinChannelAsync(channelName);
-        _logger.LogInformation("Joined channel '{Channel}' by user '{User}'", channelName, context.User.DisplayName);
+        _logger.LogInformation("[tw] joined channel '{Channel}' by user '{User}'", channelName, context.User.DisplayName);
 
         return CommandResult.Successfully(
             await _localization.GetStringAsync("command.join.success", context.Locale,
