@@ -27,7 +27,7 @@ public interface IUserRepository
     /// </summary>
     /// <param name="displayName">Display name</param>
     /// <returns>User profile</returns>
-    Task<UserProfile?> GetByDisplayNameAsync(string displayName);
+    Task<UserProfile?> GetByDisplayNameAsync(string displayName, string platform);
     
     /// <summary>
     /// Create or update a user

@@ -14,8 +14,8 @@ public class RedisUserRepository(
 {
     private readonly ResiliencePipeline _redisPipeline = pipelineProvider.GetPipeline("redis");
     private const string UserPrefix = "user:";
-    private const string PlatformIndexPrefix = "platform_index:";
-    private const string DisplayNameIndexPrefix = "display_name_index:";
+    private const string PlatformIndexPrefix = "index:platform_id:";
+    private const string DisplayNameIndexPrefix = "index:display_name:";
 
     public async Task<UserProfile?> GetByUnifiedIdAsync(Guid unifiedId)
     {
@@ -50,17 +50,15 @@ public class RedisUserRepository(
             await db.StringSetAsync(key, json);
 
             // updating platform indexes
-            foreach (var indexKey in user.PlatformIds.Select(platform => 
-                         $"{PlatformIndexPrefix}{platform.Key}:{platform.Value}"))
-            {
-                await db.StringSetAsync(indexKey, user.UnifiedId.ToString());
-            }
-
-            // updating the index by display name
             var normalized = NormalizeDisplayName(user.DisplayName);
-            var displayNameIndexKey = $"{DisplayNameIndexPrefix}{normalized}";
-            await db.StringSetAsync(displayNameIndexKey, user.UnifiedId.ToString());
-
+            foreach (var platform in user.PlatformIds)
+            {
+                var indexKey = $"{PlatformIndexPrefix}{platform.Key}:{platform.Value}";
+                var displayNameIndexKey = $"{DisplayNameIndexPrefix}{platform.Key}:{normalized}";
+                await db.StringSetAsync(indexKey, user.UnifiedId.ToString());
+                await db.StringSetAsync(displayNameIndexKey, user.UnifiedId.ToString());
+            }
+            
             return user;
         });
     }
@@ -75,13 +73,13 @@ public class RedisUserRepository(
         });
     }
 
-    public async Task<UserProfile?> GetByDisplayNameAsync(string displayName)
+    public async Task<UserProfile?> GetByDisplayNameAsync(string displayName, string platform)
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
             var db = redis.GetDatabase();
             var normalized = NormalizeDisplayName(displayName);
-            var indexKey = $"{DisplayNameIndexPrefix}{normalized}";
+            var indexKey = $"{DisplayNameIndexPrefix}{platform}:{normalized}";
             var unifiedId = await db.StringGetAsync(indexKey);
             return unifiedId.HasValue ? await GetByUnifiedIdAsync(Guid.Parse(unifiedId.ToString())) : null;
         });
@@ -91,7 +89,7 @@ public class RedisUserRepository(
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
-            var user = await GetByPlatformIdAsync(platform, identifier) ?? await GetByDisplayNameAsync(identifier);
+            var user = await GetByPlatformIdAsync(platform, identifier) ?? await GetByDisplayNameAsync(identifier, platform);
             return user;
         });
     }
