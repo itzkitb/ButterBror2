@@ -42,7 +42,7 @@ public class LocalizationService(
                 return;
             }
             
-            await using var _ = new InitializationScope(logger, "bot core");
+            await using var _ = new InitializationScope(logger, "localization");
             
             await registry.InitializeAsync(ct);
             _defaultLocale = registry.GetDefaultLocale();

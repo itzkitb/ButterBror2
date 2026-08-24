@@ -59,8 +59,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IBotCoreInfo, BotCoreInfo>();
 builder.Services.AddSingleton<IBotCore, BotCore>();
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
-builder.Services.AddSingleton<AppDataStorageProvider>();
-builder.Services.AddSingleton<IAppDataPathProvider>(sp => sp.GetRequiredService<AppDataStorageProvider>());
+builder.Services.AddSingleton<IAppDataPathProvider, AppDataStorageProvider>();
 builder.Services.AddSingleton<IDynamicServiceProvider>(sp => new DynamicServiceProvider(sp));
 
 // ^ database
@@ -131,7 +130,9 @@ var host = builder.Build();
 
 // s0: logger & core info
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("· - —==≡ butterbror is starting ≡==- — ·");
+var appdataPathProvider = host.Services.GetRequiredService<IAppDataPathProvider>();
+logger.LogInformation("- —==≡ butterbror is starting ≡==- —");
+logger.LogInformation("default path: {Path}", appdataPathProvider.GetAppDataPath());
 
 var coreInfoService = host.Services.GetRequiredService<IBotCoreInfo>();
 coreInfoService.Initialize();

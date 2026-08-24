@@ -26,7 +26,20 @@ public class BotCore(
     public async Task StartAsync(CancellationToken ct = default)
     {
         await using var _ = new InitializationScope(logger, "bot core", true);
+        
+        await Task.WhenAll(
+            userService.InitializeAsync(ct),
+            moduleManager.InitializeAsync(this, ct),
+            commandRegistry.InitializeAsync(ct),
+            statsService.InitializeAsync(ct),
+            localizationService.InitializeAsync(ct),
+            banphraseService.ReloadGlobalCategoriesAsync(),
+            InitDashboardAdmin()
+        );
+    }
 
+    private async Task InitDashboardAdmin()
+    {
         try
         {
             await using (new InitializationScope(logger, "dashboard admin"))
@@ -44,17 +57,8 @@ public class BotCore(
         {
             logger.LogWarning(ex, "failed to init dashboard admin user");
         }
-        
-        await Task.WhenAll(
-            userService.InitializeAsync(ct),
-            moduleManager.InitializeAsync(this, ct),
-            commandRegistry.InitializeAsync(ct),
-            statsService.InitializeAsync(ct),
-            localizationService.InitializeAsync(ct),
-            banphraseService.ReloadGlobalCategoriesAsync()
-        );
     }
-
+    
     public async Task<CommandResult> ProcessCommandAsync(CommandContext context) => 
         await commandProcessor.ProcessCommandAsync(context);
 

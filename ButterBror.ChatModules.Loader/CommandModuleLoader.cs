@@ -5,6 +5,7 @@ using System.Text.Json;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules;
 using ButterBror.Core.Modules.Manifest;
+using ButterBror.Core.Scopes;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Modules.Loader;
@@ -12,21 +13,22 @@ namespace ButterBror.Modules.Loader;
 /// <summary>
 /// Loader for dynamic command modules
 /// </summary>
-public class CommandModuleLoader(
+public sealed class CommandModuleLoader(
     IAppDataPathProvider pathProvider,
     IServiceProvider serviceProvider,
     ILogger<CommandModuleLoader> logger,
     ILocalizationService localizationService)
     : IDisposable, ICommandModuleLoader
 {
-    private readonly List<AssemblyLoadContext> _loadContexts = new();
-    private readonly List<ICommandModule> _loadedModules = new();
-    private readonly ConcurrentBag<string> _tempDirectories = new();
+    private readonly List<AssemblyLoadContext> _loadContexts = [];
+    private readonly List<ICommandModule> _loadedModules = [];
+    private readonly ConcurrentBag<string> _tempDirectories = [];
     private readonly Dictionary<string, string> _moduleIdToArchivePath = new();
     private readonly SemaphoreSlim _reloadLock = new(1, 1);
     private bool _disposed;
 
     private const string ManifestFileName = "bbmanifest.json";
+    private readonly string _tempPath = Path.Combine(Path.GetTempPath(), "bb", "cmd");
 
     public async Task<IReadOnlyList<ICommandModule>> LoadModulesAsync(CancellationToken ct = default)
     {
@@ -38,44 +40,45 @@ public class CommandModuleLoader(
         if (!Directory.Exists(commandsPath))
         {
             Directory.CreateDirectory(commandsPath);
-            return Array.Empty<ICommandModule>();
+            return [];
         }
 
-        logger.LogInformation("loading command modules. path='{Path}'", commandsPath);
-
-        // Looking for archives with command modules
-        var moduleFiles = Directory.GetFiles(commandsPath, "*.pag", SearchOption.TopDirectoryOnly);
-        
-        if (moduleFiles.Length == 0)
+        await using (new InitializationScope(logger, "command modules"))
         {
-            logger.LogInformation("no command modules found");
-            return Array.Empty<ICommandModule>();
+            // Looking for archives with command modules
+            var moduleFiles = Directory.GetFiles(commandsPath, "*.pag", SearchOption.TopDirectoryOnly);
+
+            if (moduleFiles.Length == 0)
+            {
+                logger.LogInformation("no command modules found");
+                return [];
+            }
+
+            var tasks = moduleFiles.Select(file => LoadModuleFromArchiveAsync(file, ct));
+            var results = await Task.WhenAll(tasks);
+
+            var allModules = results.SelectMany(r => r).ToList();
+            _loadedModules.AddRange(allModules);
+
+            logger.LogInformation("loaded command modules. count={Count}", _loadedModules.Count);
+            return _loadedModules.AsReadOnly();
         }
-
-        var tasks = moduleFiles.Select(file => LoadModuleFromArchiveAsync(file, ct));
-        var results = await Task.WhenAll(tasks);
-
-        var allModules = results.SelectMany(r => r).ToList();
-        _loadedModules.AddRange(allModules);
-
-        logger.LogInformation("Loaded command modules. count={Count}", _loadedModules.Count);
-        return _loadedModules.AsReadOnly();
     }
 
     private async Task<IReadOnlyList<ICommandModule>> LoadModuleFromArchiveAsync(string path, CancellationToken cancellationToken)
     {
         var modules = new List<ICommandModule>();
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "ButterBror", $"CommandModule_{Guid.CreateVersion7()}");
+        var tempDir = Path.Combine(_tempPath, Guid.CreateVersion7().ToString());
         Directory.CreateDirectory(tempDir);
         _tempDirectories.Add(tempDir);
 
         try
         {
-            logger.LogDebug("Extracting command module archive: {Path} to {TempDir}", path, tempDir);
-            ZipFile.ExtractToDirectory(path, tempDir, overwriteFiles: true);
+            logger.LogDebug("extracting command module archive: {Path} to {TempDir}", path, tempDir);
+            await ZipFile.ExtractToDirectoryAsync(path, tempDir, overwriteFiles: true, cancellationToken: cancellationToken);
 
-            // S0: Reading manifest
+            // s0: reading manifest
             var manifestPath = Path.Combine(tempDir, ManifestFileName);
             CommandModuleManifest? manifest = null;
             
@@ -83,54 +86,42 @@ public class CommandModuleLoader(
             {
                 var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
                 manifest = JsonSerializer.Deserialize<CommandModuleManifest>(manifestJson);
-                logger.LogDebug("Loaded manifest: {ManifestName} v.{ManifestVersion}", manifest?.Id, manifest?.Version);
+                logger.LogDebug("loaded manifest: {ManifestName} v.{ManifestVersion}", manifest?.Id, manifest?.Version);
             }
 
-            // S1: Finding main DLL
+            // s1: finding main dll
             string? mainDll = null;
             if (manifest != null && !string.IsNullOrWhiteSpace(manifest.MainDll))
             {
                 mainDll = Path.Combine(tempDir, manifest.MainDll);
                 if (!File.Exists(mainDll))
                 {
-                    logger.LogWarning("Main DLL from manifest not found: {Dll}", manifest.MainDll);
+                    logger.LogWarning("main dll from manifest not found: {Dll}", manifest.MainDll);
                     mainDll = null;
                 }
             }
 
             if (mainDll == null)
             {
-                // S2: Find first DLL that's not a dependency
-                var dllFiles = Directory.GetFiles(tempDir, "*.dll")
-                    .FirstOrDefault(f => !f.Contains("System.") && !f.Contains("Microsoft."));
-                if (dllFiles != null)
-                {
-                    mainDll = dllFiles;
-                }
-            }
-
-            if (mainDll == null)
-            {
-                logger.LogWarning("No module DLL found in archive: {Path}", path);
+                logger.LogWarning("no module dll found in archive: {Path}", path);
                 return modules;
             }
 
-            logger.LogDebug("Found main module DLL: {Dll}", mainDll);
+            logger.LogDebug("found module. name='{Dll}'", mainDll);
 
-            // S2: Creating isolated context
+            // s2: creating isolated context
             var moduleName = manifest?.Id ?? Path.GetFileNameWithoutExtension(path);
             var loadContext = new ModuleAssemblyLoadContext(moduleName, tempDir, isCollectible: true, logger);
             _loadContexts.Add(loadContext);
 
-            // S3: Loading assembly
+            // s3: loading assembly
             var assembly = loadContext.LoadFromAssemblyPath(mainDll);
-            logger.LogDebug("Loaded assembly: {AssemblyName}", assembly.FullName);
+            logger.LogDebug("loaded assembly. name='{AssemblyName}'", assembly.FullName);
 
-            // S4: Finding all classes that implement ICommandModule
+            // s4: finding all classes that implement ICommandModule
             var moduleTypes = assembly.GetTypes()
                 .Where(t => typeof(ICommandModule).IsAssignableFrom(t)
-                    && !t.IsInterface
-                    && !t.IsAbstract)
+                            && t is { IsInterface: false, IsAbstract: false })
                 .ToList();
 
             foreach (var moduleType in moduleTypes)
@@ -142,9 +133,9 @@ public class CommandModuleLoader(
                     {
                         await commandModule.InitializeAsync(serviceProvider);
                         modules.Add(commandModule);
-                        // Store mapping from module ID to archive path
+                        // store mapping from module ID to archive path
                         _moduleIdToArchivePath[commandModule.ModuleId] = path;
-                        // Register built-in locales
+                        // register built-in locales
                         localizationService.RegisterModuleTranslations(
                             commandModule.ModuleId,
                             commandModule.DefaultTranslations);
@@ -166,40 +157,40 @@ public class CommandModuleLoader(
 
     public async Task UnloadModulesAsync(CancellationToken cancellationToken = default)
     {
-        logger.LogInformation("Unloading command modules...");
-
-        // S0: Shutdown all modules
+        await using var _ = new StopScope(logger, "command modules");
+        
+        // s0: shutdown all modules
         foreach (var module in _loadedModules)
         {
             try
             {
                 await module.ShutdownAsync();
-                logger.LogDebug("Shutdown module: {ModuleId}", module.ModuleId);
+                logger.LogDebug("[shutdown] {ModuleId}", module.ModuleId);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to shutdown module: {ModuleId}", module.ModuleId);
+                logger.LogError(ex, "failed to shutdown module: {ModuleId}", module.ModuleId);
             }
         }
 
-        // S1: Unload all contexts
+        // s1: unload all contexts
         foreach (var context in _loadContexts)
         {
             try
             {
                 context.Unload();
-                logger.LogDebug("Unloaded context: {ContextName}", context.Name);
+                logger.LogDebug("unloaded context: {ContextName}", context.Name);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to unload context: {ContextName}", context.Name);
+                logger.LogError(ex, "failed to unload context: {ContextName}", context.Name);
             }
         }
 
         _loadContexts.Clear();
         _loadedModules.Clear();
 
-        // S2: Clearing temp
+        // s2: clearing temp
         foreach (var tempDir in _tempDirectories)
         {
             try
@@ -207,25 +198,23 @@ public class CommandModuleLoader(
                 if (Directory.Exists(tempDir))
                 {
                     Directory.Delete(tempDir, recursive: true);
-                    logger.LogDebug("Deleted temp directory: {TempDir}", tempDir);
+                    logger.LogDebug("[del] {TempDir}", tempDir);
                 }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to delete temp directory: {TempDir}", tempDir);
+                logger.LogError(ex, "failed to delete temp directory: {TempDir}", tempDir);
             }
         }
 
         _tempDirectories.Clear();
 
-        // S3: Force GC, IDK if this is actually needed
+        // s3: force GC
         await Task.Run(() =>
         {
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }, cancellationToken);
-
-        logger.LogInformation("Command modules unloaded");
     }
 
     public async Task<IReadOnlyList<ICommandModule>> ReloadModuleAsync(string moduleId, CancellationToken cancellationToken = default)
@@ -233,60 +222,60 @@ public class CommandModuleLoader(
         await _reloadLock.WaitAsync(cancellationToken);
         try
         {
-            // S0: Find module in loaded modules
+            // s0: find module in loaded modules
             var existingModule = _loadedModules.FirstOrDefault(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
             string? archivePath = null;
 
             if (existingModule != null)
             {
-                // S1: Get archive path from mapping
+                // s1: get archive path from mapping
                 if (!_moduleIdToArchivePath.TryGetValue(moduleId, out archivePath) || !File.Exists(archivePath))
                 {
-                    throw new FileNotFoundException($"Module file not found for '{moduleId}'");
+                    throw new FileNotFoundException($"module file not found for '{moduleId}'");
                 }
 
-                logger.LogDebug("Found existing module {ModuleId}: {ArchivePath}", moduleId, archivePath);
+                logger.LogDebug("found existing module {ModuleId}: {ArchivePath}", moduleId, archivePath);
 
-                // S2: Shutdown module
+                // s2: shutdown module
                 await existingModule.ShutdownAsync();
 
-                // S3: Find and unload the corresponding load context
-                var contextToUnload = _loadContexts.FirstOrDefault(c =>
+                // s3: find and unload the corresponding load context
+                var contextToUnload = _loadContexts.FirstOrDefault(_ =>
                     _loadedModules.Any(m => m.ModuleId == moduleId));
                 if (contextToUnload != null)
                 {
                     contextToUnload.Unload();
                     _loadContexts.Remove(contextToUnload);
-                    logger.LogDebug("Unloaded context: {ContextName}", contextToUnload.Name);
+                    logger.LogDebug("unloaded context: {ContextName}", contextToUnload.Name);
                 }
 
-                // S4: Remove from loaded modules
+                // s4: remove from loaded modules
                 _loadedModules.RemoveAll(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
 
-                // S5: Remove temp directory
+                // s5: remove temp directory
                 var tempDirToDelete = _tempDirectories.FirstOrDefault(t => t.Contains(moduleId));
                 if (!string.IsNullOrEmpty(tempDirToDelete) && Directory.Exists(tempDirToDelete))
                 {
                     try
                     {
                         Directory.Delete(tempDirToDelete, recursive: true);
-                        logger.LogDebug("Deleted temp directory: {TempDir}", tempDirToDelete);
+                        logger.LogDebug("[del] {TempDir}", tempDirToDelete);
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        logger.LogError(ex, "Failed to delete temp directory: {TempDir}", tempDirToDelete);
+                        // ok?
                     }
                 }
 
-                // S6: Remove from mapping
+                // s6: remove from mapping
                 _moduleIdToArchivePath.Remove(moduleId);
             }
             else
             {
-                // S1: Try to find archive by name
+                // s1: try to find archive by name
                 var commandModulesPath = Path.Combine(pathProvider.GetAppDataPath(), "Command");
                 
-                // S2: Try exact file name match
+                // s2: try exact file name match
                 var exactArchivePath = Path.Combine(commandModulesPath, $"{moduleId}.pag");
                 if (File.Exists(exactArchivePath))
                 {
@@ -294,20 +283,20 @@ public class CommandModuleLoader(
                 }
                 else
                 {
-                    // S3: Try to find by manifest name
+                    // s3: try to find by manifest name
                     var moduleFiles = Directory.GetFiles(commandModulesPath, "*.pag", SearchOption.TopDirectoryOnly);
                     foreach (var file in moduleFiles)
                     {
-                        var tempExtractDir = Path.Combine(Path.GetTempPath(), $"ButterBror_Command_{Guid.NewGuid()}");
+                        var tempExtractDir = Path.Combine(_tempPath, Guid.CreateVersion7().ToString());
                         try
                         {
-                            ZipFile.ExtractToDirectory(file, tempExtractDir, overwriteFiles: true);
-                            var manifestPath = Path.Combine(tempExtractDir, "command.manifest.json");
+                            await ZipFile.ExtractToDirectoryAsync(file, tempExtractDir, overwriteFiles: true, cancellationToken: cancellationToken);
+                            var manifestPath = Path.Combine(tempExtractDir, ManifestFileName);
                             if (File.Exists(manifestPath))
                             {
                                 var manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
                                 var manifest = JsonSerializer.Deserialize<CommandModuleManifest>(manifestJson);
-                                if (manifest?.Id?.Equals(moduleId, StringComparison.OrdinalIgnoreCase) == true)
+                                if (manifest?.Id.Equals(moduleId, StringComparison.OrdinalIgnoreCase) == true)
                                 {
                                     archivePath = file;
                                     break;
@@ -322,7 +311,11 @@ public class CommandModuleLoader(
                         {
                             if (Directory.Exists(tempExtractDir))
                             {
-                                try { Directory.Delete(tempExtractDir, recursive: true); } catch { }
+                                try { Directory.Delete(tempExtractDir, recursive: true); }
+                                catch
+                                {
+                                    // ignored
+                                }
                             }
                         }
                     }
@@ -330,20 +323,20 @@ public class CommandModuleLoader(
 
                 if (archivePath == null)
                 {
-                    logger.LogError("Module '{ModuleId}' not found in loaded modules", moduleId);
-                    throw new FileNotFoundException($"Module '{moduleId}' not found");
+                    logger.LogError("module '{ModuleId}' not found", moduleId);
+                    throw new FileNotFoundException($"module '{moduleId}' not found");
                 }
             }
 
-            // S7: Force GC
+            // s7: force GC
             await Task.Run(() =>
             {
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
             }, cancellationToken);
 
-            // S8: Load module
-            logger.LogDebug("Loading module: {Path}", archivePath);
+            // s8: load module
+            logger.LogDebug("loading module: {Path}", archivePath);
             var newModules = await LoadModuleFromArchiveAsync(archivePath, cancellationToken);
             _loadedModules.AddRange(newModules);
 
@@ -358,10 +351,9 @@ public class CommandModuleLoader(
     public void Dispose()
     {
         Dispose(true);
-        GC.SuppressFinalize(this);
     }
 
-    protected virtual void Dispose(bool disposing)
+    private void Dispose(bool disposing)
     {
         if (_disposed) return;
         
@@ -375,8 +367,8 @@ public class CommandModuleLoader(
                 }
                 catch (Exception ex)
                 {
-                    // I DONT CARE
-                    logger.LogError(ex, "Failed to unload context: {ContextName}", context.Name);
+                    // shtup
+                    logger.LogError(ex, "failed to unload context: {ContextName}", context.Name);
                 }
             }
 
@@ -394,7 +386,7 @@ public class CommandModuleLoader(
                 }
                 catch
                 {
-                    // Lol
+                    // * v *
                 }
             }
 

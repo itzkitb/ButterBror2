@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ButterBror.Core.Interfaces;
 using ButterBror.Core.Storage;
 using ButterBror.Localization.Models;
 using Microsoft.Extensions.Logging;
@@ -9,7 +10,7 @@ namespace ButterBror.Localization.Services;
 /// Handles loading and parsing of translation files
 /// </summary>
 public class TranslationFileLoader(
-    AppDataStorageProvider storageProvider,
+    IAppDataPathProvider storageProvider,
     ILogger<TranslationFileLoader> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
