@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Text;
+using System.Text.Json;
 using ButterBror.Data.Interfaces;
 using ButterBror.Domain.Entities;
 using Polly;
@@ -15,6 +16,7 @@ public class RedisChatRepository(
     private readonly ResiliencePipeline _redisPipeline = pipelineProvider.GetPipeline("redis");
     private const string ChatPrefix = "chat:";
     private const string PlatformIndexPrefix = "chat_platform_index:";
+    private const string TitleIndexPrefix = "chat_title_index:";
 
     public async Task<ChatInfo?> GetByUnifiedIdAsync(Guid unifiedId)
     {
@@ -38,6 +40,18 @@ public class RedisChatRepository(
         });
     }
 
+    public async Task<ChatInfo?> GetByTitleAsync(string platform, string title)
+    {
+        return await _redisPipeline.ExecuteAsync(async _ =>
+        {
+            var chatTitleB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(title));
+            var db = redis.GetDatabase();
+            var indexKey = $"{TitleIndexPrefix}{platform.ToLowerInvariant()}:{chatTitleB64}";
+            var unifiedId = await db.StringGetAsync(indexKey);
+            return unifiedId.HasValue ? await GetByUnifiedIdAsync(Guid.Parse(unifiedId.ToString())) : null;
+        });
+    }
+
     public async Task<ChatInfo> CreateOrUpdateAsync(ChatInfo chat)
     {
         return await _redisPipeline.ExecuteAsync(async _ =>
@@ -49,9 +63,13 @@ public class RedisChatRepository(
             await db.StringSetAsync(key, json);
 
             // updating platform index
-            var indexKey = $"{PlatformIndexPrefix}{chat.Platform}:{chat.PlatformId}";
-            await db.StringSetAsync(indexKey, chat.UnifiedId.ToString());
-
+            var chatTitleB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(chat.Title));
+            var platformIndexKey = $"{PlatformIndexPrefix}{chat.Platform}:{chat.PlatformId}";
+            var platformTitleKey = $"{TitleIndexPrefix}{chat.Platform}:{chatTitleB64}";
+            
+            await db.StringSetAsync(platformIndexKey, chat.UnifiedId.ToString());
+            await db.StringSetAsync(platformTitleKey, chat.UnifiedId.ToString());
+            
             return chat;
         });
     }

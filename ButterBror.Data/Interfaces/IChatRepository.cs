@@ -23,6 +23,14 @@ public interface IChatRepository
     Task<ChatInfo?> GetByPlatformIdAsync(string platform, string platformId);
     
     /// <summary>
+    /// Get chat based on title
+    /// </summary>
+    /// <param name="platform">Platform name</param>
+    /// <param name="title">Chat title</param>
+    /// <returns>Chat info or null</returns>
+    Task<ChatInfo?> GetByTitleAsync(string platform, string title);
+    
+    /// <summary>
     /// Create or update chat details
     /// </summary>
     /// <param name="chat">Chat info</param>
