@@ -44,4 +44,7 @@ public interface IDeviceStatsService
     /// Disk read speed in kilobytes per second
     /// </summary>
     double DiskOut { get; }
+
+    Task InitializeAsync(CancellationToken cancellationToken = default);
+    Task ShutdownAsync(CancellationToken cancellationToken = default);
 }

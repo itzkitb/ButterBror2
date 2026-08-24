@@ -19,7 +19,7 @@ public class PlatformModuleManager(
 
     public async Task InitializeAsync(IBotCore core, CancellationToken ct = default)
     {
-        await using (new InitializationScope(logger, "platform module manager"))
+        await using (new InitializationScope(logger, "module manager"))
         {
             await Task.WhenAll(
                 LoadAndInitializeChatModulesAsync(ct),
@@ -109,7 +109,7 @@ public class PlatformModuleManager(
         {
             try
             {
-                await using (new InitializationScope(logger, $"platform module '{module.ModuleId}'"))
+                await using (new StopScope(logger, $"platform module '{module.ModuleId}'"))
                 {
                     await module.ShutdownAsync();
                 }
@@ -125,7 +125,7 @@ public class PlatformModuleManager(
         {
             try
             {
-                await using (new InitializationScope(logger, $"chat module '{module.ModuleId}'"))
+                await using (new StopScope(logger, $"chat module '{module.ModuleId}'"))
                 {
                     await module.ShutdownAsync();
                 }
@@ -141,7 +141,7 @@ public class PlatformModuleManager(
         {
             try
             {
-                await using (new InitializationScope(logger, $"command module '{module.ModuleId}'"))
+                await using (new StopScope(logger, $"command module '{module.ModuleId}'"))
                 {
                     await module.ShutdownAsync();
                 }

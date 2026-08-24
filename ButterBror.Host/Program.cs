@@ -122,7 +122,6 @@ builder.Services.AddSingleton<IDeviceStatsService, DeviceStatsService>();
 
 // ^ hosted
 builder.Services.AddHostedService<DashboardServer>();
-builder.Services.AddHostedService<DeviceStatsHostedService>();
 builder.Services.AddHostedService<BotHostedService>();
 
 // ><> build & post-build

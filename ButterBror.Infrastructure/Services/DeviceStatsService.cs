@@ -12,7 +12,7 @@ using LibreHardwareMonitor.Hardware;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class DeviceStatsService : IDeviceStatsService, IDisposable
+public class DeviceStatsService : IDeviceStatsService
 {
     private ILogger<DeviceStatsService> _logger;
     private CpuTemperatureReader? _cpuTempReader;
@@ -27,6 +27,20 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
     public double DiskIn => _diskIn;
     public double DiskOut => _diskOut;
 
+    public Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        _updateTask = Task.Run(() => MetricsLoopAsync(cancellationToken), cancellationToken);
+        _logger.LogInformation("[init:ok] device status service");
+        return Task.CompletedTask;
+    }
+    
+    public Task ShutdownAsync(CancellationToken cancellationToken = default)
+    {
+        _updateTask.GetAwaiter().GetResult();
+        _logger.LogInformation("[stop:ok] device status service");
+        return Task.CompletedTask;
+    }
+    
     // Private
     private double _cpuLoad, _cpuTemp, _totalMem, _memUsed, _netIn, _netOut, _diskIn, _diskOut;
 
@@ -51,20 +65,6 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
         {
             _cpuTempReader = new CpuTemperatureReader(logger);
         });
-    }
-
-    public void Start()
-    {
-        _cts = new CancellationTokenSource();
-        _updateTask = Task.Run(() => MetricsLoopAsync(_cts.Token), _cts.Token);
-        _logger.LogInformation("Started device status service");
-    }
-
-    public void Stop()
-    {
-        _cts.Cancel();
-        _updateTask.GetAwaiter().GetResult();
-        _logger.LogInformation("Stopped device status service");
     }
 
     private async Task MetricsLoopAsync(CancellationToken ct)
@@ -254,7 +254,7 @@ public class DeviceStatsService : IDeviceStatsService, IDisposable
 
     public void Dispose()
     {
-        Stop();
+        ShutdownAsync();
         _cts.Dispose();
     }
 }

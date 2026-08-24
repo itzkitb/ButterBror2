@@ -8,30 +8,30 @@ namespace ButterBror.Infrastructure.Services;
 /// <summary>
 /// Bot statistics service providing live metrics and persistent counters
 /// </summary>
-public class BotStatsService : IBotStatsService
+public class BotStatsService(
+    IAppDataPathProvider pathProvider,
+    ILogger<BotStatsService> logger)
+    : IBotStatsService
 {
-    private readonly IAppDataPathProvider _pathProvider;
-    private readonly ILogger<BotStatsService> _logger;
-
     // Minute counters for CpM/MpM
     private readonly Queue<(DateTime At, int Count)> _commandTicks = new();
     private readonly Queue<(DateTime At, int Count)> _messageTicks = new();
-    private readonly object _tickLock = new();
+    private readonly Lock _tickLock = new();
 
     // Redis ops rolling windows
     private readonly Queue<(DateTime At, long Ops)> _opsMinQueue = new();
     private readonly Queue<(DateTime At, long Ops)> _opsHourQueue = new();
-    private readonly object _opsLock = new();
+    private readonly Lock _opsLock = new();
 
     // Redis live stats
     private long _redisMemoryUsedBytes;
     private long _redisConnectedClients;
     private long _redisOpsPerSecond;
     private long _redisKeys;
-    private readonly object _redisLock = new();
+    private readonly Lock _redisLock = new();
 
     // Session tracking
-    private DateTime _startedAt;
+    private DateTime _startedAt = DateTime.UtcNow;
 
     // Persistent stats
     private PersistentBotStats _persistent = new();
@@ -48,15 +48,6 @@ public class BotStatsService : IBotStatsService
     private readonly SemaphoreSlim _flushLock = new(1, 1);
 
     private bool _initialized;
-
-    public BotStatsService(
-        IAppDataPathProvider pathProvider,
-        ILogger<BotStatsService> logger)
-    {
-        _pathProvider = pathProvider;
-        _logger = logger;
-        _startedAt = DateTime.UtcNow;
-    }
 
     // Live
 
@@ -211,7 +202,7 @@ public class BotStatsService : IBotStatsService
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
-            _logger.LogDebug("Created directory. path='{Directory}'", directory);
+            logger.LogDebug("Created directory. path='{Directory}'", directory);
         }
 
         if (File.Exists(statsPath))
@@ -224,17 +215,17 @@ public class BotStatsService : IBotStatsService
                     PropertyNameCaseInsensitive = true
                 };
                 _persistent = JsonSerializer.Deserialize<PersistentBotStats>(json, options) ?? new PersistentBotStats();
-                _logger.LogInformation("Loaded bot statistics");
+                logger.LogInformation("Loaded bot statistics");
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to load stats, starting with defaults. path='{Path}', message='{Message}'", statsPath, ex.Message);
+                logger.LogWarning(ex, "Failed to load stats, starting with defaults. path='{Path}', message='{Message}'", statsPath, ex.Message);
                 _persistent = new PersistentBotStats();
             }
         }
         else
         {
-            _logger.LogInformation("No persistent stats found, starting with defaults. path='{Path}'", statsPath);
+            logger.LogInformation("No persistent stats found, starting with defaults. path='{Path}'", statsPath);
             _persistent = new PersistentBotStats();
         }
 
@@ -275,11 +266,11 @@ public class BotStatsService : IBotStatsService
             var json = JsonSerializer.Serialize(_persistent, options);
 
             await File.WriteAllTextAsync(statsPath, json, cancellationToken);
-            _logger.LogDebug("Statistics have been written to a file. path='{Path}'", statsPath);
+            logger.LogDebug("Statistics have been written to a file. path='{Path}'", statsPath);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to flush stats");
+            logger.LogWarning(ex, "Failed to flush stats");
         }
         finally
         {
@@ -294,7 +285,7 @@ public class BotStatsService : IBotStatsService
 
     private string GetStatsFilePath()
     {
-        var appDataPath = _pathProvider.GetAppDataPath();
+        var appDataPath = pathProvider.GetAppDataPath();
         return Path.Combine(appDataPath, "Stats.json");
     }
 
