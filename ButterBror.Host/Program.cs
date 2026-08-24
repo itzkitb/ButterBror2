@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -129,7 +130,9 @@ builder.Services.AddHostedService<BotHostedService>();
 builder.Services.AddSingleton(new JsonSerializerOptions
 {
     PropertyNameCaseInsensitive = true,
-    WriteIndented = true
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
 });
 
 // ><> build & post-build

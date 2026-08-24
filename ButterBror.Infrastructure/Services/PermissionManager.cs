@@ -20,23 +20,24 @@ public class PermissionManager : IPermissionManager
     {
         if (string.IsNullOrWhiteSpace(requiredPermission))
         {
-            _logger.LogWarning("An attempt to verify an empty permission");
+            _logger.LogWarning("an attempt to verify an empty permission");
             return false;
         }
 
         var user = await _userRepository.GetByUnifiedIdAsync(unifiedUserId);
         if (user == null)
         {
-            _logger.LogWarning("User {UserId} not found", unifiedUserId);
+            _logger.LogWarning("user {UserId} not found", unifiedUserId);
             return false;
         }
 
+        _logger.LogDebug("users permission: {Permission}. uid={User}", string.Join(", ", user.Permissions), unifiedUserId);
         foreach (var userPermission in user.Permissions)
         {
             if (MatchesPermission(userPermission, requiredPermission))
             {
                 _logger.LogDebug(
-                    "The permission {RequiredPermission} was found through the {UserPermission} pattern",
+                    "the permission {RequiredPermission} was found through the {UserPermission} pattern",
                     requiredPermission,
                     userPermission
                 );
@@ -44,7 +45,7 @@ public class PermissionManager : IPermissionManager
             }
         }
 
-        _logger.LogDebug("Permission {RequiredPermission} not found", requiredPermission);
+        _logger.LogDebug("permission {RequiredPermission} not found", requiredPermission);
         return false;
     }
 

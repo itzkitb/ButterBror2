@@ -155,10 +155,18 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
     public async Task<bool> UserHasPermissionForCommandAsync(string id, Guid unifiedUserId, bool idIsName = false)
     {
         var entry = ResolveEntry(id, idIsName);
-        if (entry == null) return false;
+        if (entry == null)
+        {
+            logger.LogDebug("command entry is null. id={id}, idIsName={IdIsName}", id, idIsName);
+            return false;
+        }
 
         var metadata = entry.Metadata;
-        if (metadata.RequiredPermissions.Count == 0) return true;
+        if (metadata.RequiredPermissions.Count == 0)
+        {
+            logger.LogDebug("command permission list is empty. id={id}, idIsName={IdIsName}", id, idIsName);
+            return true;
+        }
 
         using var scope = serviceProvider.CreateScope();
         var permissionManager = scope.ServiceProvider.GetRequiredService<IPermissionManager>();
@@ -171,6 +179,7 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
             }
         }
 
+        logger.LogDebug("user has no permission. id={id}, idIsName={IdIsName}, uid={uid}", id, idIsName, unifiedUserId);
         return false;
     }
 
