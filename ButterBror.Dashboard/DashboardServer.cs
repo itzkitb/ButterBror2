@@ -23,6 +23,7 @@ public class DashboardServer : IDashboardService, IDisposable
     private readonly FileManagerService _fileManager;
     private readonly SseHub _hub;
     private readonly ILogger<DashboardServer> _logger;
+    private readonly JsonSerializerOptions _jsonOptions;
 
     private HttpListener _listener = null!;
     private CancellationTokenSource _cts = null!;
@@ -36,7 +37,8 @@ public class DashboardServer : IDashboardService, IDisposable
         AdminCommandExecutor executor,
         RedisExplorerService redisExplorer,
         FileManagerService fileManager,
-        ILogger<DashboardServer> logger)
+        ILogger<DashboardServer> logger,
+        JsonSerializerOptions jsonOptions)
     {
         _opts = opts.Value;
         _bridge = bridge;
@@ -46,6 +48,7 @@ public class DashboardServer : IDashboardService, IDisposable
         _fileManager = fileManager;
         _hub = new SseHub();
         _logger = logger;
+        _jsonOptions = jsonOptions;
 
         if (bridge is DashboardBridge impl)
         {
@@ -1215,12 +1218,9 @@ public class DashboardServer : IDashboardService, IDisposable
         res.Close();
     }
 
-    private static async Task ServeJsonAsync(HttpListenerResponse res, object data)
+    private async Task ServeJsonAsync(HttpListenerResponse res, object data)
     {
-        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.Serialize(data, _jsonOptions);
         var bytes = Encoding.UTF8.GetBytes(json);
         res.ContentType = "application/json; charset=utf-8";
         res.ContentLength64 = bytes.Length;

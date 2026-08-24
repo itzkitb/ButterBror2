@@ -145,9 +145,10 @@ public sealed class ChatModuleLoader(
                             chatModule.ModuleId,
                             chatModule.DefaultTranslations);
                         logger.LogInformation(
-                            "Loaded chat module. name='{ModuleName}', platform='{PlatformName}'",
+                            "loaded chat module. name='{ModuleName}', id='{PlatformName}', v={Version}",
                             moduleType.Name,
-                            chatModule.ModuleId
+                            chatModule.ModuleId,
+                            chatModule.Version
                         );
                     }
                     else

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Models;
+using ButterBror.Core.Scopes;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
@@ -10,7 +11,8 @@ namespace ButterBror.Infrastructure.Services;
 /// </summary>
 public class BotStatsService(
     IAppDataPathProvider pathProvider,
-    ILogger<BotStatsService> logger)
+    ILogger<BotStatsService> logger,
+    JsonSerializerOptions jsonOptions)
     : IBotStatsService
 {
     // Minute counters for CpM/MpM
@@ -194,6 +196,8 @@ public class BotStatsService(
         if (_initialized)
             return;
 
+        await using var _ = new InitializationScope(logger, "bot statistics");
+        
         _startedAt = DateTime.UtcNow;
 
         var statsPath = GetStatsFilePath();
@@ -202,7 +206,7 @@ public class BotStatsService(
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
-            logger.LogDebug("Created directory. path='{Directory}'", directory);
+            logger.LogDebug("created directory. path='{Directory}'", directory);
         }
 
         if (File.Exists(statsPath))
@@ -210,22 +214,17 @@ public class BotStatsService(
             try
             {
                 var json = await File.ReadAllTextAsync(statsPath, cancellationToken);
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                };
-                _persistent = JsonSerializer.Deserialize<PersistentBotStats>(json, options) ?? new PersistentBotStats();
-                logger.LogInformation("Loaded bot statistics");
+                _persistent = JsonSerializer.Deserialize<PersistentBotStats>(json, jsonOptions) ?? new PersistentBotStats();
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to load stats, starting with defaults. path='{Path}', message='{Message}'", statsPath, ex.Message);
+                logger.LogWarning(ex, "failed to load stats, starting with defaults. path='{Path}', message='{Message}'", statsPath, ex.Message);
                 _persistent = new PersistentBotStats();
             }
         }
         else
         {
-            logger.LogInformation("No persistent stats found, starting with defaults. path='{Path}'", statsPath);
+            logger.LogInformation("no persistent stats found, starting with defaults. path='{Path}'", statsPath);
             _persistent = new PersistentBotStats();
         }
 
@@ -257,13 +256,8 @@ public class BotStatsService(
             _persistent.TotalCommandsExecuted = _commandsAtStart + _currentSessionCommands;
             _persistent.TotalRepliesSent = _repliesAtStart + _currentSessionReplies;
             _persistent.TotalUptime = _uptimeAtStart + CurrentSessionUptime;
-
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            };
-            var json = JsonSerializer.Serialize(_persistent, options);
+            
+            var json = JsonSerializer.Serialize(_persistent, jsonOptions);
 
             await File.WriteAllTextAsync(statsPath, json, cancellationToken);
             logger.LogDebug("Statistics have been written to a file. path='{Path}'", statsPath);

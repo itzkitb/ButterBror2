@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -123,6 +124,13 @@ builder.Services.AddSingleton<IDashboardService, DashboardServer>();
 
 // ^ hosted
 builder.Services.AddHostedService<BotHostedService>();
+
+// ^ json
+builder.Services.AddSingleton(new JsonSerializerOptions
+{
+    PropertyNameCaseInsensitive = true,
+    WriteIndented = true
+});
 
 // ><> build & post-build
 var host = builder.Build();
