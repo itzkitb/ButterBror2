@@ -40,6 +40,8 @@ public class BotCore(
             deviceStatsService.InitializeAsync(ct),
             dashboardService.StartAsync(ct)
         );
+        
+        localizationService.RegisterModuleTranslations("butterbror:system", Application.Localization.DefaultTranslations);
     }
 
     private async Task InitDashboardAdmin()
