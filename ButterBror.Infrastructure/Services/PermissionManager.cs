@@ -5,47 +5,36 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class PermissionManager : IPermissionManager
+public class PermissionManager(IUserRepository userRepository, ILogger<PermissionManager> logger)
+    : IPermissionManager
 {
-    private readonly IUserRepository _userRepository;
-    private readonly ILogger<PermissionManager> _logger;
-
-    public PermissionManager(IUserRepository userRepository, ILogger<PermissionManager> logger)
-    {
-        _userRepository = userRepository;
-        _logger = logger;
-    }
-
     public async Task<bool> HasPermissionAsync(Guid unifiedUserId, string requiredPermission)
     {
         if (string.IsNullOrWhiteSpace(requiredPermission))
         {
-            _logger.LogWarning("an attempt to verify an empty permission");
+            logger.LogWarning("an attempt to verify an empty permission");
             return false;
         }
 
-        var user = await _userRepository.GetByUnifiedIdAsync(unifiedUserId);
+        var user = await userRepository.GetByUnifiedIdAsync(unifiedUserId);
         if (user == null)
         {
-            _logger.LogWarning("user {UserId} not found", unifiedUserId);
+            logger.LogWarning("user not found, cant check permission. uid={UserId}", unifiedUserId);
             return false;
         }
 
-        _logger.LogDebug("users permission: {Permission}. uid={User}", string.Join(", ", user.Permissions), unifiedUserId);
-        foreach (var userPermission in user.Permissions)
+        logger.LogDebug("users permission: {Permission}. uid={User}", string.Join(", ", user.Permissions), unifiedUserId);
+        foreach (var userPermission in user.Permissions.Where(userPermission => MatchesPermission(userPermission, requiredPermission)))
         {
-            if (MatchesPermission(userPermission, requiredPermission))
-            {
-                _logger.LogDebug(
-                    "the permission {RequiredPermission} was found through the {UserPermission} pattern",
-                    requiredPermission,
-                    userPermission
-                );
-                return true;
-            }
+            logger.LogDebug(
+                "the permission {RequiredPermission} was found through the {UserPermission} pattern",
+                requiredPermission,
+                userPermission
+            );
+            return true;
         }
 
-        _logger.LogDebug("permission {RequiredPermission} not found", requiredPermission);
+        logger.LogDebug("permission {RequiredPermission} not found", requiredPermission);
         return false;
     }
 
@@ -56,77 +45,67 @@ public class PermissionManager : IPermissionManager
             return true;
         }
 
-        if (userPermission.Contains('*'))
-        {
-            return MatchWildcard(userPermission, requiredPermission);
-        }
-
-        return false;
+        return userPermission.Contains('*') && MatchWildcard(userPermission, requiredPermission);
     }
 
     private static bool MatchWildcard(string pattern, string value)
     {
-        // S0: Normalizing the pattern
+        // s0: normalizing the pattern
         pattern = pattern.ToLowerInvariant();
         value = value.ToLowerInvariant();
 
-        // S1: If the pattern is "*", then everything is suitable
+        // s1: if the pattern is "*", then everything is suitable
         if (pattern == "*")
         {
             return true;
         }
 
-        // S2: If the pattern ends with "*", check the prefix
-        if (pattern.EndsWith('*'))
-        {
-            var prefix = pattern[..^1];
+        // s2: if the pattern ends with "*", check the prefix
+        if (!pattern.EndsWith('*'))
+            return false;
+        
+        var prefix = pattern[..^1];
             
-            if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            // Prefix ends with ":" => value must be longer than the prefix
-            if (prefix.EndsWith(':') && value.Length > prefix.Length)
-            {
-                return true;
-            }
+        if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
         }
 
-        return false;
+        // s3: prefix ends with ":" => value must be longer than the prefix
+        return prefix.EndsWith(':') && value.Length > prefix.Length;
     }
 
     public async Task<bool> AddPermissionAsync(Guid unifiedUserId, string permission)
     {
         if (string.IsNullOrWhiteSpace(permission))
         {
-            _logger.LogWarning("Attempt to add an empty permission");
+            logger.LogWarning("attempt to add an empty permission. uid={Uid}, permission='{Permission}'", unifiedUserId, permission);
             return false;
         }
 
-        var user = await _userRepository.GetByUnifiedIdAsync(unifiedUserId);
+        var user = await userRepository.GetByUnifiedIdAsync(unifiedUserId);
         if (user == null)
         {
-            _logger.LogWarning("User {UserId} not found", unifiedUserId);
+            logger.LogWarning("user not found, cant add permission. uid={UserId}", unifiedUserId);
             return false;
         }
 
-        // Normalize
+        // s0: normalize
         permission = permission.Trim();
 
-        // Looking if the permission already exists
+        // s1: looking if the permission already exists
         if (user.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase))
         {
-            _logger.LogDebug("The user {UserId} already has the {Permission} permission",
+            logger.LogDebug("the user already has the permission. uid={UserId}, permission={Permission}",
                 unifiedUserId, permission);
             return false;
         }
 
         user.Permissions.Add(permission);
-        await _userRepository.CreateOrUpdateAsync(user);
+        await userRepository.CreateOrUpdateAsync(user);
 
-        _logger.LogInformation(
-            "Added permission {Permission} to user {UserId}",
+        logger.LogInformation(
+            "added permission. permission={Permission}, uid={UserId}",
             permission, unifiedUserId
         );
 
@@ -137,37 +116,40 @@ public class PermissionManager : IPermissionManager
     {
         if (string.IsNullOrWhiteSpace(permission))
         {
-            _logger.LogWarning("Attempt to delete an empty permission");
+            logger.LogWarning("attempt to delete an empty permission");
             return false;
         }
 
-        var user = await _userRepository.GetByUnifiedIdAsync(unifiedUserId);
+        var user = await userRepository.GetByUnifiedIdAsync(unifiedUserId);
         if (user == null)
         {
-            _logger.LogWarning("User {UserId} not found", unifiedUserId);
+            logger.LogWarning(
+                "user not found, cant remove permission. uid={UserId}, permission={Permission}",
+                unifiedUserId,
+                permission);
             return false;
         }
 
-        // Normalize
+        // s0: normalize
         permission = permission.Trim();
 
-        // Looking for the permission
+        // s1: looking for the permission
         var existingPermission = user.Permissions.FirstOrDefault(
             p => string.Equals(p, permission, StringComparison.OrdinalIgnoreCase)
         );
 
         if (existingPermission == null)
         {
-            _logger.LogDebug("Permission {Permission} not found in user {UserId}",
-                permission, unifiedUserId);
+            logger.LogDebug("permission not found at user. uid={UserId}, permission={Permission}",
+                unifiedUserId, permission);
             return false;
         }
 
         user.Permissions.Remove(existingPermission);
-        await _userRepository.CreateOrUpdateAsync(user);
+        await userRepository.CreateOrUpdateAsync(user);
 
-        _logger.LogInformation(
-            "Permission {Permission} removed from user {UserId}",
+        logger.LogInformation(
+            "permission removed from user. uid={UserId}, permission={Permission}",
             permission, unifiedUserId
         );
 
@@ -176,13 +158,10 @@ public class PermissionManager : IPermissionManager
 
     public async Task<IReadOnlyList<string>> GetPermissionsAsync(Guid unifiedUserId)
     {
-        var user = await _userRepository.GetByUnifiedIdAsync(unifiedUserId);
-        if (user == null)
-        {
-            _logger.LogWarning("User {UserId} not found", unifiedUserId);
-            return Array.Empty<string>();
-        }
-
-        return user.Permissions.AsReadOnly();
+        var user = await userRepository.GetByUnifiedIdAsync(unifiedUserId);
+        if (user != null)
+            return user.Permissions.AsReadOnly();
+        logger.LogWarning("user not found, cant get permissions. uid={UserId}", unifiedUserId);
+        return [];
     }
 }

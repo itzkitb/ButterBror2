@@ -1,6 +1,5 @@
 using ButterBror.Core.Interfaces;
 using ButterBror.Domain.Entities;
-using ButterBror.Data;
 using ButterBror.Data.Interfaces;
 using Microsoft.Extensions.Logging;
 using ButterBror.Domain;
@@ -13,8 +12,9 @@ public class UserService(
     ILogger<UserService> logger)
     : IUserService
 {
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
     public async Task<UserProfile> GetOrCreateUserAsync(string platformId, string platform, string displayName)
@@ -48,7 +48,7 @@ public class UserService(
 
         if (user == null)
         {
-            logger.LogWarning("User with ID {UnifiedUserId} not found for statistics update", unifiedUserId);
+            logger.LogWarning("user not found for statistics update. uid={UnifiedUserId}", unifiedUserId);
             return;
         }
 
@@ -58,14 +58,14 @@ public class UserService(
         user.Statistics[commandKey] = (int)user.Statistics[commandKey] + 1;
 
         // Updating general statistics
-        var totalCommandsKey = "commands.total";
+        const string totalCommandsKey = "commands.total";
         user.Statistics.TryAdd(totalCommandsKey, 0);
 
         user.Statistics[totalCommandsKey] = (int)user.Statistics[totalCommandsKey] + 1;
 
         if (success)
         {
-            var successfulCommandsKey = "commands.successful";
+            const string successfulCommandsKey = "commands.successful";
             user.Statistics.TryAdd(successfulCommandsKey, 0);
             user.Statistics[successfulCommandsKey] = (int)user.Statistics[successfulCommandsKey] + 1;
         }

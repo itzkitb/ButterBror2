@@ -28,10 +28,10 @@ public class PasteBinService(
     {
         if (string.IsNullOrWhiteSpace(content))
         {
-            throw new ArgumentException("Content cannot be empty", nameof(content));
+            throw new ArgumentException("content cannot be empty", nameof(content));
         }
 
-        logger.LogDebug("Uploading text to pastebin (length: {Length})", content.Length);
+        logger.LogDebug("uploading text to pastebin (length: {Length})", content.Length);
 
         return await _apiPipeline.ExecuteAsync(async (ct) =>
         {
@@ -42,19 +42,19 @@ public class PasteBinService(
             
             if (!response.IsSuccessStatusCode)
             {
-                var errData = await JsonSerializer.DeserializeAsync<ErrorResponse>(responseStream, cancellationToken: ct);
-                logger.LogError("Failed to upload to pastebin. HTTP {Status}: {message}", response.StatusCode, errData?.Message);
-                return "[API_ERROR]";
+                await JsonSerializer.DeserializeAsync<ErrorResponse>(responseStream, cancellationToken: ct);
+                logger.LogError("failed to upload to pastebin. http={Status}", response.StatusCode);
+                return "[api_error]";
             }
 
             var data = await JsonSerializer.DeserializeAsync<CreateResponse>(responseStream, cancellationToken: ct);
             if (data is not { Status: "ok" })
             {
-                logger.LogError("Failed to upload to pastebin: Invalid response or status is not 'ok'");
-                return "[API_ERROR]";
+                logger.LogError("failed to upload to pastebin: invalid response or status is not 'ok'");
+                return "[api_error]";
             }
             
-            logger.LogInformation("Text uploaded to pastebin: {Url}", data.Url);
+            logger.LogInformation("text uploaded to pastebin. url={Url}", data.Url);
             return data.Url;
         }, cancellationToken);
     }
@@ -63,11 +63,11 @@ public class PasteBinService(
     {
         if (string.IsNullOrWhiteSpace(urlOrKey))
         {
-            throw new ArgumentException("URL or key cannot be empty", nameof(urlOrKey));
+            throw new ArgumentException("url or key cannot be empty", nameof(urlOrKey));
         }
 
         var key = ExtractKey(urlOrKey);
-        logger.LogDebug("Retrieving text from pastebin with key: {Key}", key);
+        logger.LogDebug("retrieving text from pastebin. key={Key}", key);
 
         return await _apiPipeline.ExecuteAsync(async (ct) =>
         {
@@ -76,19 +76,26 @@ public class PasteBinService(
 
             if (!response.IsSuccessStatusCode)
             {
-                var errData = await JsonSerializer.DeserializeAsync<ErrorResponse>(responseStream, cancellationToken: ct);
-                logger.LogError("Failed to retrieve text from pastebin. HTTP {Status}: {message}", response.StatusCode, errData?.Message);
-                return "[API_ERROR]";
+                await JsonSerializer.DeserializeAsync<ErrorResponse>(responseStream, cancellationToken: ct);
+                logger.LogError(
+                    "failed to retrieve text from pastebin. http={Status}, key={Key}",
+                    response.StatusCode,
+                    key);
+                return "[api_error]";
             }
             
             var data = await JsonSerializer.DeserializeAsync<PasteResponse>(responseStream, cancellationToken: ct);
             if (data is not { Status: "ok" })
             {
-                logger.LogError("Failed to retrieve text from pastebin: Invalid response or status is not 'ok'");
-                return "[API_ERROR]";
+                logger.LogError(
+                    "failed to retrieve text from pastebin: invalid response or status is not 'ok'. key={Key}", key);
+                return "[api_error]";
             }
             
-            logger.LogDebug("Successfully retrieved text from pastebin (length: {Length})", data.Content.Length);
+            logger.LogDebug(
+                "successfully retrieved text from pastebin. length={Length}, key={Key}",
+                data.Content.Length,
+                key);
             return data.Content;
         }, cancellationToken);
     }
@@ -122,7 +129,7 @@ public class PasteBinService(
         }
 
         throw new ArgumentException(
-            $"Invalid pastebin URL or key format: {urlOrKey}. Expected format: https://{BaseUrl}/p?i={{key}} or just {{key}}",
+            $"invalid pastebin url or key format: {urlOrKey}. expected format: https://{BaseUrl}/p?i={{key}} or just {{key}}",
             nameof(urlOrKey));
     }
     

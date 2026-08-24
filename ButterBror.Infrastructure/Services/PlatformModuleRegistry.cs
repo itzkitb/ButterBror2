@@ -1,33 +1,18 @@
-﻿using ButterBror.Core.Modules;
+﻿using ButterBror.Core.Interfaces;
+using ButterBror.Core.Modules;
 using Microsoft.Extensions.Logging;
 
 namespace ButterBror.Infrastructure.Services;
 
-public interface IChatModuleRegistry
+public class PlatformModuleRegistry(ILogger<PlatformModuleRegistry> logger) : IChatModuleRegistry
 {
-    void RegisterModule(IChatModule module);
-    IEnumerable<IChatModule> GetModules();
-    /// <summary>
-    /// Removes a module by PlatformName. Returns true if the module is found and removed
-    /// </summary>
-    bool UnregisterModule(string platformName);
-}
-
-public class PlatformModuleRegistry : IChatModuleRegistry
-{
-    private readonly List<IChatModule> _modules = new();
-    private readonly ILogger<PlatformModuleRegistry> _logger;
-
-    public PlatformModuleRegistry(ILogger<PlatformModuleRegistry> logger)
-    {
-        _logger = logger;
-    }
+    private readonly List<IChatModule> _modules = [];
 
     public void RegisterModule(IChatModule module)
     {
         if (_modules.Any(m => m.ModuleId.Equals(module.ModuleId, StringComparison.OrdinalIgnoreCase)))
         {
-            _logger.LogWarning("Module with platform name '{PlatformName}' is already registered", module.ModuleId);
+            logger.LogWarning("module is already registered. id={PlatformName}", module.ModuleId);
             return;
         }
 
@@ -43,18 +28,18 @@ public class PlatformModuleRegistry : IChatModuleRegistry
 
         if (module == null)
         {
-            _logger.LogWarning("Module with id '{PlatformName}' not found", moduleId);
+            logger.LogWarning("module not found. id={PlatformName}", moduleId);
         }
 
         return module;
     }
     
-    public bool UnregisterModule(string platformName)
+    public bool UnregisterModule(string moduleId)
     {
-        var module = _modules.FirstOrDefault(m => m.ModuleId.Equals(platformName, StringComparison.OrdinalIgnoreCase));
+        var module = _modules.FirstOrDefault(m => m.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase));
         if (module == null)
         {
-            _logger.LogWarning("Module with platform name '{PlatformName}' not found", platformName);
+            logger.LogWarning("module not found. id={PlatformName}", moduleId);
             return false;
         }
 

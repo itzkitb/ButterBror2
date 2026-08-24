@@ -7,7 +7,7 @@ public class RestrictionService(IConnectionMultiplexer redis) : IRestrictionServ
 {
     private readonly IDatabase _redis = redis.GetDatabase();
 
-    // ><> Users
+    // ><> users
     public async Task<UserBlockStatus> CheckUserBlockStatusAsync(string platform, Guid userId, CancellationToken ct = default)
     {
         var plat = platform.ToLowerInvariant();
@@ -23,7 +23,7 @@ public class RestrictionService(IConnectionMultiplexer redis) : IRestrictionServ
         }
         
         var notifiedKey = $"blocks:users:notified:{plat}:{userId}";
-        bool isFirstNotification = await _redis.StringSetAsync(notifiedKey, "1", when: When.NotExists);
+        var isFirstNotification = await _redis.StringSetAsync(notifiedKey, "1", when: When.NotExists);
 
         return new UserBlockStatus(IsBlocked: true, ShouldNotify: isFirstNotification);
     }
@@ -51,7 +51,7 @@ public class RestrictionService(IConnectionMultiplexer redis) : IRestrictionServ
         return await _redis.KeyDeleteAsync(key);
     }
 
-    // ><> Command Checks
+    // ><> command checks
     public async Task<CommandBlockStatus> CheckCommandStatusAsync(
         string platform, 
         string chatId, 
@@ -61,22 +61,22 @@ public class RestrictionService(IConnectionMultiplexer redis) : IRestrictionServ
         var id = commandId.ToLowerInvariant();
         var plat = platform.ToLowerInvariant();
 
-        // S0. Global
+        // s0: global
         if (await _redis.SetContainsAsync("blocks:cmd:global", id))
             return CommandBlockStatus.BlockedGlobally;
 
-        // S1. Platform
+        // s1: platform
         if (await _redis.SetContainsAsync($"blocks:cmd:platform:{plat}", id))
             return CommandBlockStatus.BlockedOnPlatform;
 
-        // S2. Channel
+        // s2: channel
         if (await _redis.SetContainsAsync($"blocks:cmd:chat:{plat}:{chatId}", id))
             return CommandBlockStatus.BlockedInChat;
 
         return CommandBlockStatus.Allowed;
     }
 
-    // ><> Management
+    // ><> management
     public Task<bool> BlockCommandGlobalAsync(string commandId, CancellationToken ct = default) =>
         _redis.SetAddAsync("blocks:cmd:global", commandId.ToLowerInvariant());
 
