@@ -11,7 +11,6 @@ public class BotHostedService(IBotCore botCore, ILogger<BotHostedService> logger
         try
         {
             await botCore.StartAsync(cancellationToken);
-            logger.LogInformation("the bot host has started successfully");
         }
         catch (Exception ex)
         {
@@ -24,7 +23,6 @@ public class BotHostedService(IBotCore botCore, ILogger<BotHostedService> logger
         try
         {
             await botCore.StopAsync(cancellationToken);
-            logger.LogInformation("bot host stopped successfully");
         }
         catch (Exception ex)
         {

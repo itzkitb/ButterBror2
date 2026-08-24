@@ -10,7 +10,7 @@ namespace ButterBror.Dashboard.Services;
 /// Executes admin commands from the dashboard
 /// </summary>
 public class AdminCommandExecutor(
-    IBotCore core,
+    ICommandProcessor commandProcessor,
     ILogger<AdminCommandExecutor> logger)
 {
     /// <summary>
@@ -67,7 +67,7 @@ public class AdminCommandExecutor(
             user.Permissions,
             message,
             ct);
-        var result = await core.ProcessCommandAsync(context);
+        var result = await commandProcessor.ProcessCommandAsync(context);
         
         return result.Message?.RawText ?? "Empty result";
     }

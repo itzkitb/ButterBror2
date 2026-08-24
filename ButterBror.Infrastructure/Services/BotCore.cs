@@ -16,6 +16,7 @@ public class BotCore(
     ICommandRegistry commandRegistry,
     IPermissionManager permissionManager,
     IDeviceStatsService deviceStatsService,
+    IDashboardService dashboardService,
     IUserService userService,
     IChatService chatService,
     ILogger<BotCore> logger)
@@ -37,7 +38,8 @@ public class BotCore(
             banphraseService.ReloadGlobalCategoriesAsync(),
             InitDashboardAdmin(),
             statsService.InitializeAsync(ct),
-            deviceStatsService.InitializeAsync(ct)
+            deviceStatsService.InitializeAsync(ct),
+            dashboardService.StartAsync(ct)
         );
     }
 
@@ -73,7 +75,8 @@ public class BotCore(
         await Task.WhenAll(
             moduleManager.ShutdownAsync(ct),
             statsService.FlushAsync(ct),
-            deviceStatsService.ShutdownAsync(ct)
+            deviceStatsService.ShutdownAsync(ct),
+            dashboardService.StopAsync(ct)
         );
     }
 

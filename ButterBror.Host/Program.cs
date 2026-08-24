@@ -119,9 +119,9 @@ builder.Services.AddSingleton<AdminCommandExecutor>();
 builder.Services.AddSingleton<RedisExplorerService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<IDeviceStatsService, DeviceStatsService>();
+builder.Services.AddSingleton<IDashboardService, DashboardServer>();
 
 // ^ hosted
-builder.Services.AddHostedService<DashboardServer>();
 builder.Services.AddHostedService<BotHostedService>();
 
 // ><> build & post-build
