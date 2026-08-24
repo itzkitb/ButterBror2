@@ -130,11 +130,10 @@ var host = builder.Build();
 // s0: logger & core info
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
 var appdataPathProvider = host.Services.GetRequiredService<IAppDataPathProvider>();
-logger.LogInformation("- —==≡ butterbror is starting ≡==- —");
-logger.LogInformation("default path: {Path}", appdataPathProvider.GetAppDataPath());
-
 var coreInfoService = host.Services.GetRequiredService<IBotCoreInfo>();
+logger.LogInformation("- —==≡ butterbror is starting ≡==- —");
 coreInfoService.Initialize();
+logger.LogInformation("default path: {Path}", appdataPathProvider.GetAppDataPath());
 
 // s1: dashboard logger provider
 var bridge = host.Services.GetRequiredService<IDashboardBridge>();
