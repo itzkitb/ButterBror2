@@ -15,8 +15,8 @@ public class BanphraseRepository(
     
     private const string GlobalPrefix = "banphrases:global:";
     private const string GlobalSetKey = "banphrases:global:categories";
-    private const string ChannelPrefix = "banphrases:";
-    private const string ChannelSetKeyPrefix = "banphrases:channels:";
+    private const string ChatPrefix = "banphrases:";
+    private const string ChatSetKeyPrefix = "banphrases:chats:";
 
     public async Task<IReadOnlyList<BanphraseRecord>> GetGlobalCategoriesAsync()
     {
@@ -85,7 +85,7 @@ public class BanphraseRepository(
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
             var db = redis.GetDatabase();
-            var members = await db.SetMembersAsync($"{ChannelSetKeyPrefix}{chatId}:categories");
+            var members = await db.SetMembersAsync($"{ChatSetKeyPrefix}{chatId}:categories");
             
             if (members.Length == 0)
                 return [];
@@ -95,7 +95,7 @@ public class BanphraseRepository(
 
             foreach (var member in members)
             {
-                tasks.Add(batch.StringGetAsync($"{ChannelPrefix}{chatId}:{member}"));
+                tasks.Add(batch.StringGetAsync($"{ChatPrefix}{chatId}:{member}"));
             }
             
             batch.Execute();
@@ -120,7 +120,7 @@ public class BanphraseRepository(
         return await _redisPipeline.ExecuteAsync(async _ =>
         {
             var db = redis.GetDatabase();
-            var key = $"{ChannelPrefix}{chatId}:{categoryName}";
+            var key = $"{ChatPrefix}{chatId}:{categoryName}";
             var value = await db.StringGetAsync(key);
             return value.HasValue ? new BanphraseRecord(categoryName, value.ToString()) : null;
         });
@@ -131,8 +131,8 @@ public class BanphraseRepository(
         await _redisPipeline.ExecuteAsync(async _ =>
         {
             var db = redis.GetDatabase();
-            var key = $"{ChannelPrefix}{chatId}:{categoryName}";
-            var setKey = $"{ChannelSetKeyPrefix}{chatId}:categories";
+            var key = $"{ChatPrefix}{chatId}:{categoryName}";
+            var setKey = $"{ChatSetKeyPrefix}{chatId}:categories";
             await db.StringSetAsync(key, regexPattern);
             await db.SetAddAsync(setKey, categoryName);
         });
@@ -143,8 +143,8 @@ public class BanphraseRepository(
         await _redisPipeline.ExecuteAsync(async _ =>
         {
             var db = redis.GetDatabase();
-            var key = $"{ChannelPrefix}{chatId}:{categoryName}";
-            var setKey = $"{ChannelSetKeyPrefix}{chatId}:categories";
+            var key = $"{ChatPrefix}{chatId}:{categoryName}";
+            var setKey = $"{ChatSetKeyPrefix}{chatId}:categories";
             await db.KeyDeleteAsync(key);
             await db.SetRemoveAsync(setKey, categoryName);
         });

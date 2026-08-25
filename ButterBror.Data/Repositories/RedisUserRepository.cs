@@ -15,8 +15,8 @@ public class RedisUserRepository(
 {
     private readonly ResiliencePipeline _redisPipeline = pipelineProvider.GetPipeline("redis");
     private const string UserPrefix = "user:";
-    private const string PlatformIndexPrefix = "index:platform_id:";
-    private const string DisplayNameIndexPrefix = "index:display_name:";
+    private const string PlatformIndexPrefix = "index:user_id:";
+    private const string DisplayNameIndexPrefix = "index:user_name:";
 
     public async Task<UserProfile?> GetByUnifiedIdAsync(Guid unifiedId)
     {
