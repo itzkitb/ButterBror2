@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Text;
+using System.Text.Json;
 using ButterBror.Data.Interfaces;
 using ButterBror.Domain.Entities;
 using Polly;
@@ -95,5 +96,5 @@ public class RedisUserRepository(
     }
 
     private static string NormalizeDisplayName(string displayName) =>
-        displayName.Trim().ToLowerInvariant();
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(displayName.Trim().ToLowerInvariant()));
 }

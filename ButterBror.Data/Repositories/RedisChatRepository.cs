@@ -15,8 +15,8 @@ public class RedisChatRepository(
 {
     private readonly ResiliencePipeline _redisPipeline = pipelineProvider.GetPipeline("redis");
     private const string ChatPrefix = "chat:";
-    private const string PlatformIndexPrefix = "chat_platform_index:";
-    private const string TitleIndexPrefix = "chat_title_index:";
+    private const string PlatformIndexPrefix = "index:chat_platform:";
+    private const string TitleIndexPrefix = "index:chat_title:";
 
     public async Task<ChatInfo?> GetByUnifiedIdAsync(Guid unifiedId)
     {
