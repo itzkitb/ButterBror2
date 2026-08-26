@@ -34,8 +34,8 @@ public class CommandFactories
         ITwitchChannelManager channelManager,
         IServiceProvider serviceProvider)
     {
-        _joinCommandFactory = () => new JoinChannelCommand(serviceProvider, twitchClient);
-        _partCommandFactory = () => new PartChannelCommand(serviceProvider, twitchClient);
+        _joinCommandFactory = () => new JoinChannelCommand(serviceProvider, twitchClient, channelManager);
+        _partCommandFactory = () => new PartChannelCommand(serviceProvider, twitchClient, channelManager);
         _setPrefixCommandFactory = () => new SetPrefixCommand(serviceProvider, twitchModule);
         _authCommandFactory = () => new AuthCommand(serviceProvider, config);
         _addChannelCommandFactory = () => new AddChannelCommand(serviceProvider, twitchClient, channelManager);

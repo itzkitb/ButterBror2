@@ -3,7 +3,6 @@ using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;
 using ButterBror.Core.Modules.Interfaces;
-using ButterBror.Data;
 using ButterBror.Data.Interfaces;
 using ButterBror.Domain;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,7 +13,6 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
     : ICommand
 {
     private readonly ICustomDataRepository _customRepo = serviceProvider.GetRequiredService<ICustomDataRepository>();
-    private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
     private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
 
     public async Task<CommandResult> ExecuteAsync(

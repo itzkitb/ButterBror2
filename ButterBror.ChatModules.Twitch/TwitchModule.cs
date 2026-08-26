@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using ButterBror.ChatModules.Twitch.Commands;
+using ButterBror.ChatModules.Twitch.Interfaces;
 using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.ChatModules.Twitch.Services;
+using ButterBror.ChatModules.Twitch.Services.Auth;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Messaging;
 using ButterBror.Core.Modules;
@@ -22,7 +24,7 @@ public class TwitchModule : IChatModule
 {
     // ><> metadata
     public string ModuleId => "sillyapps:twitch";
-    public Version Version { get; } = new(1, 4, 1);
+    public Version Version { get; } = new(1, 5, 0);
     public List<ChatModuleFlags> Flags { get; } = [ChatModuleFlags.CanSendMessages];
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
@@ -40,6 +42,11 @@ public class TwitchModule : IChatModule
     private ILocalizationService? _localization;
 
     private TwitchClient _twitchClient = null!;
+    private IServiceProvider? _moduleServiceProvider;
+    private ITwitchTokenManager? _tokenManager;
+    private TwitchAuthFileWatcher? _authWatcher;
+    private TwitchTokenRefreshBackgroundService? _tokenRefreshService;
+    private TwitchAuthPollingService? _cloudflareAuthPollingService;
     private TwitchBroadcasterService _broadcasterService = null!;
     private CommandFactories _commandFactories = null!;
 
@@ -54,20 +61,39 @@ public class TwitchModule : IChatModule
             return;
 
         var config = await LoadConfigurationAsync(serviceProvider);
-        if (!config.IsEnabled || string.IsNullOrWhiteSpace(config.OauthToken))
+        if (!config.IsEnabled)
         {
             var logger = serviceProvider.GetRequiredService<ILogger<TwitchModule>>();
-            logger.LogError("[tw] module is disabled or oauth token is missing");
+            logger.LogInformation("[tw] module is disabled");
             return;
         }
 
         ResolveCoreDependencies(serviceProvider, config);
         
-        var channelManager = await RegisterAndGetChannelManagerAsync(serviceProvider);
+        _moduleServiceProvider = CreateModuleServiceProvider(serviceProvider, config);
+        _tokenManager = _moduleServiceProvider.GetRequiredService<ITwitchTokenManager>();
+        await _tokenManager.InitializeAsync();
+        _tokenRefreshService = _moduleServiceProvider.GetRequiredService<TwitchTokenRefreshBackgroundService>();
+        await _tokenRefreshService.StartAsync(CancellationToken.None);
+        _authWatcher = _moduleServiceProvider.GetRequiredService<TwitchAuthFileWatcher>();
+        _authWatcher.Start();
+
+        var channelManager = _moduleServiceProvider.GetRequiredService<ITwitchChannelManager>();
         await InitializeModuleServices(serviceProvider, config, channelManager);
+        _cloudflareAuthPollingService = new TwitchAuthPollingService(
+            _localization,
+            _moduleServiceProvider.GetRequiredService<IHttpClientFactory>(),
+            _moduleServiceProvider.GetRequiredService<IOptions<TwitchConfiguration>>(),
+            _twitchClient,
+            channelManager,
+            _db,
+            _moduleServiceProvider.GetRequiredService<ILogger<TwitchAuthPollingService>>());
+        await _cloudflareAuthPollingService.StartAsync(CancellationToken.None);
 
         SubscribeEvents();
-        await ConnectAsync();
+        _tokenManager.StateChanged += OnTokenStateChanged;
+        if (_tokenManager.Current.BotCredential is not null)
+            await ConnectAsync();
 
         IsInitialized = true;
     }
@@ -78,7 +104,19 @@ public class TwitchModule : IChatModule
             return;
 
         UnsubscribeEvents();
+        if (_tokenManager is not null)
+            _tokenManager.StateChanged -= OnTokenStateChanged;
+        if (_authWatcher is not null)
+            await _authWatcher.DisposeAsync();
+        if (_tokenRefreshService is not null)
+            await _tokenRefreshService.StopAsync(CancellationToken.None);
+        if (_cloudflareAuthPollingService is not null)
+            await _cloudflareAuthPollingService.StopAsync(CancellationToken.None);
         await _twitchClient.DisconnectAsync();
+        if (_moduleServiceProvider is IAsyncDisposable asyncDisposable)
+            await asyncDisposable.DisposeAsync();
+        else if (_moduleServiceProvider is IDisposable disposable)
+            disposable.Dispose();
         
         IsInitialized = false;
         _logger.LogInformation("[tw] module shutdown complete");
@@ -105,18 +143,39 @@ public class TwitchModule : IChatModule
         _messageRender = new TwitchMessageRender(pastebinService, localization);
     }
 
-    private static Task<ITwitchChannelManager> RegisterAndGetChannelManagerAsync(IServiceProvider sp)
+    private static IServiceProvider CreateModuleServiceProvider(IServiceProvider host, TwitchConfiguration config)
     {
-        try
-        {
-            var dynamicSp = sp.GetRequiredService<IDynamicServiceProvider>();
-            dynamicSp.AddSingleton<ITwitchChannelManager, TwitchChannelManager>();
-            return Task.FromResult(dynamicSp.GetRequiredService<ITwitchChannelManager>());
-        }
-        catch (Exception exception)
-        {
-            return Task.FromException<ITwitchChannelManager>(exception);
-        }
+        var services = new ServiceCollection();
+        services.AddSingleton(host.GetRequiredService<IBotCore>());
+        services.AddSingleton(host.GetRequiredService<ICustomDataRepository>());
+        services.AddSingleton(host.GetRequiredService<ILocalizationService>());
+        services.AddSingleton(host.GetRequiredService<IPasteBinService>());
+        services.AddSingleton(host.GetRequiredService<IConfigurationService>());
+        services.AddSingleton(host.GetRequiredService<IAppDataPathProvider>());
+        services.AddSingleton(host.GetRequiredService<ILoggerFactory>());
+        services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
+        if (host.GetService<IDashboardBridge>() is { } dashboard)
+            services.AddSingleton(dashboard);
+        if (host.GetService<ResiliencePipelineProvider<string>>() is { } pipelines)
+            services.AddSingleton(pipelines);
+        services.AddSingleton<ITwitchChannelManager, TwitchChannelManager>();
+        services.AddTwitchChatTransports(options => CopyConfiguration(config, options));
+        return services.BuildServiceProvider();
+    }
+
+    private static void CopyConfiguration(TwitchConfiguration source, TwitchConfiguration target)
+    {
+        target.BotUsername = source.BotUsername;
+        target.BotUserId = source.BotUserId;
+        target.Channel = source.Channel;
+        target.ClientId = source.ClientId;
+        target.ClientSecret = source.ClientSecret;
+        target.RedirectUri = source.RedirectUri;
+        target.AuthApiBaseUrl = source.AuthApiBaseUrl;
+        target.BotApiToken = source.BotApiToken;
+        target.IsEnabled = source.IsEnabled;
+        target.CommandPrefix = source.CommandPrefix;
+        target.ReplyMode = source.ReplyMode;
     }
 
     private async Task InitializeModuleServices(IServiceProvider sp, TwitchConfiguration config, ITwitchChannelManager channelManager)
@@ -125,10 +184,12 @@ public class TwitchModule : IChatModule
         
         _twitchClient = await TwitchClient.CreateAsync(
             options,
-            sp.GetRequiredService<ResiliencePipelineProvider<string>>(),
-            sp.GetRequiredService<ILogger<TwitchClient>>(),
-            channelManager.GetChannelsAsync().GetAwaiter().GetResult(),
-            _db
+            _moduleServiceProvider!.GetRequiredService<ResiliencePipelineProvider<string>>(),
+            _moduleServiceProvider!.GetRequiredService<ILogger<TwitchClient>>(),
+            channelManager.GetChannelsAsync().GetAwaiter().GetResult().Select(channel => channel.Login),
+            _db,
+            _moduleServiceProvider!.GetRequiredService<ITwitchChatTransport>(),
+            _tokenManager!
         );
 
         _broadcasterService = new TwitchBroadcasterService(
@@ -145,20 +206,18 @@ public class TwitchModule : IChatModule
     private void SubscribeEvents()
     {
         _twitchClient.OnMessageReceived += OnMessageReceived;
-        _twitchClient.OnConnected += OnConnected;
         _twitchClient.OnDisconnected += OnDisconnected;
         _twitchClient.OnBroadcasterAuthReceived += _broadcasterService.OnBroadcasterAuthReceived;
 
-        _twitchClient.OnNewSubscriber += (_, e) => _logger.LogInformation("[tw:event] new sub in #{Channel}: {User} ({Plan})", e.Channel, e.Username, e.SubscriptionPlan);
-        _twitchClient.OnGiftedSubscription += (_, e) => _logger.LogInformation("[tw:event] gifted sub in #{Channel}: {Gifter} -> {Recipient}", e.Channel, e.GifterUsername, e.RecipientUsername);
-        _twitchClient.OnRaidNotification += (_, e) => _logger.LogInformation("[tw:event] raid in #{Channel}: {Raider} ({Viewers} viewers)", e.Channel, e.RaiderUsername, e.ViewerCount);
-        _twitchClient.OnBitsReceived += (_, e) => _logger.LogInformation("[tw:event] bits in #{Channel}: {User} ({Bits} bits)", e.Channel, e.Username, e.Bits);
+        _twitchClient.OnNewSubscriber += (_, e) => _logger.LogInformation("[tw] new sub in #{Channel}: {User} ({Plan})", e.Channel, e.Username, e.SubscriptionPlan);
+        _twitchClient.OnGiftedSubscription += (_, e) => _logger.LogInformation("[tw] gifted sub in #{Channel}: {Gifter} -> {Recipient}", e.Channel, e.GifterUsername, e.RecipientUsername);
+        _twitchClient.OnRaidNotification += (_, e) => _logger.LogInformation("[tw] raid in #{Channel}: {Raider} ({Viewers} viewers)", e.Channel, e.RaiderUsername, e.ViewerCount);
+        _twitchClient.OnBitsReceived += (_, e) => _logger.LogInformation("[tw] bits in #{Channel}: {User} ({Bits} bits)", e.Channel, e.Username, e.Bits);
     }
 
     private void UnsubscribeEvents()
     {
         _twitchClient.OnMessageReceived -= OnMessageReceived;
-        _twitchClient.OnConnected -= OnConnected;
         _twitchClient.OnDisconnected -= OnDisconnected;
         _twitchClient.OnBroadcasterAuthReceived -= _broadcasterService.OnBroadcasterAuthReceived;
     }
@@ -168,11 +227,15 @@ public class TwitchModule : IChatModule
     {
         try
         {
-            await _twitchClient.ConnectAsync(_config.BotUsername, _config.OauthToken, _config.ClientId);
+            if (_tokenManager?.Current.BotCredential is null)
+                return;
+            if (_twitchClient.IsConnected)
+                return;
+            await _twitchClient.ConnectAsync(_config.BotUsername, string.Empty, _config.ClientId);
             await _broadcasterService.LoadBroadcasterTokensAsync();
             
-            var targetChannel = !string.IsNullOrWhiteSpace(_config.Channel) ? _config.Channel : _config.BotUsername;
-            await _twitchClient.JoinChannelAsync(targetChannel);
+            await _twitchClient.JoinBotChannelAsync(_config.BotUsername);
+            await SendBotConnectionMessageAsync();
         }
         catch (Exception ex)
         {
@@ -181,22 +244,37 @@ public class TwitchModule : IChatModule
         }
     }
 
-    // ><> event handlers
-    private void OnConnected(object? sender, OnConnectedEventArgs e) =>
-        ExecuteSafeBackground(SafeHandleConnectAsync(e), "[tw] unhandled exception in connect handler");
+    private void OnTokenStateChanged(object? sender, TwitchTokenState state)
+    {
+        ExecuteSafeBackground(state.BotCredential is null ? DisconnectForMissingCredentialAsync() : ReconnectForCredentialAsync(),
+            "[tw] unhandled exception while changing bot credential");
+    }
 
+    private async Task ReconnectForCredentialAsync()
+    {
+        if (_twitchClient.IsConnected)
+            await _twitchClient.DisconnectAsync();
+        await ConnectAsync();
+    }
+
+    private async Task DisconnectForMissingCredentialAsync()
+    {
+        await _twitchClient.DisconnectAsync();
+    }
+
+    // ><> event handlers
     private void OnDisconnected(object? sender, OnDisconnectedArgs e) =>
         _logger.LogWarning("[tw] disconnected");
 
     private void OnMessageReceived(object? sender, Events.OnMessageReceivedArgs e) =>
         ExecuteSafeBackground(SafeHandleMessageAsync(e), "[tw] unhandled exception in message handler");
 
-    private async Task SafeHandleConnectAsync(OnConnectedEventArgs _)
+    private async Task SendBotConnectionMessageAsync()
     {
-        if (_localization != null && _twitchClient.IsConnected && !string.IsNullOrWhiteSpace(_config.Channel))
+        if (_localization != null && _twitchClient.IsConnected)
         {
             var msg = await _localization.GetStringAsync("core.bot.connected", "EN_US");
-            await _twitchClient.SendMessageAsync(_config.Channel, msg);
+            await _twitchClient.SendMessageAsync(_config.BotUsername, msg);
         }
     }
 

@@ -5,12 +5,12 @@ public interface ITwitchChannelManager
     /// <summary>
     /// Gets the list of managed channels
     /// </summary>
-    Task<List<string>> GetChannelsAsync();
+    Task<List<TwitchManagedChannel>> GetChannelsAsync();
 
     /// <summary>
     /// Adds a channel to the managed channels list
     /// </summary>
-    Task AddChannelAsync(string channel);
+    Task AddChannelAsync(TwitchManagedChannel channel);
 
     /// <summary>
     /// Removes a channel from the managed channels list

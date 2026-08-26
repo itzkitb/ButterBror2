@@ -9,7 +9,7 @@ public class TwitchChannelManager(ICustomDataRepository db) : ITwitchChannelMana
     private readonly SemaphoreSlim _lock = new(1, 1);
     private const string RedisKey = "twitch:channels";
 
-    public async Task<List<string>> GetChannelsAsync()
+    public async Task<List<TwitchManagedChannel>> GetChannelsAsync()
     {
         await _lock.WaitAsync();
         try
@@ -22,13 +22,13 @@ public class TwitchChannelManager(ICustomDataRepository db) : ITwitchChannelMana
         }
     }
 
-    public async Task AddChannelAsync(string channel)
+    public async Task AddChannelAsync(TwitchManagedChannel channel)
     {
         await _lock.WaitAsync();
         try
         {
             var channels = await GetChannelsInternalAsync();
-            if (!channels.Contains(channel, StringComparer.OrdinalIgnoreCase))
+            if (!channels.Any(item => item.Id.Equals(channel.Id, StringComparison.OrdinalIgnoreCase)))
             {
                 channels.Add(channel);
                 await db.SetDataAsync(RedisKey, JsonSerializer.Serialize(channels));
@@ -40,13 +40,13 @@ public class TwitchChannelManager(ICustomDataRepository db) : ITwitchChannelMana
         }
     }
 
-    public async Task RemoveChannelAsync(string channel)
+    public async Task RemoveChannelAsync(string channelId)
     {
         await _lock.WaitAsync();
         try
         {
             var channels = await GetChannelsInternalAsync();
-            if (channels.RemoveAll(c => string.Equals(c, channel, StringComparison.OrdinalIgnoreCase)) > 0)
+            if (channels.RemoveAll(c => string.Equals(c.Id, channelId, StringComparison.OrdinalIgnoreCase)) > 0)
             {
                 await db.SetDataAsync(RedisKey, JsonSerializer.Serialize(channels));
             }
@@ -57,9 +57,16 @@ public class TwitchChannelManager(ICustomDataRepository db) : ITwitchChannelMana
         }
     }
     
-    private async Task<List<string>> GetChannelsInternalAsync()
+    private async Task<List<TwitchManagedChannel>> GetChannelsInternalAsync()
     {
         var json = await db.GetDataAsync(RedisKey) ?? "[]";
-        return JsonSerializer.Deserialize<List<string>>(json) ?? new();
+        try
+        {
+            return JsonSerializer.Deserialize<List<TwitchManagedChannel>>(json) ?? new();
+        }
+        catch (JsonException)
+        {
+            return new();
+        }
     }
 }

@@ -40,11 +40,14 @@ public class DeleteChannelCommand(
                 await _localization.GetStringAsync("command.del_channel.permission", context.Locale));
         }
 
-        // s3: persist to Redis
-        await channelManager.RemoveChannelAsync(channelName);
+        var channel = await twitchClient.ResolveChannelAsync(channelName);
+        if (channel is null)
+            return CommandResult.Failure(
+                await _localization.GetStringAsync("command.twitch.channel_not_found", context.Locale));
+        await channelManager.RemoveChannelAsync(channel.Id);
 
         // s4: connect on the fly
-        await twitchClient.LeaveChannelAsync(channelName);
+        await twitchClient.LeaveChannelAsync(channel.Login);
 
         return CommandResult.Successfully(
             await _localization.GetStringAsync("command.del_channel.success", context.Locale,

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
 
-public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient twitchClient)
+public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient twitchClient, ITwitchChannelManager channelManager)
     : ICommand
 {
     private readonly ILogger<PartChannelCommand> _logger = serviceProvider.GetRequiredService<ILogger<PartChannelCommand>>();
@@ -40,8 +40,12 @@ public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient 
                 await _localization.GetStringAsync("command.part.permission", context.Locale));
         }
 
-        // s3: trying to disconnect from the channel
-        await twitchClient.LeaveChannelAsync(channelName);
+        var channel = await twitchClient.ResolveChannelAsync(channelName);
+        if (channel is null)
+            return CommandResult.Failure(
+                await _localization.GetStringAsync("command.twitch.channel_not_found", context.Locale));
+        await channelManager.RemoveChannelAsync(channel.Id);
+        await twitchClient.LeaveChannelAsync(channel.Login);
 
         _logger.LogInformation("[tw] parted channel. chat={Channel}, user={User}",
             channelName, context.User.DisplayName);

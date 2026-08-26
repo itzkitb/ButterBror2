@@ -19,21 +19,14 @@ public class AuthCommand(IServiceProvider serviceProvider, IOptions<TwitchConfig
         CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        if (string.IsNullOrWhiteSpace(_config.ClientId))
-        {
-            throw new Exception("ClientId is not configured");
-        }
-
-        var botAuthUrl = $"{_config.RedirectUri}?client_id={_config.ClientId}&bot_username={_config.BotUsername}";
-        _logger.LogInformation("[TW] Auth URL generated. url={Url}", botAuthUrl);
+        var botAuthUrl = _config.RedirectUri;
+        _logger.LogInformation("[tw] auth url generated. url={Url}", botAuthUrl);
 
         var response = await _localization.GetStringAsync(
             "command.auth.success",
             context.Locale,
-            _config.BotUsername,
             botAuthUrl);
         
-        _logger.LogInformation("[TW] Result auth message: {res}", response);
         return CommandResult.Successfully(response);
     }
 }

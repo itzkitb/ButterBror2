@@ -15,7 +15,7 @@ public static class Localization
                 { "command.add_channel.already", "Канал #{0} уже есть в списке." },
                 { "command.add_channel.success", "Канал #{0} добавлен в список и подключен." },
                 // auth
-                { "command.auth.success", "После авторизации скопируйте код и отправьте его мне личным сообщением (/w {0} <code>): {1}" },
+                { "command.auth.success", "Ссылка для авторизации: {0}" },
                 // channel settings
                 { "command.channel_settings.permission", "Доступ запрещен" },
                 { "command.channel_settings.usage", "Использование: twitchset <online|offline> <true|false>" },
@@ -52,7 +52,8 @@ public static class Localization
                 { "command.add_channel.already", "Channel #{0} is already in the list" },
                 { "command.add_channel.success", "Channel #{0} added to list and connected" },
                 // auth
-                { "command.auth.success", "After authorization, copy the code and send it to me via whisper (/w {0} <code>): {1}" },
+                { "command.auth.success", "Auth link: {0}" },
+                { "text.twitch.auth", "The bot has been successfully authorized!" },
                 // channel settings
                 { "command.channel_settings.permission", "Permission denied" },
                 { "command.channel_settings.usage", "Usage: twitchset <online|offline> <true|false>" },

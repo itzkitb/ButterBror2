@@ -27,9 +27,13 @@ The module loads settings from `Twitch.json` in the ButterBror2 AppData director
 ```json
 {
   "BotUsername": "your_bot_name",
-  "OauthToken": "oauth:your_token_here",
+   "BotUserId": "123456789",
   "Channel": "initial_target_channel",
   "ClientId": "your_twitch_client_id",
+   "ClientSecret": "your_client_secret",
+   "RedirectUri": "https://tupid.lol/ba",
+   "AuthApiBaseUrl": "https://api.tupid.lol",
+   "BotApiToken": "your_bot_api_token_for_worker_auth",
   "IsEnabled": true,
   "CommandPrefix": "#",
   "ReplyMode": "Mention"
@@ -39,9 +43,13 @@ The module loads settings from `Twitch.json` in the ButterBror2 AppData director
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `BotUsername` | `string` | `"butterbror_bot"` | Twitch username of the bot account |
-| `OauthToken` | `string` | `""` | OAuth token (format: `oauth:xxxxxxxx`) — required |
+| `BotUserId` | `string` | `""` | Twitch user ID of the bot account |
 | `Channel` | `string` | `""` | Initial channel to join on startup |
 | `ClientId` | `string` | `""` | Twitch API Client ID — required for API/EventSub |
+| `ClientSecret` | `string` | `""` | Twitch application secret |
+| `RedirectUri` | `string` | `"https://tupid.lol/ba"` | Authorization page returned by `!auth` |
+| `AuthApiBaseUrl` | `string` | `"https://api.tupid.lol"` | Cloudflare authentication API base URL |
+| `BotApiToken` | `string` | `""` | Bearer token for pending authorization polling |
 | `IsEnabled` | `bool` | `true` | Set `false` to disable the module without uninstalling |
 | `CommandPrefix` | `string` | `"!"` | Default command prefix (can be overridden per-channel) |
 | `ReplyMode` | `enum` | `"Mention"` | `"Mention"` or `"Reply"` — how the bot responds to commands |
@@ -85,6 +93,32 @@ ButterBror.ChatModules.Twitch/
 <PackageReference Include="TwitchLib.EventSub.Websockets" Version="0.8.0" />
 <PackageReference Include="Microsoft.Extensions.Resilience" Version="10.6.0" />
 <PackageReference Include="Polly.Core" Version="8.6.6" />
+```
+
+### Token Bootstrap and Transport Architecture
+
+`Twitch.json` contains configuration only. It must not contain bot, refresh, or app tokens. The module first loads the bot credential from Redis key `twitch:bot_token`. If none exists, it remains loaded and waits for `TwitchAuth.json` in the application data directory.
+
+The `!auth` command returns `https://tupid.lol/ba` without query parameters. The module polls `GET {AuthApiBaseUrl}/auth/pending` every 30 seconds with `BotApiToken`, validates each pending broadcaster token through Twitch Helix, acknowledges it with `DELETE /auth/tokens/{id}`, and upgrades the channel to EventSub when authorization is available.
+
+```json
+{
+   "OAuthToken": "***",
+   "RefreshToken": "***",
+   "Ttl": 1780000000
+}
+```
+
+The module polls for this file every five seconds, imports it, strips `oauth:` from the stored access token, persists the credential under `twitch:bot_token`, and deletes the file. `Ttl` is an absolute Unix UTC expiration timestamp in seconds, not a relative lifetime or `expires_in` value. Values larger than `10_000_000_000` are interpreted as Unix milliseconds. A past timestamp is imported and refreshed immediately using `RefreshToken`; refresh failures clear the stored credential and return the module to the waiting state. Dropping a new file replaces the credential and reconnects the bot without a host restart.
+
+IRC uses the bot credential with the `oauth:` prefix added only at the TwitchLib boundary. EventSub is preferred per channel when a broadcaster token exists and the `channel.chat.message` subscription succeeds. Otherwise that channel uses IRC. Broadcaster tokens remain in `twitch:broadcaster_token:{channelId}` and are never written to `Twitch.json`.
+
+Managed channels are stored in Redis key `twitch:channels` as canonical objects. Commands accept either a channel login or ID and resolve it through Helix:
+
+```json
+[
+   { "id": "123456789", "login": "channelname", "displayName": "ChannelName" }
+]
 ```
 
 <img src="https://tupid.lol/i/bb2/installation.png" width="100%">

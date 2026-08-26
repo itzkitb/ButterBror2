@@ -41,7 +41,11 @@ public class AddChannelCommand(
         }
 
         // S3: Persist to Redis
-        await channelManager.AddChannelAsync(channelName);
+        var channel = await twitchClient.ResolveChannelAsync(channelName);
+        if (channel is null)
+            return CommandResult.Failure(
+                await _localization.GetStringAsync("command.twitch.channel_not_found", context.Locale));
+        await channelManager.AddChannelAsync(channel);
 
         // S4: Connect on the fly
         await twitchClient.AddChannelAsync(channelName);

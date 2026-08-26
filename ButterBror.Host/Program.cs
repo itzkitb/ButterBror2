@@ -53,6 +53,7 @@ builder.Logging.AddConsoleFormatter<CustomConsoleFormatter, CustomConsoleFormatt
 builder.Logging.AddFilter("Polly", LogLevel.Warning);
 builder.Logging.AddFilter("Polly.Core", LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+builder.Logging.AddFilter("TwitchLib.Api", LogLevel.Warning);
 
 // ><> services
 

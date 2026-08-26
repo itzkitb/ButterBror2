@@ -9,13 +9,12 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using TwitchLib.Api;
-using TwitchLib.Api.Helix.Models.Channels.SendChatMessage;
 using TwitchLib.Client.Events;
-using TwitchLib.Client.Models;
 using TwitchLib.Communication.Clients;
 using TwitchLib.Communication.Models;
 using TwitchLib.EventSub.Websockets;
 using System.Threading.Channels;
+using ButterBror.ChatModules.Twitch.Interfaces;
 using ButterBror.Core.Scopes;
 using ButterBror.Data.Interfaces;
 
@@ -24,8 +23,6 @@ namespace ButterBror.ChatModules.Twitch.Services;
 public sealed class TwitchClient : ITwitchClient, IDisposable
 {
     // ><> constants & static fields
-    private const string AppTokenCacheKey = "app";
-    private static readonly TimeSpan TokenExpiryBuffer = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan IrcFallbackDuration = TimeSpan.FromHours(1);
     private const int NormalChannelDelayMs = 1500;
     private const int ModVipChannelDelayMs = 100;
@@ -35,7 +32,9 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     private readonly ILogger<TwitchClient> _logger;
     private readonly ResiliencePipeline _twitchPipeline;
     private readonly ResiliencePipeline _apiPipeline;
-    private ICustomDataRepository _db;
+    private readonly ICustomDataRepository _db;
+    private readonly ITwitchChatTransport _chatTransport;
+    private readonly ITwitchTokenManager _tokenManager;
     private readonly HttpClient _tokenHttpClient = new();
     
     // ><> clients & api sdks
@@ -86,8 +85,8 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     #endregion
     
     // ><> properties
-    public bool IsConnected => _ircClient.IsConnected;
-    public HashSet<string> ConnectedChannels => [.. _ircClient.JoinedChannels.Select(c => c.Channel.ToLowerInvariant())];
+    public bool IsConnected => _chatTransport.IsConnected;
+    public HashSet<string> ConnectedChannels => [.. _chatTransport.ConnectedChannels.Select(c => c.ToLowerInvariant())];
     
     // ><> constructor & finalizer
     private TwitchClient(
@@ -95,7 +94,9 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         ResiliencePipelineProvider<string> pipelineProvider,
         ILogger<TwitchClient> logger,
         IEnumerable<string> channels,
-        ICustomDataRepository db)
+        ICustomDataRepository db,
+        ITwitchChatTransport chatTransport,
+        ITwitchTokenManager tokenManager)
     {
         _config = config.Value;
         _logger = logger;
@@ -103,6 +104,10 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         _apiPipeline = pipelineProvider.GetPipeline("api");
         _initialChannels = [.. channels];
         _db = db;
+        _chatTransport = chatTransport;
+        _tokenManager = tokenManager;
+        _chatTransport.MessageReceived += OnTransportMessageReceived;
+        _chatTransport.BroadcasterAuthReceived += OnTransportBroadcasterAuthReceived;
 
         var reconnectionPolicy = new ReconnectionPolicy(
             minReconnectInterval: 3000,
@@ -131,11 +136,13 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         ResiliencePipelineProvider<string> pipelineProvider,
         ILogger<TwitchClient> logger,
         IEnumerable<string> channels,
-        ICustomDataRepository db)
+        ICustomDataRepository db,
+        ITwitchChatTransport chatTransport,
+        ITwitchTokenManager tokenManager)
     {
         await using (new InitializationScope(logger, "twitch client"))
         {
-            var client = new TwitchClient(config, pipelineProvider, logger, channels, db);
+            var client = new TwitchClient(config, pipelineProvider, logger, channels, db, chatTransport, tokenManager);
             return client;
         }
     }
@@ -153,39 +160,28 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         {
             await using (new CustomScope(_logger, "conn", "twitch"))
             {
-                // s0: init api with bot credentials
                 _api.Settings.ClientId = clientId;
-                _api.Settings.AccessToken = oauthToken;
+                _api.Settings.AccessToken = await _tokenManager.GetAppAccessTokenAsync();
 
                 // s1: retrieve bot id
                 _botId = await GetChannelIdAsync(username) ??
                          throw new InvalidOperationException("failed to retrieve bot user id");
 
-                _logger.LogInformation("[tw] api init. id={Id}, name={Name}", _botId, username);
+                _logger.LogInformation("[tw] api init id={Id}, name={Name}", _botId, username);
 
-                // s2: init and connect
-                var credentials = new ConnectionCredentials(
-                    twitchUsername: username,
-                    twitchOAuth: oauthToken,
-                    disableUsernameCheck: true
-                );
-                _ircClient.Initialize(credentials);
-
-                var connectTask = _ircClient.ConnectAsync();
-                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
-
-                if (await Task.WhenAny(connectTask, timeoutTask) == timeoutTask)
+                await _chatTransport.ConnectAsync();
+                foreach (var channel in _initialChannels.ToArray())
                 {
-                    await _ircClient.DisconnectAsync();
-                    throw new TimeoutException("irc connection timed out after 30 seconds");
-                }
+                    var managedChannel = await ResolveChannelAsync(channel);
+                    if (managedChannel is null)
+                    {
+                        _logger.LogWarning("[tw] failed to resolve startup channel {Channel}", channel);
+                        continue;
+                    }
 
-                await connectTask;
-
-                // s3: connect eventsub
-                if (_eventSubClient != null)
-                {
-                    await _eventSubClient.ConnectAsync();
+                    _initialChannels.Remove(channel);
+                    _initialChannels.Add(managedChannel.Login);
+                    await _chatTransport.JoinChannelAsync(managedChannel.Login);
                 }
             }
         }
@@ -203,15 +199,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         
         try
         {
-            if (_ircClient.IsConnected)
-            {
-                await _ircClient.DisconnectAsync();
-            }
-
-            if (_eventSubClient != null)
-            {
-                await _eventSubClient.DisconnectAsync();
-            }
+            await _chatTransport.DisconnectAsync();
 
             _logger.LogInformation("[tw] disconnected successfully");
         }
@@ -226,12 +214,16 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
         
-        var normalizedChannel = channel.ToLowerInvariant();
+        var managedChannel = await ResolveChannelAsync(channel);
+        if (managedChannel is null)
+            throw new InvalidOperationException($"channel '{channel}' not found");
+
+        var normalizedChannel = managedChannel.Login.ToLowerInvariant();
         if (!_initialChannels.Add(normalizedChannel)) 
             return;
 
-        if (_ircClient.IsConnected)
-            await ReconnectToChannelsAsync();
+        if (_chatTransport.IsConnected)
+            await _chatTransport.JoinChannelAsync(normalizedChannel);
     }
     public async Task<bool> TryRemoveChannelAsync(string channel)
     {
@@ -241,23 +233,37 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         if (!_initialChannels.Contains(normalizedChannel))
             return true;
 
-        if (_ircClient.IsConnected && IsJoined(channel))
-            await _ircClient.LeaveChannelAsync(channel);
+        if (_chatTransport.IsConnected && IsJoined(channel))
+            await _chatTransport.LeaveChannelAsync(channel);
         
-        return _initialChannels.Remove(channel);
+        return _initialChannels.Remove(normalizedChannel);
     }
     public async Task JoinChannelAsync(string channel)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
-        if (!_ircClient.IsConnected)
-            throw new InvalidOperationException("irc is not connected yet");
+        if (!_chatTransport.IsConnected)
+            throw new InvalidOperationException("twitch transport is not connected yet");
 
-        var normalizedChannel = channel.ToLowerInvariant();
+        var managedChannel = await ResolveChannelAsync(channel);
+        if (managedChannel is null)
+            throw new InvalidOperationException($"channel '{channel}' not found");
+
+        var normalizedChannel = managedChannel.Login.ToLowerInvariant();
         if (IsJoined(normalizedChannel))
             return;
 
         _logger.LogInformation("[tw] join #{Channel}", normalizedChannel);
-        await _ircClient.JoinChannelAsync(normalizedChannel, true);
+        await _chatTransport.JoinChannelAsync(normalizedChannel);
+    }
+
+    public async Task JoinBotChannelAsync(string channel)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        var managedChannel = await ResolveChannelAsync(channel);
+        if (managedChannel is null)
+            throw new InvalidOperationException($"channel '{channel}' not found");
+
+        await _chatTransport.JoinChannelViaIrcAsync(managedChannel.Login);
     }
     public async Task LeaveChannelAsync(string channel)
     {
@@ -270,13 +276,19 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         {
             lazyQueue.Value.Writer.TryComplete();
         }
-        await _ircClient.LeaveChannelAsync(channel);
+        await _chatTransport.LeaveChannelAsync(channel);
     }
     public bool IsJoined(string channel)
     {
         if (string.IsNullOrWhiteSpace(channel)) return false;
         string normalizedChannel = channel.ToLowerInvariant();
-        return _ircClient.JoinedChannels.Any(c => c.Channel.Equals(normalizedChannel, StringComparison.OrdinalIgnoreCase));
+        if (_chatTransport.ConnectedChannels.Any(c => c.Equals(normalizedChannel, StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+         var login = _channelIdCache.FirstOrDefault(pair =>
+             pair.Value.Equals(normalizedChannel, StringComparison.OrdinalIgnoreCase)).Key;
+         return !string.IsNullOrWhiteSpace(login) &&
+             _chatTransport.ConnectedChannels.Any(c => c.Equals(login, StringComparison.OrdinalIgnoreCase));
     }
     
     // ><> public api - messaging
@@ -290,7 +302,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         ObjectDisposedException.ThrowIf(_isDisposed, this);
         if (string.IsNullOrWhiteSpace(replyToMessageId))
         {
-            _logger.LogWarning("[tw] send reply called with empty messageId, falling back");
+            _logger.LogWarning("[tw] send reply called with empty messageid, falling back");
             await SendMessageAsync(channel, message, convertChannelId);
             return;
         }
@@ -430,6 +442,56 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
             return null;
         }
     }
+
+    public async Task<TwitchManagedChannel?> ResolveChannelAsync(string channelOrId, CancellationToken cancellationToken = default)
+    {
+        var normalized = channelOrId.TrimStart('#').TrimStart('@').ToLowerInvariant();
+        return await ResolveChannelWithTokenAsync(normalized, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<TwitchManagedChannel?> ValidateBotTokenAsync(string accessToken, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+            return null;
+    
+        try
+        {
+            _api.Settings.AccessToken = accessToken;
+            var response = await _api.Helix.Users.GetUsersAsync().ConfigureAwait(false);
+            var user = response.Users.FirstOrDefault();
+            return user is null ? null : new TwitchManagedChannel(user.Id, user.Login, user.DisplayName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[tw] failed to validate bot token");
+            return null;
+        }
+    }
+
+    private async Task<TwitchManagedChannel?> ResolveChannelWithTokenAsync(string? channelOrId, string? accessToken, CancellationToken cancellationToken)
+    {
+        _api.Settings.ClientId = _config.ClientId;
+        _api.Settings.AccessToken = string.IsNullOrWhiteSpace(accessToken)
+            ? await _tokenManager.GetAppAccessTokenAsync(cancellationToken)
+            : accessToken;
+        var normalized = channelOrId?.TrimStart('#').TrimStart('@').ToLowerInvariant() ?? string.Empty;
+        var user = normalized.All(char.IsDigit)
+            ? (await _api.Helix.Users.GetUsersAsync(ids: [normalized]).ConfigureAwait(false)).Users.FirstOrDefault()
+            : (await _api.Helix.Users.GetUsersAsync(logins: [normalized]).ConfigureAwait(false)).Users.FirstOrDefault();
+        return user is null ? null : new TwitchManagedChannel(user.Id, user.Login, user.DisplayName);
+    }
+
+    public Task UpgradeToEventSubAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        return UpgradeToEventSubInternalAsync(channelId, cancellationToken);
+    }
+
+    private async Task UpgradeToEventSubInternalAsync(string channelId, CancellationToken cancellationToken)
+    {
+        var channel = await ResolveChannelAsync(channelId, cancellationToken).ConfigureAwait(false);
+        if (channel is not null)
+            await _chatTransport.RefreshChannelAsync(channel.Login, cancellationToken).ConfigureAwait(false);
+    }
     public void InvalidateChannelSettingsCache(string channelId) => _settingsCache.TryRemove(channelId, out _);
     public void ClearIrcFallback(string channelId)
     {
@@ -439,6 +501,14 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
                 "[tw] irc fallback cleared for channel {ChannelId}",
                 channelId);
         }
+    }
+
+    public Task RefreshChannelAsync(string channelId)
+    {
+        var channel = _channelIdCache.FirstOrDefault(pair => pair.Value.Equals(channelId, StringComparison.OrdinalIgnoreCase)).Key;
+        return string.IsNullOrWhiteSpace(channel)
+            ? Task.CompletedTask
+            : _chatTransport.RefreshChannelAsync(channel);
     }
     
     // ><> messaging & fallbacks
@@ -476,41 +546,13 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
                 }
             }
             
-            if (IsIrcFallbackActive(channelId))
-            {
-                _logger.LogDebug("[tw] #{Channel} is in irc fallback mode, using irc", channel);
-                await SendIrcMessage(channel, sanitizedMessage, replyToMessageId);
-                return;
-            }
-
-            var appToken = await GetAppAccessTokenAsync();
-
-            var request = new SendChatMessageRequest
-            {
-                BroadcasterId = channelId,
-                SenderId = _botId,
-                Message = sanitizedMessage,
-                ReplyParentMessageId = replyToMessageId
-            };
-
-            await _apiPipeline.ExecuteAsync(async _ =>
-                await _api.Helix.Chat.SendChatMessage(request, accessToken: appToken));
+            await _chatTransport.SendMessageAsync(channel, sanitizedMessage, replyToMessageId);
 
             _logger.LogDebug("[tw] sent message to #{Channel}: \"{Message}\"", channel, sanitizedMessage);
         }
         catch (Exception) when (channelId != null)
         {
-            SetIrcFallback(channelId);
-
-            try
-            {
-                await SendIrcMessage(channel, sanitizedMessage, replyToMessageId);
-            }
-            catch (Exception ircEx)
-            {
-                _logger.LogError(ircEx, "[tw] irc fallback also failed for #{Channel}", channel);
-                throw;
-            }
+            throw;
         }
         catch (Exception ex)
         {
@@ -525,7 +567,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         if (!IsJoined(normalizedChannel))
         {
             _logger.LogWarning(
-                "[tw:fallback] bot is not joined to #{Channel}, cannot send via irc",
+                "[tw] bot is not joined to #{Channel}, cannot send via irc",
                 normalizedChannel);
             return;
         }
@@ -570,42 +612,16 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     // ><> twitch api & token helpers
     private async Task<string?> GetAppAccessTokenAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_config.ClientSecret) || string.IsNullOrWhiteSpace(_config.ClientId))
-        {
-            _logger.LogInformation("[tw] aat requested but ClientId/ClientSecret not configured, falling back to bot token");
-            return _config.OauthToken;
-        }
-
-        if (_appTokenCache.TryGetValue(AppTokenCacheKey, out var cached)
-            && cached.ExpiresAt - DateTime.UtcNow > TokenExpiryBuffer)
-        {
-            return cached.Token;
-        }
-
-        await _appTokenRefreshLock.WaitAsync(ct);
-        try
-        {
-            if (_appTokenCache.TryGetValue(AppTokenCacheKey, out cached)
-                && cached.ExpiresAt - DateTime.UtcNow > TokenExpiryBuffer)
-            {
-                return cached.Token;
-            }
-
-            var entry = await FetchAppAccessTokenAsync(ct);
-            _appTokenCache[AppTokenCacheKey] = entry;
-            _logger.LogInformation("[tw] aat refreshed successfully. expires at {ExpiresAt:u}", entry.ExpiresAt);
-            return entry.Token;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogInformation(ex, "[tw] aat receive error");
-            throw;
-        }
-        finally
-        {
-            _appTokenRefreshLock.Release();
-        }
+        return await _tokenManager.GetAppAccessTokenAsync(ct);
     }
+
+    private void OnTransportMessageReceived(object? sender, Events.OnMessageReceivedArgs e)
+    {
+        OnMessageReceived?.Invoke(this, e);
+    }
+
+    private void OnTransportBroadcasterAuthReceived(object? sender, BroadcasterAuthReceivedArgs e) =>
+        OnBroadcasterAuthReceived?.Invoke(this, e);
     private async Task<AppAccessTokenEntry> FetchAppAccessTokenAsync(CancellationToken ct = default)
     {
         _logger.LogDebug("[tw] fetching new aat");
@@ -763,7 +779,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:irc] error parsing USERSTATE for #{Channel}", e.UserState.Channel);
+            _logger.LogError(ex, "[tw] error parsing userstate for #{Channel}", e.UserState.Channel);
         }
 
         return Task.CompletedTask;
@@ -772,30 +788,30 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     {
         try
         {
-            _logger.LogInformation("[tw:irc] client connected");
+            _logger.LogInformation("[tw] irc client connected");
             OnConnected?.Invoke(this, e);
             await ReconnectToChannelsAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:irc] error handling");
+            _logger.LogError(ex, "[tw] irc error handling");
         }
     }
     private async Task OnClientReconnected(object? sender, OnConnectedEventArgs e)
     {
         try
         {
-            _logger.LogInformation("[tw:irc] client reconnected");
+            _logger.LogInformation("[tw] irc client reconnected");
             await ReconnectToChannelsAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:irc] error handling reconnect");
+            _logger.LogError(ex, "[tw] irc error handling reconnect");
         }
     }
     private async Task OnClientDisconnected(object? sender, OnDisconnectedArgs e)
     {
-        _logger.LogWarning("[tw:irc] client disconnected");
+        _logger.LogWarning("[tw] irc client disconnected");
         OnDisconnected?.Invoke(this, e);
 
         // s0. nothing
@@ -808,14 +824,14 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
             await Task.Delay(5000);
             if (!_ircClient.IsConnected && !_isDisposed)
             {
-                _logger.LogWarning("[tw:irc] client is still disconnected. triggering manual reconnect...");
+                _logger.LogWarning("[tw] irc client is still disconnected. triggering manual reconnect");
                 try
                 {
                     await _ircClient.ReconnectAsync();
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "[tw:irc] manual reconnect attempt failed");
+                    _logger.LogError(ex, "[tw] irc manual reconnect attempt failed");
                 }
             }
         });
@@ -845,28 +861,28 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:irc] error handling message");
+            _logger.LogError(ex, "[tw] irc error handling message");
         }
 
         return Task.CompletedTask;
     }
     private Task OnClientConnectionError(object? sender, OnConnectionErrorArgs e)
     {
-        _logger.LogError("[tw:irc] connection error: {Error}", e.Error);
+        _logger.LogError("[tw] irc connection error: {Error}", e.Error);
         
         return Task.CompletedTask;
     }
     private Task OnClientJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
         var channel = e.Channel.ToLowerInvariant();
-        _logger.LogDebug("[tw:irc] joined #{Channel}", channel);
+        _logger.LogDebug("[tw] irc joined #{Channel}", channel);
         
         return Task.CompletedTask;
     }
     private Task OnClientPartChannel(object? sender, OnLeftChannelArgs e)
     {
         var channel = e.Channel.ToLowerInvariant();
-        _logger.LogDebug("[tw:irc] parted #{Channel}", channel);
+        _logger.LogDebug("[tw] irc parted #{Channel}", channel);
         
         return Task.CompletedTask;
     }
@@ -885,7 +901,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:irc] error handling new subscriber event");
+            _logger.LogError(ex, "[tw] irc error handling new subscriber event");
         }
         
         return Task.CompletedTask;
@@ -905,7 +921,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:irc] error handling gifted subscription event");
+            _logger.LogError(ex, "[tw] irc error handling gifted subscription event");
         }
         
         return Task.CompletedTask;
@@ -924,7 +940,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:irc] error handling raid notification event");
+            _logger.LogError(ex, "[tw] irc error handling raid notification event");
         }
         
         return Task.CompletedTask;
@@ -944,7 +960,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:irc] error handling bits received event");
+            _logger.LogError(ex, "[tw] irc error handling bits received event");
         }
         
         return Task.CompletedTask;
@@ -953,19 +969,19 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     // ><> EventSub
     private async Task OnEventSubReconnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketReconnectedArgs e)
     {
-        _logger.LogInformation("[tw:es] client reconnected");
+        _logger.LogInformation("[tw] eventsub client reconnected");
 
         await SubscribeToWhispersAsync();
     }
     private async Task OnEventSubConnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketConnectedArgs e)
     {
-        _logger.LogInformation("[tw:es] client connected");
+        _logger.LogInformation("[tw] eventsub client connected");
 
         await SubscribeToWhispersAsync();
     }
     private async Task OnEventSubDisconnected(object? sender, EventArgs e)
     {
-        _logger.LogWarning("[tw:es] client disconnected");
+        _logger.LogWarning("[tw] eventsub client disconnected");
         try
         {
             await Task.Delay(2000);
@@ -974,7 +990,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:es] failed to reconnect");
+            _logger.LogError(ex, "[tw] eventsub failed to reconnect");
         }
     }
     private Task OnWhisperMessage(object? sender, TwitchLib.EventSub.Core.EventArgs.User.UserWhisperMessageArgs e)
@@ -993,7 +1009,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
             }
             catch (FormatException)
             {
-                _logger.LogDebug("[tw:es] whisper message is not a valid b64 string, ignoring");
+                _logger.LogDebug("[tw] eventsub whisper message is not a valid b64 string, ignoring");
                 return Task.CompletedTask;
             }
 
@@ -1001,7 +1017,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
             var authData = JsonSerializer.Deserialize<BroadcasterAuthPayload>(json);
             if (authData == null || string.IsNullOrWhiteSpace(authData.Channel) || string.IsNullOrWhiteSpace(authData.Token))
             {
-                _logger.LogWarning("[tw:es] invalid auth payload format in whisper from @{User}", data.FromUserName);
+                _logger.LogWarning("[tw] eventsub invalid auth payload format in whisper from @{User}", data.FromUserName);
                 return Task.CompletedTask;
             }
 
@@ -1018,7 +1034,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[tw:es] error handling whisper");
+            _logger.LogError(ex, "[tw] eventsub error handling whisper");
         }
 
         return Task.CompletedTask;

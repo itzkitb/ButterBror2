@@ -97,6 +97,7 @@ public interface ITwitchClient
     /// Join the specified channel using the specified transport
     /// </summary>
     Task JoinChannelAsync(string channel);
+    Task JoinBotChannelAsync(string channel);
 
     /// <summary>
     /// Leave the specified channel
@@ -137,6 +138,9 @@ public interface ITwitchClient
     /// Get the unique Twitch channel ID by channel name
     /// </summary>
     Task<string?> GetChannelIdAsync(string channelName);
+    Task<TwitchManagedChannel?> ResolveChannelAsync(string channelOrId, CancellationToken cancellationToken = default);
+    Task<TwitchManagedChannel?> ValidateBotTokenAsync(string accessToken, CancellationToken cancellationToken = default);
+    Task UpgradeToEventSubAsync(string channelId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Validate the provided broadcaster OAuth token
@@ -147,4 +151,6 @@ public interface ITwitchClient
     /// Clear the IRC fallback connection state for a specific channel
     /// </summary>
     void ClearIrcFallback(string channelId);
+
+    Task RefreshChannelAsync(string channelId);
 }
