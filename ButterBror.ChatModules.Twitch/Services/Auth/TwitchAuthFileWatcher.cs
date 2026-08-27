@@ -12,41 +12,69 @@ public sealed class TwitchAuthFileWatcher(
 {
     private readonly string _path = Path.Combine(appDataPathProvider.GetAppDataPath(), "TwitchAuth.json");
     private readonly CancellationTokenSource _shutdown = new();
+    
+    private readonly Lock _lock = new(); 
     private Task? _pollTask;
+    private bool _isDisposed;
 
     public void Start()
     {
-        _pollTask ??= PollAsync(_shutdown.Token);
+        lock (_lock)
+        {
+            if (_isDisposed) return;
+            _pollTask ??= PollAsync(_shutdown.Token);
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _shutdown.CancelAsync().ConfigureAwait(false);
+        lock (_lock)
+        {
+            if (_isDisposed) return;
+            _isDisposed = true;
+        }
+
+        try 
+        {
+            await _shutdown.CancelAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException) { }
+
         if (_pollTask is not null)
         {
-            try { await _pollTask.ConfigureAwait(false); }
-            catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
+            try 
+            { 
+                await _pollTask.ConfigureAwait(false); 
+            }
+            catch (OperationCanceledException) { } 
         }
+
         _shutdown.Dispose();
     }
 
     private async Task PollAsync(CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-        while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+        try
         {
-            try
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                await TryImportAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await TryImportAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(exception, "[tw:afw] credential polling failed");
+                }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                logger.LogError(exception, "[tw:afw] credential polling failed");
-            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
     }
 

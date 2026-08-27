@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.Json;
 using ButterBror.ChatModules.Twitch.Events;
 using ButterBror.ChatModules.Twitch.Interfaces;
 using ButterBror.ChatModules.Twitch.Models;
@@ -22,7 +20,11 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     private readonly ICustomDataRepository _repository;
     private readonly ILogger<EventSubChatTransport> _logger;
     private readonly TwitchConfiguration _configuration;
+    
     private readonly HashSet<string> _subscriptions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _subscriptionLock = new(1, 1);
+    private readonly SemaphoreSlim _connectionLock = new(1, 1);
+    
     private string _botUserId = string.Empty;
 
     public EventSubChatTransport(
@@ -39,50 +41,127 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         _repository = repository;
         _logger = logger;
         _configuration = options.Value;
+        
         client.ChannelChatMessage += OnChatMessage;
         client.UserWhisperMessage += OnWhisperMessage;
+        client.WebsocketConnected += OnWebsocketConnected;
+        client.WebsocketReconnected += OnWebsocketReconnected;
+        client.WebsocketDisconnected += OnWebsocketDisconnected;
     }
 
     public string Name => "eventsub";
     public bool IsConnected { get; private set; }
     public IReadOnlyCollection<string> ConnectedChannels => _subscriptions.ToArray();
     public event EventHandler<OnMessageReceivedArgs>? MessageReceived;
-    public event EventHandler<BroadcasterAuthReceivedArgs>? BroadcasterAuthReceived;
+    public event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         _botUserId = _configuration.BotUserId;
         _api.Settings.ClientId = _configuration.ClientId;
         _api.Settings.AccessToken = await _tokens.GetUserAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        await _client.ConnectAsync(new Uri("wss://eventsub.wss.twitch.tv/ws")).ConfigureAwait(false);
-        IsConnected = true;
+    }
+    
+    private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
+    {
+        if (IsConnected)
+            return;
+
+        await _connectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (IsConnected)
+                return;
+
+            _logger.LogInformation("[tw:es] connecting...");
+            await _client.ConnectAsync(new Uri("wss://eventsub.wss.twitch.tv/ws")).ConfigureAwait(false);
+        }
+        finally
+        {
+            _connectionLock.Release();
+        }
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
         if (!IsConnected)
             return;
+            
         await _client.DisconnectAsync().ConfigureAwait(false);
         IsConnected = false;
         _subscriptions.Clear();
     }
 
+    private async Task SubscribeToWhispersAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_botUserId))
+        {
+            _logger.LogWarning("[tw:es] cannot subscribe to whispers: bot user id is not set");
+            return;
+        }
+
+        try
+        {
+            _logger.LogInformation("[tw:es] subscribing to whispers for bot user {BotUserId}", _botUserId);
+            var botAccessToken = await _tokens.GetUserAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+            
+            await _api.Helix.EventSub.CreateEventSubSubscriptionAsync(
+                "user.whisper.message", "1",
+                new Dictionary<string, string> { ["user_id"] = _botUserId },
+                EventSubTransportMethod.Websocket,
+                _client.SessionId,
+                accessToken: botAccessToken
+            ).ConfigureAwait(false);
+            
+            _logger.LogInformation("[tw:es] successfully subscribed to whispers");
+        }
+        catch (HttpRequestException exception) when (exception.Message.Contains("subscription already exists", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("[tw:es] whisper subscription already exists");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[tw:es] failed to subscribe to whispers");
+        }
+    }
+    
     public async Task SubscribeChannelAsync(string channel, CancellationToken cancellationToken = default)
     {
         var normalizedChannel = channel.TrimStart('#').ToLowerInvariant();
-        if (_subscriptions.Contains(normalizedChannel))
+        await _subscriptionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await SubscribeChannelCoreAsync(channel, normalizedChannel, force: false, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _subscriptionLock.Release();
+        }
+    }
+
+    private async Task SubscribeChannelCoreAsync(
+        string channel,
+        string normalizedChannel,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        if (!force && _subscriptions.Contains(normalizedChannel))
             return;
+        
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
 
         var broadcaster = await _api.Helix.Users.GetUsersAsync(logins: [channel]).ConfigureAwait(false);
         var broadcasterId = broadcaster.Users.FirstOrDefault()?.Id
-            ?? throw new InvalidOperationException($"сhannel #{channel} was not found");
+            ?? throw new InvalidOperationException($"channel #{channel} was not found");
+            
         var broadcasterToken = await _repository.GetDataAsync($"twitch:broadcaster_token:{broadcasterId}").ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(broadcasterToken))
             throw new InvalidOperationException("broadcaster authorization is unavailable");
 
         _api.Settings.ClientId = _configuration.ClientId;
-            var botAccessToken = await _tokens.GetUserAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-            _api.Settings.AccessToken = botAccessToken;
+        var botAccessToken = await _tokens.GetUserAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+        _api.Settings.AccessToken = botAccessToken;
+
         try
         {
             await _api.Helix.EventSub.CreateEventSubSubscriptionAsync(
@@ -95,16 +174,49 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
                 EventSubTransportMethod.Websocket,
                 _client.SessionId,
                 accessToken: botAccessToken).ConfigureAwait(false);
+                
+            _logger.LogInformation("[tw:es] successfully subscribed to #{Channel}", normalizedChannel);
         }
         catch (HttpRequestException exception) when (exception.Message.Contains("subscription already exists", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("[tw] eventsub subscription already exists for #{Channel}", normalizedChannel);
+            _logger.LogWarning("[tw:es] subscription already exists for #{Channel}", normalizedChannel);
         }
+        
         _subscriptions.Add(normalizedChannel);
     }
 
-    public Task JoinChannelAsync(string channel, CancellationToken cancellationToken = default) =>
-        SubscribeChannelAsync(channel, cancellationToken);
+    private async Task ResubscribeChannelsAsync()
+    {
+        await _subscriptionLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var channels = _subscriptions.ToArray();
+            _subscriptions.Clear();
+            
+            foreach (var channel in channels)
+            {
+                try
+                {
+                    await SubscribeChannelCoreAsync(channel, channel, force: true, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    _subscriptions.Add(channel);
+                    _logger.LogWarning(exception, "[tw:es] failed to restore subscription for #{Channel}", channel);
+                }
+            }
+        }
+        finally
+        {
+            _subscriptionLock.Release();
+        }
+    }
+
+    public async Task JoinChannelAsync(string channel, CancellationToken cancellationToken = default)
+    {
+        await SubscribeChannelAsync(channel, cancellationToken);
+        await UpdateAndFireUserStateAsync(channel).ConfigureAwait(false);
+    }
 
     public Task JoinChannelViaIrcAsync(string channel, CancellationToken cancellationToken = default) =>
         throw new InvalidOperationException("eventsub transport cannot join via irc");
@@ -122,9 +234,11 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     {
         _api.Settings.ClientId = _configuration.ClientId;
         _api.Settings.AccessToken = await _tokens.GetAppAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+        
         var users = await _api.Helix.Users.GetUsersAsync(logins: [channel]).ConfigureAwait(false);
-        var broadcasterId = users.Users.FirstOrDefault()?.Id ?? throw new InvalidOperationException($"channel #{channel} was not found.");
+        var broadcasterId = users.Users.FirstOrDefault()?.Id ?? throw new InvalidOperationException($"channel #{channel} was not found");
         var senderId = string.IsNullOrWhiteSpace(_botUserId) ? _configuration.BotUserId : _botUserId;
+        
         await _api.Helix.Chat.SendChatMessage(new SendChatMessageRequest
         {
             BroadcasterId = broadcasterId,
@@ -139,14 +253,70 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         IsConnected = false;
         _client.ChannelChatMessage -= OnChatMessage;
         _client.UserWhisperMessage -= OnWhisperMessage;
+        _client.WebsocketConnected -= OnWebsocketConnected;
+        _client.WebsocketReconnected -= OnWebsocketReconnected;
+        _client.WebsocketDisconnected -= OnWebsocketDisconnected;
+        
         try
         {
             await _client.DisconnectAsync().ConfigureAwait(false);
         }
         catch (Exception exception)
         {
-            _logger.LogDebug(exception, "[tw:es] disconnect failed");
+            _logger.LogDebug(exception, "[tw:es] disconnect failed during disposal");
         }
+        
+        _subscriptionLock.Dispose();
+        _connectionLock.Dispose();
+    }
+
+    private Task OnWebsocketConnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketConnectedArgs args)
+    {
+        try
+        {
+            IsConnected = true;
+            _logger.LogInformation("[tw:es] connected. session: {SessionId}", _client.SessionId);
+        
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (_subscriptions.Count > 0)
+                    {
+                        _logger.LogInformation("[tw:es] restoring {Count} eventsub subscriptions", _subscriptions.Count);
+                        await ResubscribeChannelsAsync().ConfigureAwait(false);
+                    }
+                
+                    await SubscribeToWhispersAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[tw:es] error during post-connection subscriptions setup");
+                }
+            });
+            return Task.CompletedTask;
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException(exception);
+        }
+    }
+
+
+    private Task OnWebsocketReconnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketReconnectedArgs args)
+    {
+        IsConnected = true;
+        _logger.LogInformation("[tw:es] successfully reconnected. session: {SessionId}", _client.SessionId);
+        
+        return Task.CompletedTask;
+    }
+
+
+    private Task OnWebsocketDisconnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketDisconnectedArgs args)
+    {
+        IsConnected = false;
+        _logger.LogWarning("[tw:es] disconnected. data={Reason}", args);
+        return Task.CompletedTask;
     }
 
     private Task OnChatMessage(object? sender, ChannelChatMessageArgs args)
@@ -174,29 +344,57 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
 
     private Task OnWhisperMessage(object? sender, TwitchLib.EventSub.Core.EventArgs.User.UserWhisperMessageArgs args)
     {
+        var message = args.Payload.Event;
+        MessageReceived?.Invoke(this, new OnMessageReceivedArgs
+        {
+            ChatMessage = new ChatMessage
+            {
+                Username = message.FromUserLogin,
+                UserId = message.FromUserId,
+                MessageId = message.WhisperId,
+                Message = message.Whisper.Text,
+                Channel = $"whisper:{message.FromUserId}",
+                ChannelId = "whisper",
+                IsModerator = false,
+                IsBroadcaster = false,
+                IsSubscriber = false,
+                IsVip = false,
+                Color = "#ffffff"
+            }
+        });
+
+        return Task.CompletedTask;
+    }
+    
+    private async Task UpdateAndFireUserStateAsync(string channel)
+    {
         try
         {
-            var json = Encoding.UTF8.GetString(Convert.FromBase64String(args.Payload.Event.Whisper.Text.Trim()));
-            var payload = JsonSerializer.Deserialize<BroadcasterAuthPayload>(json);
-            if (payload is { Channel.Length: > 0, Token.Length: > 0 })
+            var normalizedChannel = channel.TrimStart('#').ToLowerInvariant();
+            var broadcaster = await _api.Helix.Users.GetUsersAsync(logins: [normalizedChannel]).ConfigureAwait(false);
+            var broadcasterId = broadcaster.Users.FirstOrDefault()?.Id;
+            
+            if (string.IsNullOrWhiteSpace(broadcasterId) || string.IsNullOrWhiteSpace(_botUserId))
+                return;
+
+            // Check moderator status
+            var mods = await _api.Helix.Moderation.GetModeratorsAsync(broadcasterId, userIds: [_botUserId]).ConfigureAwait(false);
+            var isMod = mods.Data.Length != 0;
+
+            // Check VIP status
+            var vips = await _api.Helix.Channels.GetVIPsAsync(broadcasterId).ConfigureAwait(false);
+            var isVip = vips.Data.Any(v => v.UserId == _botUserId);
+
+            UserStateChanged?.Invoke(this, new OnUserStateChangedArgs
             {
-                BroadcasterAuthReceived?.Invoke(this, new BroadcasterAuthReceivedArgs
-                {
-                    UserId = args.Payload.Event.FromUserId,
-                    Username = args.Payload.Event.FromUserName,
-                    Channel = payload.Channel,
-                    Token = payload.Token
-                });
-            }
+                Channel = normalizedChannel,
+                IsModerator = isMod,
+                IsVip = isVip
+            });
         }
-        catch (FormatException)
+        catch (Exception ex)
         {
-            _logger.LogDebug("[tw:es] ignored non-bootstrap whisper");
+            _logger.LogWarning(ex, "[tw:es] failed to fetch initial user state for #{Channel}", channel);
         }
-        catch (JsonException)
-        {
-            _logger.LogWarning("[tw:es] ignored malformed bootstrap whisper");
-        }
-        return Task.CompletedTask;
     }
 }

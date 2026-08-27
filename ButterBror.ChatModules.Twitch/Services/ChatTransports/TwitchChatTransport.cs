@@ -18,7 +18,7 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
     public bool IsConnected => _primary?.IsConnected == true || _transports.Values.Any(t => t.IsConnected);
     public IReadOnlyCollection<string> ConnectedChannels => _transports.Keys.ToArray();
     public event EventHandler<OnMessageReceivedArgs>? MessageReceived;
-    public event EventHandler<BroadcasterAuthReceivedArgs>? BroadcasterAuthReceived;
+    public event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
 
     public TwitchChatTransportStrategy(
         EventSubChatTransport eventSub,
@@ -26,10 +26,10 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
         ITwitchTokenManager tokenManager,
         ILogger<TwitchChatTransportStrategy> logger)
     {
-        this._eventSub = eventSub;
-        this._irc = irc;
-        this._tokenManager = tokenManager;
-        this._logger = logger;
+        _eventSub = eventSub;
+        _irc = irc;
+        _tokenManager = tokenManager;
+        _logger = logger;
         tokenManager.StateChanged += OnTokenStateChanged;
         SubscribeEvents(eventSub);
         SubscribeEvents(irc);
@@ -118,9 +118,10 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
     public async ValueTask DisposeAsync()
     {
         _eventSub.MessageReceived -= ForwardMessage;
-        _eventSub.BroadcasterAuthReceived -= ForwardBroadcasterAuth;
+        _eventSub.UserStateChanged -= ForwardUserStateChanged;
         _irc.MessageReceived -= ForwardMessage;
-        _irc.BroadcasterAuthReceived -= ForwardBroadcasterAuth;
+        _irc.UserStateChanged -= ForwardUserStateChanged;
+        
         await _eventSub.DisposeAsync().ConfigureAwait(false);
         await _irc.DisposeAsync().ConfigureAwait(false);
         _tokenManager.StateChanged -= OnTokenStateChanged;
@@ -142,7 +143,7 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
             }
             catch (Exception exception)
             {
-                _logger.LogWarning(exception, "[tw] eventsub subscription denied for #{Channel}; using irc", channel);
+                _logger.LogWarning("[tw] eventsub subscription denied for #{Channel}; using irc. reason='{Message}'", channel, exception.Message);
                 await SwitchToIrcAsync(channel, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -158,12 +159,13 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
     }
 
     private void ForwardMessage(object? sender, OnMessageReceivedArgs args) => MessageReceived?.Invoke(this, args);
-    private void ForwardBroadcasterAuth(object? sender, BroadcasterAuthReceivedArgs args) => BroadcasterAuthReceived?.Invoke(this, args);
 
+    private void ForwardUserStateChanged(object? sender, OnUserStateChangedArgs args) => UserStateChanged?.Invoke(this, args);
+    
     private void SubscribeEvents(ITwitchChatTransport transport)
     {
         transport.MessageReceived += ForwardMessage;
-        transport.BroadcasterAuthReceived += ForwardBroadcasterAuth;
+        transport.UserStateChanged += ForwardUserStateChanged;
     }
 
     private void OnTokenStateChanged(object? sender, TwitchTokenState state)

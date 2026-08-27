@@ -15,7 +15,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.Registry;
-using TwitchLib.Client.Events;
 using ChatMessage = ButterBror.Domain.Chat.ChatMessage;
 
 namespace ButterBror.ChatModules.Twitch;
@@ -24,8 +23,8 @@ public class TwitchModule : IChatModule
 {
     // ><> metadata
     public string ModuleId => "sillyapps:twitch";
-    public Version Version { get; } = new(1, 5, 0);
-    public List<ChatModuleFlags> Flags { get; } = [ChatModuleFlags.CanSendMessages];
+    public Version Version { get; } = new(1, 5, 4);
+    public List<ChatModuleFlags> Flags { get; } = [ ChatModuleFlags.CanSendMessages ];
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
         Services.Localization.DefaultTranslations;
@@ -46,7 +45,7 @@ public class TwitchModule : IChatModule
     private ITwitchTokenManager? _tokenManager;
     private TwitchAuthFileWatcher? _authWatcher;
     private TwitchTokenRefreshBackgroundService? _tokenRefreshService;
-    private TwitchAuthPollingService? _cloudflareAuthPollingService;
+    private TwitchAuthPollingService? _authPollingService;
     private TwitchBroadcasterService _broadcasterService = null!;
     private CommandFactories _commandFactories = null!;
 
@@ -80,7 +79,7 @@ public class TwitchModule : IChatModule
 
         var channelManager = _moduleServiceProvider.GetRequiredService<ITwitchChannelManager>();
         await InitializeModuleServices(serviceProvider, config, channelManager);
-        _cloudflareAuthPollingService = new TwitchAuthPollingService(
+        _authPollingService = new TwitchAuthPollingService(
             _localization,
             _moduleServiceProvider.GetRequiredService<IHttpClientFactory>(),
             _moduleServiceProvider.GetRequiredService<IOptions<TwitchConfiguration>>(),
@@ -88,7 +87,7 @@ public class TwitchModule : IChatModule
             channelManager,
             _db,
             _moduleServiceProvider.GetRequiredService<ILogger<TwitchAuthPollingService>>());
-        await _cloudflareAuthPollingService.StartAsync(CancellationToken.None);
+        await _authPollingService.StartAsync(CancellationToken.None);
 
         SubscribeEvents();
         _tokenManager.StateChanged += OnTokenStateChanged;
@@ -110,13 +109,18 @@ public class TwitchModule : IChatModule
             await _authWatcher.DisposeAsync();
         if (_tokenRefreshService is not null)
             await _tokenRefreshService.StopAsync(CancellationToken.None);
-        if (_cloudflareAuthPollingService is not null)
-            await _cloudflareAuthPollingService.StopAsync(CancellationToken.None);
+        if (_authPollingService is not null)
+            await _authPollingService.StopAsync(CancellationToken.None);
         await _twitchClient.DisconnectAsync();
-        if (_moduleServiceProvider is IAsyncDisposable asyncDisposable)
-            await asyncDisposable.DisposeAsync();
-        else if (_moduleServiceProvider is IDisposable disposable)
-            disposable.Dispose();
+        switch (_moduleServiceProvider)
+        {
+            case IAsyncDisposable asyncDisposable:
+                await asyncDisposable.DisposeAsync();
+                break;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+        }
         
         IsInitialized = false;
         _logger.LogInformation("[tw] module shutdown complete");
@@ -183,10 +187,9 @@ public class TwitchModule : IChatModule
         var options = Options.Create(config);
         
         _twitchClient = await TwitchClient.CreateAsync(
-            options,
             _moduleServiceProvider!.GetRequiredService<ResiliencePipelineProvider<string>>(),
             _moduleServiceProvider!.GetRequiredService<ILogger<TwitchClient>>(),
-            channelManager.GetChannelsAsync().GetAwaiter().GetResult().Select(channel => channel.Login),
+            channelManager.GetChannelsAsync().GetAwaiter().GetResult(),
             _db,
             _moduleServiceProvider!.GetRequiredService<ITwitchChatTransport>(),
             _tokenManager!
@@ -207,19 +210,12 @@ public class TwitchModule : IChatModule
     {
         _twitchClient.OnMessageReceived += OnMessageReceived;
         _twitchClient.OnDisconnected += OnDisconnected;
-        _twitchClient.OnBroadcasterAuthReceived += _broadcasterService.OnBroadcasterAuthReceived;
-
-        _twitchClient.OnNewSubscriber += (_, e) => _logger.LogInformation("[tw] new sub in #{Channel}: {User} ({Plan})", e.Channel, e.Username, e.SubscriptionPlan);
-        _twitchClient.OnGiftedSubscription += (_, e) => _logger.LogInformation("[tw] gifted sub in #{Channel}: {Gifter} -> {Recipient}", e.Channel, e.GifterUsername, e.RecipientUsername);
-        _twitchClient.OnRaidNotification += (_, e) => _logger.LogInformation("[tw] raid in #{Channel}: {Raider} ({Viewers} viewers)", e.Channel, e.RaiderUsername, e.ViewerCount);
-        _twitchClient.OnBitsReceived += (_, e) => _logger.LogInformation("[tw] bits in #{Channel}: {User} ({Bits} bits)", e.Channel, e.Username, e.Bits);
     }
 
     private void UnsubscribeEvents()
     {
         _twitchClient.OnMessageReceived -= OnMessageReceived;
         _twitchClient.OnDisconnected -= OnDisconnected;
-        _twitchClient.OnBroadcasterAuthReceived -= _broadcasterService.OnBroadcasterAuthReceived;
     }
 
     // ><> connection
@@ -263,7 +259,7 @@ public class TwitchModule : IChatModule
     }
 
     // ><> event handlers
-    private void OnDisconnected(object? sender, OnDisconnectedArgs e) =>
+    private void OnDisconnected(object? sender, Events.OnDisconnectedArgs e) =>
         _logger.LogWarning("[tw] disconnected");
 
     private void OnMessageReceived(object? sender, Events.OnMessageReceivedArgs e) =>

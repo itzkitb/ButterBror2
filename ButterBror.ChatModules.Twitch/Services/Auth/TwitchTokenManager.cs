@@ -137,7 +137,7 @@ public sealed class TwitchTokenManager(
     private async Task RefreshAppTokenAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_configuration.ClientId) || string.IsNullOrWhiteSpace(_configuration.ClientSecret))
-            throw new InvalidOperationException("Twitch ClientId and ClientSecret are required for an App Access Token.");
+            throw new InvalidOperationException("twitch clientid and clientsecret are required for an aat");
 
         await _refreshLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -147,14 +147,14 @@ public sealed class TwitchTokenManager(
             using var response = await httpClientFactory.CreateClient("twitch-token").PostAsync(
                 "oauth2/token",
                 new FormUrlEncodedContent([
-                    new("client_id", _configuration.ClientId),
-                    new("client_secret", _configuration.ClientSecret),
-                    new("grant_type", "client_credentials")
+                    new KeyValuePair<string, string>("client_id", _configuration.ClientId),
+                    new KeyValuePair<string, string>("client_secret", _configuration.ClientSecret),
+                    new KeyValuePair<string, string>("grant_type", "client_credentials")
                 ]),
                 cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             var token = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("Twitch returned an empty app token response.");
+                ?? throw new InvalidOperationException("twitch returned an empty app token response");
             var next = Current with
             {
                 AppAccessToken = token.AccessToken,

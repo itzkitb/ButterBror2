@@ -2,7 +2,6 @@ using ButterBror.ChatModules.Twitch.Interfaces;
 using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.ChatModules.Twitch.Services.Auth;
 using ButterBror.ChatModules.Twitch.Services.ChatTransports;
-using ButterBror.Data.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using TwitchLib.Api;
 using TwitchLib.EventSub.Websockets;

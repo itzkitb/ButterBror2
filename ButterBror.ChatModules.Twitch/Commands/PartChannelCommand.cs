@@ -1,3 +1,4 @@
+using ButterBror.ChatModules.Twitch.Interfaces;
 using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.Core.Interfaces;
 using ButterBror.Core.Modules.Commands;

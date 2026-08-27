@@ -8,7 +8,7 @@ public interface ITwitchChatTransport : IAsyncDisposable
     bool IsConnected { get; }
     IReadOnlyCollection<string> ConnectedChannels { get; }
     event EventHandler<OnMessageReceivedArgs>? MessageReceived;
-    event EventHandler<BroadcasterAuthReceivedArgs>? BroadcasterAuthReceived;
+    event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
     Task ConnectAsync(CancellationToken cancellationToken = default);
     Task DisconnectAsync(CancellationToken cancellationToken = default);
     Task JoinChannelAsync(string channel, CancellationToken cancellationToken = default);

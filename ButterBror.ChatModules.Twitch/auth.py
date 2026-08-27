@@ -14,7 +14,7 @@ CLIENT_SECRET = "ur_client_secret"
 REDIRECT_URI = "http://localhost:17563"
 
 # ><> scopes
-SCOPES = "user:bot chat:read chat:edit user:write:chat user:read:chat"
+SCOPES = "user:bot chat:read chat:edit user:write:chat user:read:chat user:read:whispers user:manage:whispers"
 
 class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
     """http request handler to intercept the authorization code from the redirect uri"""
