@@ -522,3 +522,5 @@ public class TwitchModule : IChatModule
             throw new InvalidOperationException("module is not initialized");
     }
 }
+
+// ><> test
