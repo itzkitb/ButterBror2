@@ -27,13 +27,14 @@ public sealed class IrcChatTransport : ITwitchChatTransport
         _logger = logger;
         _client = CreateClient();
         _client.OnMessageReceived += OnMessageReceived;
+        _client.OnUserStateChanged += OnUserStateChanged;
     }
 
     public string Name => "irc";
     public bool IsConnected => _client.IsConnected;
     public IReadOnlyCollection<string> ConnectedChannels => _client.JoinedChannels.Select(channel => channel.Channel).ToArray();
     public event EventHandler<OnMessageReceivedArgs>? MessageReceived;
-    public event EventHandler<BroadcasterAuthReceivedArgs>? BroadcasterAuthReceived;
+    public event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
@@ -66,6 +67,7 @@ public sealed class IrcChatTransport : ITwitchChatTransport
     {
         await DisconnectAsync().ConfigureAwait(false);
         _client.OnMessageReceived -= OnMessageReceived;
+        _client.OnUserStateChanged -= OnUserStateChanged;
     }
 
     private static TwitchLib.Client.TwitchClient CreateClient()
@@ -94,6 +96,17 @@ public sealed class IrcChatTransport : ITwitchChatTransport
                 Badges = message.Badges,
                 Color = message.HexColor
             }
+        });
+        return Task.CompletedTask;
+    }
+    
+    private Task OnUserStateChanged(object? sender, TwitchLib.Client.Events.OnUserStateChangedArgs args)
+    {
+        UserStateChanged?.Invoke(this, new OnUserStateChangedArgs
+        {
+            Channel = args.UserState.Channel.ToLowerInvariant(),
+            IsModerator = args.UserState.IsModerator,
+            IsVip = args.UserState.Badges.Any(b => b.Key.Equals("vip", StringComparison.OrdinalIgnoreCase))
         });
         return Task.CompletedTask;
     }

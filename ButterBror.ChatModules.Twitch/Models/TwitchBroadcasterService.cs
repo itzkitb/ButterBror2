@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Text.Json;
 using ButterBror.ChatModules.Twitch.Events;
+using ButterBror.ChatModules.Twitch.Interfaces;
 using ButterBror.Data;
 using ButterBror.Data.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -120,7 +121,6 @@ internal class TwitchBroadcasterService
             var tokenKey = $"twitch:broadcaster_token:{channelId}";
             await _db.SetDataAsync(tokenKey, e.Token);
             _twitchClient.SetBroadcasterToken(channelId, e.Token);
-            _twitchClient.ClearIrcFallback(channelId);
             await _twitchClient.RefreshChannelAsync(channelId);
 
             var managedChannel = await _twitchClient.ResolveChannelAsync(e.Channel);

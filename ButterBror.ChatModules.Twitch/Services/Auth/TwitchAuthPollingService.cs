@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using ButterBror.ChatModules.Twitch.Interfaces;
 using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.Core.Interfaces;
 using ButterBror.Data.Interfaces;
@@ -92,7 +93,7 @@ public sealed class TwitchAuthPollingService(
                 await twitchClient.JoinChannelAsync(channel.Login).ConfigureAwait(false);
 
             if (localization != null)
-                await twitchClient.SendMessageAsync(channel.Id, 
+                await twitchClient.SendMessageAsync(channel.Login, 
                 await localization.GetStringAsync("text.twitch.auth", "EN_US"));
         }
         catch (Exception exception)
