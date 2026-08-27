@@ -77,6 +77,7 @@ builder.Services.AddScoped<ICommandUsageRepository, RedisCommandUsageRepository>
 builder.Services.AddSingleton<ICustomDataRepository, RedisCustomDataRepository>();
 builder.Services.AddScoped<IBanphraseRepository, BanphraseRepository>();
 builder.Services.AddScoped<IErrorReportRepository, ErrorReportRepository>();
+builder.Services.AddSingleton<IDataRepository, DataRepository>();
 
 // ^ users
 builder.Services.AddScoped<IUserService, UserService>();
