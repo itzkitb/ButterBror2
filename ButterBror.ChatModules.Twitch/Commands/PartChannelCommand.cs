@@ -8,7 +8,11 @@ using Microsoft.Extensions.Logging;
 
 namespace ButterBror.ChatModules.Twitch.Commands;
 
-public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient twitchClient, ITwitchChannelManager channelManager)
+public class PartChannelCommand(
+    IServiceProvider serviceProvider,
+    ITwitchClient twitchClient,
+    ITwitchChannelManager channelManager,
+    ITwitchNotificationService notificationService)
     : ICommand
 {
     private readonly ILogger<PartChannelCommand> _logger = serviceProvider.GetRequiredService<ILogger<PartChannelCommand>>();
@@ -47,6 +51,7 @@ public class PartChannelCommand(IServiceProvider serviceProvider, ITwitchClient 
                 await _localization.GetStringAsync("command.twitch.channel_not_found", context.Locale));
         await channelManager.RemoveChannelAsync(channel.Id);
         await twitchClient.LeaveChannelAsync(channel.Login);
+        await notificationService.NotifyChannelPartedAsync(channel.Login, context.User.DisplayName, context.CancellationToken);
 
         _logger.LogInformation("[tw] parted channel. chat={Channel}, user={User}",
             channelName, context.User.DisplayName);

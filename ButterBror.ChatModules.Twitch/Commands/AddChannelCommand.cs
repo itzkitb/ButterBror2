@@ -10,7 +10,8 @@ namespace ButterBror.ChatModules.Twitch.Commands;
 public class AddChannelCommand(
     IServiceProvider serviceProvider,
     ITwitchClient twitchClient,
-    ITwitchChannelManager channelManager)
+    ITwitchChannelManager channelManager,
+    ITwitchNotificationService notificationService)
     : ICommand
 {
     private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
@@ -50,6 +51,7 @@ public class AddChannelCommand(
 
         // S4: Connect on the fly
         await twitchClient.AddChannelAsync(channelName);
+        await notificationService.NotifyChannelAddedAsync(channelName, context.User.DisplayName, context.CancellationToken);
 
         return CommandResult.Successfully(
             await _localization.GetStringAsync("command.add_channel.success", context.Locale,

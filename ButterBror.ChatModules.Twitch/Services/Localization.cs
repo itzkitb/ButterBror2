@@ -78,6 +78,15 @@ public static class Localization
                 { "command.set_prefix.empty", "Prefix cannot be empty or whitespace" },
                 { "command.set_prefix.32chars", "Prefix must be 1-32 characters long" },
                 { "command.set_prefix.success", "Command prefix for #{0} has been changed to '{1}'" },
+                // events
+                { "notification.irc.connect", "IRC connected" },
+                { "notification.irc.reconnect", "IRC reconnected" },
+                { "notification.eventsub.connect", "EventSub connected" },
+                { "notification.eventsub.reconnect", "EventSub reconnected" },
+                { "notification.channel.join", "Joined channel #{0} (by @{1})" },
+                { "notification.channel.part", "Left channel #{0} (by @{1})" },
+                { "notification.channel.add", "Channel #{0} added (by @{1})" },
+                { "notification.channel.remove", "Channel #{0} removed (by @{1})" },
             }
         }
     };

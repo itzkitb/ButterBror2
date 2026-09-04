@@ -70,6 +70,8 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     public event EventHandler<EventArgs>? TransportFailed;
     public event EventHandler<OnMessageReceivedArgs>? MessageReceived;
     public event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
+    public event EventHandler<TransportConnectionEventArgs>? TransportConnected;
+    public event EventHandler<TransportConnectionEventArgs>? TransportReconnected;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -305,6 +307,8 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         IsConnected = true;
         _logger.LogInformation("[tw:es] connected. session: {SessionId}", _client.SessionId);
 
+        TransportConnected?.Invoke(this, new TransportConnectionEventArgs { TransportName = Name });
+        
         _ = Task.Run(async () =>
         {
             try
@@ -333,6 +337,8 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     {
         IsConnected = true;
         _logger.LogInformation("[tw:es] successfully reconnected. session: {SessionId}", _client.SessionId);
+        
+        TransportReconnected?.Invoke(this, new TransportConnectionEventArgs { TransportName = Name });
         
         return Task.CompletedTask;
     }

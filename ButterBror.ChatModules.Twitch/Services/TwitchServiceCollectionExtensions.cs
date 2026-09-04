@@ -27,6 +27,7 @@ public static class TwitchServiceCollectionExtensions
         services.AddSingleton<EventSubChatTransport>();
         services.AddSingleton<IrcChatTransport>();
         services.AddSingleton<ITwitchChatTransport, TwitchChatTransportStrategy>();
+        services.AddSingleton<ITwitchNotificationService, TwitchNotificationService>();
         return services;
     }
 }

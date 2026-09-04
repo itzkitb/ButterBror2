@@ -23,7 +23,7 @@ public class TwitchModule : IChatModule
 {
     // ><> metadata
     public string ModuleId => "sillyapps:twitch";
-    public Version Version { get; } = new(1, 5, 6);
+    public Version Version { get; } = new(1, 5, 7);
     public List<ChatModuleFlags> Flags { get; } = [ ChatModuleFlags.CanSendMessages ];
 
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations =>
@@ -43,6 +43,7 @@ public class TwitchModule : IChatModule
     private TwitchClient _twitchClient = null!;
     private IServiceProvider? _moduleServiceProvider;
     private ITwitchTokenManager? _tokenManager;
+    private ITwitchNotificationService? _notificationService;
     private TwitchAuthFileWatcher? _authWatcher;
     private TwitchTokenRefreshBackgroundService? _tokenRefreshService;
     private TwitchAuthPollingService? _authPollingService;
@@ -86,7 +87,8 @@ public class TwitchModule : IChatModule
             _twitchClient,
             channelManager,
             _db,
-            _moduleServiceProvider.GetRequiredService<ILogger<TwitchAuthPollingService>>());
+            _moduleServiceProvider.GetRequiredService<ILogger<TwitchAuthPollingService>>(),
+            _notificationService);
         await _authPollingService.StartAsync(CancellationToken.None);
 
         SubscribeEvents();
@@ -147,7 +149,7 @@ public class TwitchModule : IChatModule
         _messageRender = new TwitchMessageRender(pastebinService, localization);
     }
 
-    private static IServiceProvider CreateModuleServiceProvider(IServiceProvider host, TwitchConfiguration config)
+    private IServiceProvider CreateModuleServiceProvider(IServiceProvider host, TwitchConfiguration config)
     {
         var services = new ServiceCollection();
         services.AddSingleton(host.GetRequiredService<IBotCore>());
@@ -157,6 +159,9 @@ public class TwitchModule : IChatModule
         services.AddSingleton(host.GetRequiredService<IConfigurationService>());
         services.AddSingleton(host.GetRequiredService<IAppDataPathProvider>());
         services.AddSingleton(host.GetRequiredService<ILoggerFactory>());
+        services.AddSingleton(_messageRender ?? new TwitchMessageRender(
+            host.GetRequiredService<IPasteBinService>(), 
+            host.GetRequiredService<ILocalizationService>()));
         services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
         if (host.GetService<IDashboardBridge>() is { } dashboard)
             services.AddSingleton(dashboard);
@@ -195,6 +200,9 @@ public class TwitchModule : IChatModule
             _tokenManager!
         );
 
+        _notificationService = _moduleServiceProvider!.GetRequiredService<ITwitchNotificationService>();
+        _notificationService.SetClient(_twitchClient);
+        
         _broadcasterService = new TwitchBroadcasterService(
             _twitchClient,
             _db,
@@ -202,7 +210,13 @@ public class TwitchModule : IChatModule
             sp.GetRequiredService<ILogger<TwitchBroadcasterService>>(),
             channelManager);
 
-        _commandFactories = new CommandFactories(this, _twitchClient, options, channelManager, sp);
+        _commandFactories = new CommandFactories(
+            this,
+            _twitchClient,
+            options,
+            channelManager,
+            sp,
+            _notificationService);
     }
 
     // ><> events

@@ -11,7 +11,8 @@ namespace ButterBror.ChatModules.Twitch.Commands;
 public class JoinChannelCommand(
     IServiceProvider serviceProvider,
     ITwitchClient twitchClient,
-    ITwitchChannelManager channelManager)
+    ITwitchChannelManager channelManager,
+    ITwitchNotificationService notificationService)
     : ICommand
 {
     private readonly ILogger<JoinChannelCommand> _logger = serviceProvider.GetRequiredService<ILogger<JoinChannelCommand>>();
@@ -51,6 +52,7 @@ public class JoinChannelCommand(
                 await _localization.GetStringAsync("command.twitch.channel_not_found", context.Locale));
         await channelManager.AddChannelAsync(channel);
         await twitchClient.JoinChannelAsync(channel.Login);
+        await notificationService.NotifyChannelJoinedAsync(channel.Login, context.User.DisplayName, context.CancellationToken);
         _logger.LogInformation("[tw] joined channel '{Channel}' by user '{User}'", channelName, context.User.DisplayName);
 
         return CommandResult.Successfully(

@@ -19,7 +19,8 @@ public sealed class TwitchAuthPollingService(
     ITwitchClient twitchClient,
     ITwitchChannelManager channelManager,
     ICustomDataRepository repository,
-    ILogger<TwitchAuthPollingService> logger) : BackgroundService
+    ILogger<TwitchAuthPollingService> logger,
+    ITwitchNotificationService notificationService) : BackgroundService
 {
     private readonly TwitchConfiguration _configuration = options.Value;
     private int _consecutiveFailures;
@@ -93,6 +94,8 @@ public sealed class TwitchAuthPollingService(
             else
                 await twitchClient.JoinChannelAsync(channel.Login).ConfigureAwait(false);
 
+            await notificationService.NotifyChannelAddedAsync(channel.Login, cancellationToken: cancellationToken);
+            
             if (localization != null)
                 await twitchClient.SendMessageAsync(channel.Login, 
                 await localization.GetStringAsync("text.twitch.auth", "EN_US"));

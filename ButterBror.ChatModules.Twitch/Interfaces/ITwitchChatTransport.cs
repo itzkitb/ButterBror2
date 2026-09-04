@@ -7,9 +7,13 @@ public interface ITwitchChatTransport : IAsyncDisposable
     string Name { get; }
     bool IsConnected { get; }
     IReadOnlyCollection<string> ConnectedChannels { get; }
+    
     event EventHandler<OnMessageReceivedArgs>? MessageReceived;
     event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
     event EventHandler<EventArgs>? TransportFailed;
+    event EventHandler<TransportConnectionEventArgs>? TransportConnected;
+    event EventHandler<TransportConnectionEventArgs>? TransportReconnected;
+    
     Task ConnectAsync(CancellationToken cancellationToken = default);
     Task DisconnectAsync(CancellationToken cancellationToken = default);
     Task JoinChannelAsync(string channel, CancellationToken cancellationToken = default);

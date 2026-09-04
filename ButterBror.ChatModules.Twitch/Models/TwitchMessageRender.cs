@@ -5,7 +5,7 @@ using ButterBror.Core.Messaging.Enums;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 
-internal class TwitchMessageRender(IPasteBinService pasteBinService, ILocalizationService localization)
+public class TwitchMessageRender(IPasteBinService pasteBinService, ILocalizationService localization)
 {
     private const int MaxTwitchMessageLength = 500;
     

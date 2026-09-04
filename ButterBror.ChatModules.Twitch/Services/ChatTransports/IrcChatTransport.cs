@@ -43,6 +43,8 @@ public sealed class IrcChatTransport(
     public event EventHandler<OnMessageReceivedArgs>? MessageReceived;
     public event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
     public event EventHandler<EventArgs>? TransportFailed;
+    public event EventHandler<TransportConnectionEventArgs>? TransportConnected;
+    public event EventHandler<TransportConnectionEventArgs>? TransportReconnected;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -60,7 +62,7 @@ public sealed class IrcChatTransport(
             _lifecycleCts = new CancellationTokenSource();
             _reconnectAttempts = 0;
 
-            await ConnectCoreAsync(_lifecycleCts.Token).ConfigureAwait(false);
+            await ConnectCoreAsync(_lifecycleCts.Token, isReconnect: false).ConfigureAwait(false);
         }
         finally
         {
@@ -132,7 +134,7 @@ public sealed class IrcChatTransport(
         await DisconnectAndDisposeCurrentClient();
     }
 
-    private async Task ConnectCoreAsync(CancellationToken cancellationToken)
+    private async Task ConnectCoreAsync(CancellationToken cancellationToken, bool isReconnect = false)
     {
         await DisconnectAndDisposeCurrentClient();
 
@@ -159,6 +161,11 @@ public sealed class IrcChatTransport(
 
         await RejoinDesiredChannelsAsync(cancellationToken).ConfigureAwait(false);
 
+        if (isReconnect)
+            TransportReconnected?.Invoke(this, new TransportConnectionEventArgs { TransportName = Name });
+        else
+            TransportConnected?.Invoke(this, new TransportConnectionEventArgs { TransportName = Name });
+        
         _heartbeatTask = Task.Run(() => RunHeartbeatAsync(cancellationToken), cancellationToken);
     }
 
@@ -227,7 +234,7 @@ public sealed class IrcChatTransport(
 
                 try
                 {
-                    await ConnectCoreAsync(_lifecycleCts.Token).ConfigureAwait(false);
+                    await ConnectCoreAsync(_lifecycleCts.Token, isReconnect: true).ConfigureAwait(false);
                     _reconnectAttempts = 0;
                     logger.LogInformation("[tw:irc] successfully reconnected");
                     return;

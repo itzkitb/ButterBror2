@@ -33,14 +33,15 @@ public class CommandFactories
         ITwitchClient twitchClient,
         IOptions<TwitchConfiguration> config,
         ITwitchChannelManager channelManager,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ITwitchNotificationService notificationService)
     {
-        _joinCommandFactory = () => new JoinChannelCommand(serviceProvider, twitchClient, channelManager);
-        _partCommandFactory = () => new PartChannelCommand(serviceProvider, twitchClient, channelManager);
+        _joinCommandFactory = () => new JoinChannelCommand(serviceProvider, twitchClient, channelManager, notificationService);
+        _partCommandFactory = () => new PartChannelCommand(serviceProvider, twitchClient, channelManager, notificationService);
         _setPrefixCommandFactory = () => new SetPrefixCommand(serviceProvider, twitchModule);
         _authCommandFactory = () => new AuthCommand(serviceProvider, config);
-        _addChannelCommandFactory = () => new AddChannelCommand(serviceProvider, twitchClient, channelManager);
-        _deleteChannelCommandFactory = () => new DeleteChannelCommand(serviceProvider, twitchClient, channelManager);
+        _addChannelCommandFactory = () => new AddChannelCommand(serviceProvider, twitchClient, channelManager, notificationService);
+        _deleteChannelCommandFactory = () => new DeleteChannelCommand(serviceProvider, twitchClient, channelManager, notificationService);
         _channelSettingsCommandFactory = () => new ChannelSettingsCommand(serviceProvider, twitchClient);
     }
 }

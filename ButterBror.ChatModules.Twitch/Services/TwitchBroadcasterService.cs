@@ -2,11 +2,11 @@
 using System.Text.Json;
 using ButterBror.ChatModules.Twitch.Events;
 using ButterBror.ChatModules.Twitch.Interfaces;
-using ButterBror.Data;
+using ButterBror.ChatModules.Twitch.Models;
 using ButterBror.Data.Interfaces;
 using Microsoft.Extensions.Logging;
 
-namespace ButterBror.ChatModules.Twitch.Models;
+namespace ButterBror.ChatModules.Twitch.Services;
 
 internal class TwitchBroadcasterService
 {
@@ -80,60 +80,6 @@ internal class TwitchBroadcasterService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[tw] failed to load broadcaster tokens from redis");
-        }
-    }
-
-    public void OnBroadcasterAuthReceived(object? sender, BroadcasterAuthReceivedArgs e)
-    {
-        _ = SafeHandleBroadcasterAuthAsync(e).ContinueWith(
-            t => _logger.LogError(t.Exception, "[tw] unhandled exception in broadcaster auth handler"),
-            TaskContinuationOptions.OnlyOnFaulted
-        );
-    }
-
-    private async Task SafeHandleBroadcasterAuthAsync(BroadcasterAuthReceivedArgs e)
-    {
-        try
-        {
-            if (_twitchClient == null)
-                throw new Exception("Twitch client not initialized");
-            
-            if (_channelManager == null)
-                throw new Exception("Twitch channel manager not initialized");
-            
-            var channelId = await _twitchClient.GetChannelIdAsync(e.Channel);
-            if (string.IsNullOrWhiteSpace(channelId))
-            {
-                _logger.LogWarning("[tw] channel {Channel} not found", e.Channel);
-                return;
-            }
-
-            var isValid = await _twitchClient.ValidateBroadcasterTokenAsync(e.Token);
-            if (!isValid)
-            {
-                _logger.LogWarning("[tw] invalid broadcaster token from {User} for #{Channel}", e.Username, e.Channel);
-                await _twitchClient.SendMessageAsync(
-                    e.Channel, 
-                    "❌ | Failed to authorize. The token is invalid or expired");
-                return;
-            }
-
-            var tokenKey = $"twitch:broadcaster_token:{channelId}";
-            await _db.SetDataAsync(tokenKey, e.Token);
-            _twitchClient.SetBroadcasterToken(channelId, e.Token);
-            await _twitchClient.RefreshChannelAsync(channelId);
-
-            var managedChannel = await _twitchClient.ResolveChannelAsync(e.Channel);
-            if (managedChannel is not null)
-                await _channelManager.AddChannelAsync(managedChannel);
-            await _twitchClient.AddChannelAsync(e.Channel);
-            await _twitchClient.SendMessageAsync(e.Channel, "✅ | Successfully authorized, hi!");
-
-            _logger.LogInformation("[tw] successfully authorized #{Channel}", e.Channel);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[tw] error processing broadcaster auth from {User}", e.Username);
         }
     }
 }

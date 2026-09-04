@@ -37,6 +37,8 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
     public event EventHandler<OnMessageReceivedArgs>? MessageReceived;
     public event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
     public event EventHandler<EventArgs>? TransportFailed;
+    public event EventHandler<TransportConnectionEventArgs>? TransportConnected;
+    public event EventHandler<TransportConnectionEventArgs>? TransportReconnected;
 
     public TwitchChatTransportStrategy(
         EventSubChatTransport eventSub,
@@ -53,9 +55,25 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
         SubscribeEvents(_irc);
         
         _eventSub.TransportFailed += OnEventSubTransportFailed;
+        _eventSub.TransportConnected += OnEventSubTransportConnected;
+        _eventSub.TransportReconnected += OnEventSubTransportReconnected;
         _irc.TransportFailed += OnIrcTransportFailed;
+        _irc.TransportConnected += OnIrcTransportConnected;
+        _irc.TransportReconnected += OnIrcTransportReconnected;
     }
 
+    private void OnEventSubTransportConnected(object? sender, TransportConnectionEventArgs e)
+        => TransportConnected?.Invoke(this, e);
+
+    private void OnEventSubTransportReconnected(object? sender, TransportConnectionEventArgs e)
+        => TransportReconnected?.Invoke(this, e);
+
+    private void OnIrcTransportConnected(object? sender, TransportConnectionEventArgs e)
+        => TransportConnected?.Invoke(this, e);
+
+    private void OnIrcTransportReconnected(object? sender, TransportConnectionEventArgs e)
+        => TransportReconnected?.Invoke(this, e);
+    
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -160,10 +178,14 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
         _eventSub.MessageReceived -= ForwardMessage;
         _eventSub.UserStateChanged -= ForwardUserStateChanged;
         _eventSub.TransportFailed -= OnEventSubTransportFailed;
+        _eventSub.TransportConnected -= OnEventSubTransportConnected;
+        _eventSub.TransportReconnected -= OnEventSubTransportReconnected;
         
         _irc.MessageReceived -= ForwardMessage;
         _irc.UserStateChanged -= ForwardUserStateChanged;
         _irc.TransportFailed -= OnIrcTransportFailed;
+        _irc.TransportConnected -= OnIrcTransportConnected;
+        _irc.TransportReconnected -= OnIrcTransportReconnected;
         
         await _eventSub.DisposeAsync().ConfigureAwait(false);
         await _irc.DisposeAsync().ConfigureAwait(false);
