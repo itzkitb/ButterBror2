@@ -61,6 +61,7 @@ public sealed class TwitchAuthPollingService(
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _configuration.BotApiToken);
             return request;
         }, cancellationToken).ConfigureAwait(false);
+        logger.LogDebug(await response.Content.ReadAsStringAsync(cancellationToken));
         response.EnsureSuccessStatusCode();
         var pending = await response.Content.ReadFromJsonAsync<PendingAuthResponse>(cancellationToken).ConfigureAwait(false);
         if (pending?.Tokens is null)

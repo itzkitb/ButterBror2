@@ -168,6 +168,10 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         {
             _logger.LogError(ex, "[tw] error during disconnection");
         }
+        finally
+        {
+            _isDisconnecting = false;
+        }
     }
     
     // ><> public api - channels

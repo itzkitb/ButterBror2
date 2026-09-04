@@ -24,8 +24,12 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     private readonly HashSet<string> _subscriptions = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _subscriptionLock = new(1, 1);
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
+    private readonly SemaphoreSlim _reconnectLock = new(1, 1);
     
     private string _botUserId = string.Empty;
+    private bool _disposed;
+    private Task? _reconnectTask;
+    private int _reconnectAttempts;
 
     public EventSubChatTransport(
         TwitchAPI api,
@@ -47,11 +51,14 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         client.WebsocketConnected += OnWebsocketConnected;
         client.WebsocketReconnected += OnWebsocketReconnected;
         client.WebsocketDisconnected += OnWebsocketDisconnected;
+        client.ErrorOccurred += OnErrorOccurred;
     }
 
     public string Name => "eventsub";
     public bool IsConnected { get; private set; }
     public IReadOnlyCollection<string> ConnectedChannels => _subscriptions.ToArray();
+    
+    public event EventHandler<EventArgs>? TransportFailed;
     public event EventHandler<OnMessageReceivedArgs>? MessageReceived;
     public event EventHandler<OnUserStateChangedArgs>? UserStateChanged;
 
@@ -60,6 +67,8 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         _botUserId = _configuration.BotUserId;
         _api.Settings.ClientId = _configuration.ClientId;
         _api.Settings.AccessToken = await _tokens.GetUserAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+        
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
     }
     
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
@@ -75,6 +84,7 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
 
             _logger.LogInformation("[tw:es] connecting...");
             await _client.ConnectAsync(new Uri("wss://eventsub.wss.twitch.tv/ws")).ConfigureAwait(false);
+            _reconnectAttempts = 0;
         }
         finally
         {
@@ -250,12 +260,15 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         IsConnected = false;
+        
         _client.ChannelChatMessage -= OnChatMessage;
         _client.UserWhisperMessage -= OnWhisperMessage;
         _client.WebsocketConnected -= OnWebsocketConnected;
         _client.WebsocketReconnected -= OnWebsocketReconnected;
         _client.WebsocketDisconnected -= OnWebsocketDisconnected;
+        _client.ErrorOccurred -= OnErrorOccurred;
         
         try
         {
@@ -268,41 +281,32 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         
         _subscriptionLock.Dispose();
         _connectionLock.Dispose();
+        _reconnectLock.Dispose();
     }
 
     private Task OnWebsocketConnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketConnectedArgs args)
     {
-        try
+        IsConnected = true;
+        _logger.LogInformation("[tw:es] connected. session: {SessionId}", _client.SessionId);
+
+        _ = Task.Run(async () =>
         {
-            IsConnected = true;
-            _logger.LogInformation("[tw:es] connected. session: {SessionId}", _client.SessionId);
-        
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    if (_subscriptions.Count > 0)
-                    {
-                        _logger.LogInformation("[tw:es] restoring {Count} eventsub subscriptions", _subscriptions.Count);
-                        await ResubscribeChannelsAsync().ConfigureAwait(false);
-                    }
+                if (_subscriptions.Count > 0)
+                    await ResubscribeChannelsAsync().ConfigureAwait(false);
                 
-                    await SubscribeToWhispersAsync(CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "[tw:es] error during post-connection subscriptions setup");
-                }
-            });
-            return Task.CompletedTask;
-        }
-        catch (Exception exception)
-        {
-            return Task.FromException(exception);
-        }
+                await SubscribeToWhispersAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[tw:es] error during post-connection subscriptions setup");
+            }
+        });
+
+        return Task.CompletedTask;
     }
-
-
+    
     private Task OnWebsocketReconnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketReconnectedArgs args)
     {
         IsConnected = true;
@@ -311,12 +315,77 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         return Task.CompletedTask;
     }
 
-
     private Task OnWebsocketDisconnected(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.WebsocketDisconnectedArgs args)
     {
         IsConnected = false;
-        _logger.LogWarning("[tw:es] disconnected. data={Reason}", args);
+        _logger.LogWarning("[tw:es] disconnected. triggering internal reconnect loop.");
+        TriggerReconnect("websocket disconnected");
+        
         return Task.CompletedTask;
+    }
+    
+    private Task OnErrorOccurred(object? sender, TwitchLib.EventSub.Websockets.Core.EventArgs.ErrorOccuredArgs args)
+    {
+        IsConnected = false;
+        _logger.LogError(args.Exception, "[tw:es] error occurred: {Message}", args.Message);
+        TriggerReconnect("error occurred");
+        
+        return Task.CompletedTask;
+    }
+    
+    private void TriggerReconnect(string reason)
+    {
+        if (_disposed) return;
+        
+        if (_reconnectTask is { IsCompleted: false }) return;
+
+        _reconnectTask = Task.Run(() => ReconnectLoopAsync(reason));
+    }
+    
+    private async Task ReconnectLoopAsync(string reason)
+    {
+        if (!await _reconnectLock.WaitAsync(0).ConfigureAwait(false)) return;
+
+        try
+        {
+            _logger.LogWarning("[tw:es] starting reconnect loop. reason: {Reason}", reason);
+
+            while (!_disposed && !IsConnected)
+            {
+                _reconnectAttempts++;
+                var delay = TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, _reconnectAttempts))) +
+                            TimeSpan.FromMilliseconds(Random.Shared.Next(0, 1000));
+
+                _logger.LogInformation("[tw:es] reconnect attempt {Attempt} in {Delay}s", _reconnectAttempts, delay.TotalSeconds);
+                await Task.Delay(delay).ConfigureAwait(false);
+
+                try
+                {
+                    var success = await _client.ConnectAsync(new Uri("wss://eventsub.wss.twitch.tv/ws")).ConfigureAwait(false);
+                    if (success)
+                    {
+                        _logger.LogInformation("[tw:es] successfully reconnected");
+                        _reconnectAttempts = 0;
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[tw:es] reconnect attempt {Attempt} failed", _reconnectAttempts);
+                }
+
+                if (_reconnectAttempts < 10)
+                    continue;
+                
+                _logger.LogError("[tw:es] max reconnect attempts reached. triggering transport failover");
+                TransportFailed?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+        }
+        finally
+        {
+            _reconnectLock.Release();
+        }
     }
 
     private Task OnChatMessage(object? sender, ChannelChatMessageArgs args)
@@ -376,12 +445,10 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
             
             if (string.IsNullOrWhiteSpace(broadcasterId) || string.IsNullOrWhiteSpace(_botUserId))
                 return;
-
-            // Check moderator status
+            
             var mods = await _api.Helix.Moderation.GetModeratorsAsync(broadcasterId, userIds: [_botUserId]).ConfigureAwait(false);
             var isMod = mods.Data.Length != 0;
-
-            // Check VIP status
+            
             var vips = await _api.Helix.Channels.GetVIPsAsync(broadcasterId).ConfigureAwait(false);
             var isVip = vips.Data.Any(v => v.UserId == _botUserId);
 
