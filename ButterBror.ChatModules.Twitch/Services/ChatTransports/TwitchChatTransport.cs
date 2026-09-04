@@ -14,6 +14,7 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
     
     private readonly ConcurrentDictionary<string, ITwitchChatTransport> _transports = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _stateLock = new();
+    private readonly SemaphoreSlim _transportSwitchLock = new(1, 1);
     
     private ITwitchChatTransport? _primary;
     private bool _isMigrating;
@@ -83,12 +84,30 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
     public async Task JoinChannelAsync(string channel, CancellationToken cancellationToken = default)
     {
         var normalized = channel.TrimStart('#').ToLowerInvariant();
-        if (_transports.ContainsKey(normalized))
-            return;
+        lock (_stateLock)
+        {
+            if (_transports.ContainsKey(normalized))
+                return;
+        }
 
         var transport = await SelectTransportAsync(normalized, cancellationToken).ConfigureAwait(false);
         _transports[normalized] = transport;
-        await transport.JoinChannelAsync(normalized, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await transport.JoinChannelAsync(normalized, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception) when (transport == _eventSub)
+        {
+            await SwitchToIrcAsync(normalized, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[tw] failed to join #{Channel} via {Transport}", normalized, transport.Name);
+            
+            lock (_stateLock)
+                _transports.TryRemove(normalized, out _);
+        }
     }
 
     public async Task JoinChannelViaIrcAsync(string channel, CancellationToken cancellationToken = default)
@@ -207,7 +226,7 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
             }
             catch (Exception ex)
             {
-                _logger.LogCritical(ex, "[tw] fallback transport {Transport} is also down. failover aborted.", toTransport.Name);
+                _logger.LogCritical(ex, "[tw] fallback transport {Transport} is also down. failover aborted", toTransport.Name);
                 TransportFailed?.Invoke(this, EventArgs.Empty);
                 return;
             }
@@ -245,27 +264,39 @@ public sealed class TwitchChatTransportStrategy : ITwitchChatTransport
         if (_transports.TryGetValue(channel, out var selected))
             return selected;
 
-        lock (_stateLock)
-        {
-            if (_primary == _irc)
-            {
-                _transports[channel] = _irc;
-                return _irc;
-            }
-        }
-
+        await _transportSwitchLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await _eventSub.SubscribeChannelAsync(channel, cancellationToken).ConfigureAwait(false);
-            _transports[channel] = _eventSub;
-        }
-        catch (Exception exception)
-        {
-            _logger.LogWarning("[tw] eventsub subscription denied for #{Channel}; using irc. reason='{Message}'", channel, exception.Message);
-            await SwitchToIrcAsync(channel, cancellationToken).ConfigureAwait(false);
-        }
+            if (_transports.TryGetValue(channel, out selected))
+                return selected;
 
-        return _transports[channel];
+            lock (_stateLock)
+            {
+                if (_primary == _irc)
+                {
+                    _transports[channel] = _irc;
+                    return _irc;
+                }
+            }
+
+            try
+            {
+                await _eventSub.SubscribeChannelAsync(channel, cancellationToken).ConfigureAwait(false);
+                _transports[channel] = _eventSub;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning("[tw] eventsub subscription denied for #{Channel}; using irc. reason='{Message}'", 
+                    channel, exception.Message);
+                await SwitchToIrcAsync(channel, cancellationToken).ConfigureAwait(false);
+            }
+
+            return _transports[channel];
+        }
+        finally
+        {
+            _transportSwitchLock.Release();
+        }
     }
 
     private async Task SwitchToIrcAsync(string channel, CancellationToken cancellationToken)

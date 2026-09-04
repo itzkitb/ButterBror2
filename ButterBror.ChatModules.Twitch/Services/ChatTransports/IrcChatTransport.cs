@@ -9,7 +9,7 @@ using TwitchLib.Communication.Models;
 using ChatMessage = ButterBror.ChatModules.Twitch.Models.ChatMessage;
 
 namespace ButterBror.ChatModules.Twitch.Services.ChatTransports;
-
+ 
 public sealed class IrcChatTransport(
     IOptions<TwitchConfiguration> options,
     ITwitchTokenManager tokenManager,
@@ -26,6 +26,8 @@ public sealed class IrcChatTransport(
 
     private TaskCompletionSource? _connectedTcs;
     private CancellationTokenSource? _lifecycleCts;
+    private readonly SemaphoreSlim _connectLock = new(1, 1);
+
     private Task? _heartbeatTask;
     private Task? _reconnectTask;
     
@@ -46,13 +48,24 @@ public sealed class IrcChatTransport(
     {
         ThrowIfDisposed();
         
-        if (_lifecycleCts is not null)
-            await _lifecycleCts.CancelAsync().ConfigureAwait(false);
-            
-        _lifecycleCts = new CancellationTokenSource();
-        _reconnectAttempts = 0;
+        await _connectLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_client?.IsConnected == true)
+                return;
 
-        await ConnectCoreAsync(_lifecycleCts.Token).ConfigureAwait(false);
+            if (_lifecycleCts is not null)
+                await _lifecycleCts.CancelAsync().ConfigureAwait(false);
+                
+            _lifecycleCts = new CancellationTokenSource();
+            _reconnectAttempts = 0;
+
+            await ConnectCoreAsync(_lifecycleCts.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _connectLock.Release();
+        }
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)

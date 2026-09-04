@@ -46,6 +46,7 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
     
     // ><> locks & state
     private readonly CancellationTokenSource _cts = new();
+    private readonly Lock _initialChannelsLock = new();
     private string _botId = string.Empty;
     private string _clientId = string.Empty;
     private bool _isDisposed;
@@ -126,20 +127,38 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
                 _logger.LogInformation("[tw] api initialized. botId={Id}, name={Name}", _botId, username);
 
                 await _chatTransport.ConnectAsync();
-                
-                foreach (var channel in _initialChannels.ToArray())
-                {
-                    var managedChannel = await ResolveChannelAsync(channel.Id);
-                    if (managedChannel is null)
-                    {
-                        _logger.LogWarning("[tw] failed to resolve startup channel: {Channel}", channel);
-                        continue;
-                    }
 
-                    _initialChannels.Remove(channel);
-                    _initialChannels.Add(managedChannel);
-                    await _chatTransport.JoinChannelAsync(managedChannel.Login);
+                IEnumerable<Task> joinTasks;
+                lock (_initialChannelsLock)
+                {
+                    joinTasks = _initialChannels.Select(async channel =>
+                    {
+                        var managedChannel = await ResolveChannelAsync(channel.Id).ConfigureAwait(false);
+                        if (managedChannel is null)
+                        {
+                            _logger.LogWarning("[tw] failed to resolve startup channel: {Channel}", channel);
+                            return;
+                        }
+
+                        lock (_initialChannelsLock)
+                        {
+                            _initialChannels.Remove(channel);
+                            _initialChannels.Add(managedChannel);
+                        }
+
+                        try
+                        {
+                            await _chatTransport.JoinChannelAsync(managedChannel.Login).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "[tw] failed to join startup channel #{Channel}",
+                                managedChannel.Login);
+                        }
+                    });
                 }
+
+                await Task.WhenAll(joinTasks).ConfigureAwait(false);
                 
                 OnConnected?.Invoke(this, new OnConnectedArgs());
             }
@@ -183,8 +202,11 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
         if (managedChannel is null)
             throw new InvalidOperationException($"Channel '{channel}' not found");
         
-        if (!_initialChannels.Add(managedChannel)) 
-            return;
+        lock (_initialChannelsLock)
+        {
+            if (!_initialChannels.Add(managedChannel))
+                return;
+        }
 
         if (_chatTransport.IsConnected)
             await _chatTransport.JoinChannelAsync(managedChannel.Login);
@@ -196,13 +218,20 @@ public sealed class TwitchClient : ITwitchClient, IDisposable
 
         var normalizedChannel = channel.ToLowerInvariant();
         var managedChannel = await ResolveChannelAsync(channel);
-        if (managedChannel != null && !_initialChannels.Contains(managedChannel))
-            return true;
-
+        bool removed;
+        
+        lock (_initialChannelsLock)
+        {
+            if (managedChannel != null && !_initialChannels.Contains(managedChannel))
+                return true;
+            
+            removed = managedChannel != null && _initialChannels.Remove(managedChannel);
+        }
+        
         if (_chatTransport.IsConnected && IsJoined(normalizedChannel))
             await _chatTransport.LeaveChannelAsync(normalizedChannel);
-        
-        return managedChannel != null && _initialChannels.Remove(managedChannel);
+
+        return removed;
     }
 
     public async Task JoinChannelAsync(string channel)

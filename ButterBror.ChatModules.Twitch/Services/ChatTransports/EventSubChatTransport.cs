@@ -21,7 +21,9 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     private readonly ILogger<EventSubChatTransport> _logger;
     private readonly TwitchConfiguration _configuration;
     
+    private readonly Lock _subscriptionsLock = new();
     private readonly HashSet<string> _subscriptions = new(StringComparer.OrdinalIgnoreCase);
+    
     private readonly SemaphoreSlim _subscriptionLock = new(1, 1);
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private readonly SemaphoreSlim _reconnectLock = new(1, 1);
@@ -56,7 +58,14 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
 
     public string Name => "eventsub";
     public bool IsConnected { get; private set; }
-    public IReadOnlyCollection<string> ConnectedChannels => _subscriptions.ToArray();
+    public IReadOnlyCollection<string> ConnectedChannels 
+    { 
+        get 
+        {
+            lock (_subscriptionsLock)
+                return _subscriptions.ToArray();
+        } 
+    }
     
     public event EventHandler<EventArgs>? TransportFailed;
     public event EventHandler<OnMessageReceivedArgs>? MessageReceived;
@@ -99,7 +108,9 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
             
         await _client.DisconnectAsync().ConfigureAwait(false);
         IsConnected = false;
-        _subscriptions.Clear();
+        
+        lock (_subscriptionsLock)
+            _subscriptions.Clear();
     }
 
     private async Task SubscribeToWhispersAsync(CancellationToken cancellationToken = default)
@@ -138,15 +149,14 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     public async Task SubscribeChannelAsync(string channel, CancellationToken cancellationToken = default)
     {
         var normalizedChannel = channel.TrimStart('#').ToLowerInvariant();
-        await _subscriptionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        
+        lock (_subscriptionsLock)
         {
-            await SubscribeChannelCoreAsync(channel, normalizedChannel, force: false, cancellationToken).ConfigureAwait(false);
+            if (_subscriptions.Contains(normalizedChannel))
+                return;
         }
-        finally
-        {
-            _subscriptionLock.Release();
-        }
+
+        await SubscribeChannelCoreAsync(channel, normalizedChannel, force: false, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task SubscribeChannelCoreAsync(
@@ -155,8 +165,11 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         bool force,
         CancellationToken cancellationToken)
     {
-        if (!force && _subscriptions.Contains(normalizedChannel))
-            return;
+        lock (_subscriptionsLock)
+        {
+            if (!force && _subscriptions.Contains(normalizedChannel))
+                return;
+        }
         
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
 
@@ -192,40 +205,40 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
             _logger.LogWarning("[tw:es] subscription already exists for #{Channel}", normalizedChannel);
         }
         
-        _subscriptions.Add(normalizedChannel);
+        lock (_subscriptionsLock)
+        {
+            _subscriptions.Add(normalizedChannel);
+        }
     }
 
     private async Task ResubscribeChannelsAsync()
     {
-        await _subscriptionLock.WaitAsync().ConfigureAwait(false);
-        try
+        string[] channels;
+        lock (_subscriptionsLock)
         {
-            var channels = _subscriptions.ToArray();
+            channels = _subscriptions.ToArray();
             _subscriptions.Clear();
-            
-            foreach (var channel in channels)
-            {
-                try
-                {
-                    await SubscribeChannelCoreAsync(channel, channel, force: true, CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (Exception exception)
-                {
-                    _subscriptions.Add(channel);
-                    _logger.LogWarning(exception, "[tw:es] failed to restore subscription for #{Channel}", channel);
-                }
-            }
         }
-        finally
+        
+        var tasks = channels.Select(async channel =>
         {
-            _subscriptionLock.Release();
-        }
+            try
+            {
+                await SubscribeChannelCoreAsync(channel, channel, force: true, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                lock (_subscriptionsLock) _subscriptions.Add(channel);
+                _logger.LogWarning(exception, "[tw:es] failed to restore subscription for #{Channel}", channel);
+            }
+        });
+        
+        await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 
     public async Task JoinChannelAsync(string channel, CancellationToken cancellationToken = default)
     {
         await SubscribeChannelAsync(channel, cancellationToken);
-        await UpdateAndFireUserStateAsync(channel).ConfigureAwait(false);
     }
 
     public Task JoinChannelViaIrcAsync(string channel, CancellationToken cancellationToken = default) =>
@@ -236,7 +249,10 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
 
     public Task LeaveChannelAsync(string channel, CancellationToken cancellationToken = default)
     {
-        _subscriptions.Remove(channel.TrimStart('#').ToLowerInvariant());
+        lock (_subscriptionsLock)
+        {
+            _subscriptions.Remove(channel.TrimStart('#').ToLowerInvariant());
+        }
         return Task.CompletedTask;
     }
 
@@ -293,7 +309,13 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         {
             try
             {
-                if (_subscriptions.Count > 0)
+                bool isSubCount;
+                lock (_subscriptionsLock)
+                {
+                    isSubCount = _subscriptions.Count > 0;
+                }
+
+                if (isSubCount)
                     await ResubscribeChannelsAsync().ConfigureAwait(false);
                 
                 await SubscribeToWhispersAsync(CancellationToken.None).ConfigureAwait(false);
@@ -335,9 +357,11 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     
     private void TriggerReconnect(string reason)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         
-        if (_reconnectTask is { IsCompleted: false }) return;
+        if (_reconnectTask is { IsCompleted: false })
+            return;
 
         _reconnectTask = Task.Run(() => ReconnectLoopAsync(reason));
     }
@@ -391,6 +415,17 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
     private Task OnChatMessage(object? sender, ChannelChatMessageArgs args)
     {
         var message = args.Payload.Event;
+        
+        if (message.ChatterUserId == _botUserId)
+        {
+            UserStateChanged?.Invoke(this, new OnUserStateChangedArgs
+            {
+                Channel = message.BroadcasterUserLogin.ToLowerInvariant(),
+                IsModerator = message.IsModerator,
+                IsVip = message.IsVip
+            });
+        }
+        
         MessageReceived?.Invoke(this, new OnMessageReceivedArgs
         {
             ChatMessage = new ChatMessage
@@ -433,35 +468,5 @@ public sealed class EventSubChatTransport : ITwitchChatTransport
         });
 
         return Task.CompletedTask;
-    }
-    
-    private async Task UpdateAndFireUserStateAsync(string channel)
-    {
-        try
-        {
-            var normalizedChannel = channel.TrimStart('#').ToLowerInvariant();
-            var broadcaster = await _api.Helix.Users.GetUsersAsync(logins: [normalizedChannel]).ConfigureAwait(false);
-            var broadcasterId = broadcaster.Users.FirstOrDefault()?.Id;
-            
-            if (string.IsNullOrWhiteSpace(broadcasterId) || string.IsNullOrWhiteSpace(_botUserId))
-                return;
-            
-            var mods = await _api.Helix.Moderation.GetModeratorsAsync(broadcasterId, userIds: [_botUserId]).ConfigureAwait(false);
-            var isMod = mods.Data.Length != 0;
-            
-            var vips = await _api.Helix.Channels.GetVIPsAsync(broadcasterId).ConfigureAwait(false);
-            var isVip = vips.Data.Any(v => v.UserId == _botUserId);
-
-            UserStateChanged?.Invoke(this, new OnUserStateChangedArgs
-            {
-                Channel = normalizedChannel,
-                IsModerator = isMod,
-                IsVip = isVip
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[tw:es] failed to fetch initial user state for #{Channel}", channel);
-        }
     }
 }
