@@ -120,7 +120,7 @@ def main():
             }
             
             script_dir = Path(__file__).parent.resolve()
-            output_file = script_dir / "TwitchAuth.json"
+            output_file = script_dir / "twitch_auth.json"
             temp_file = output_file.with_suffix('.tmp')
             
             try:
@@ -130,7 +130,7 @@ def main():
                 temp_file.replace(output_file)
                 
                 print("\n" + "="*70)
-                print("success. TwitchAuth.json has been created:")
+                print("success. twitch_auth.json has been created:")
                 print(" ")
                 print(f"file location: {output_file}")
                 print(f"access token:  {access_token[:20]}...")
@@ -138,14 +138,14 @@ def main():
                 print(f"expires In:    {expires_in}s.")
                 print(f"expiration:    {expiration_timestamp}")
                 print(" ")
-                print("next step: move TwitchAuth.json to the bb appdata directory:")
-                print("   windows: %APPDATA%\\SillyApps\\ButterBror2\\")
-                print("   linux:   ~/.local/share/SillyApps/ButterBror2/")
+                print("next step: move twitch_auth.json to the bb appdata directory:")
+                print("   windows: %APPDATA%\\tupidapps\\butterbror\\")
+                print("   linux:   ~/.local/share/tupidapps/butterbror/")
                 print("the bot will detect and import it")
                 print("!!! the file will be deleted by the bot after successful import")
                 
             except Exception as e:
-                print(f"failed to write TwitchAuth.json: {e}")
+                print(f"failed to write twitch_auth.json: {e}")
                 if temp_file.exists():
                     temp_file.unlink()
                 return

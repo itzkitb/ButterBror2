@@ -3,11 +3,11 @@
 public class Localization
 {
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DefaultTranslations => 
-        new Dictionary<string, IReadOnlyDictionary<string, string>>()
-    {
+        new Dictionary<string, IReadOnlyDictionary<string, string>>
+        {
         { 
             "RU_RU",
-            new Dictionary<string, string>()
+            new Dictionary<string, string>
             {
                 // Ban phrases
                 { "command.banphrases.usage", "Использование: banphrases <set|get|list|test|delete> <global|channel> [категория] [шаблон|hastebin]" },
@@ -101,7 +101,7 @@ public class Localization
         },
         {
             "EN_US",
-            new Dictionary<string, string>()
+            new Dictionary<string, string>
             {
                 // Ban phrases
                 { "command.banphrases.usage", "Usage: banphrases <set|get|list|test|delete> <global|channel> [category] [pattern|hastebin]" },

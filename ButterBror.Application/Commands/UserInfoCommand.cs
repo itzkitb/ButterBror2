@@ -9,7 +9,7 @@ namespace ButterBror.Application.Commands;
 
 public class UserInfoCommand(IServiceProvider serviceProvider) : ICommand
 {
-    private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
+    private readonly ILocaleService _locale = serviceProvider.GetRequiredService<ILocaleService>();
     private readonly IUserRepository _userRepository = serviceProvider.GetRequiredService<IUserRepository>();
 
     public async Task<CommandResult> ExecuteAsync(
@@ -25,10 +25,10 @@ public class UserInfoCommand(IServiceProvider serviceProvider) : ICommand
 
         if (userEntity == null)
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.userinfo.not_found", context.Locale));
+                await _locale.GetStringAsync("command.userinfo.not_found", context.Locale));
 
         return CommandResult.Successfully(
-            await _localization.GetStringAsync("command.userinfo.success", context.Locale,
+            await _locale.GetStringAsync("command.userinfo.success", context.Locale,
                 userEntity.DisplayName,
                 userEntity.UnifiedId));
     }

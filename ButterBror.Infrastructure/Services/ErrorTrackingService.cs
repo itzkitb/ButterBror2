@@ -12,7 +12,7 @@ namespace ButterBror.Infrastructure.Services;
 public class ErrorTrackingService(
     IErrorReportRepository repository,
     IUserRepository userRepository,
-    ILocalizationService localizationService,
+    ILocaleService localeService,
     ILogger<ErrorTrackingService> logger)
     : IErrorTrackingService
 {
@@ -29,7 +29,7 @@ public class ErrorTrackingService(
         var errorId = await LogErrorInternalAsync(exception, message, user?.UnifiedId, platform, extraData);
         var errorHash = GenerateExceptionHash(exception);
         
-        var localizedMessage = await localizationService.GetStringAsync(
+        var localizedMessage = await localeService.GetStringAsync(
             "core.error.report",
             locale,
             errorHash);

@@ -50,10 +50,10 @@ The compiled output will be placed in `ButterBror.Host/bin/Release/net10.0/`
 
 Once the host is running, it will scan the platform-specific AppData directory for installed `.pag` modules:
 
-| OS | Path |
-|----|------|
-| Windows | `%APPDATA%\SillyApps\ButterBror2\` |
-| Linux / macOS | `~/.local/share/SillyApps/ButterBror2\` |
+| OS | Path                                    |
+|----|-----------------------------------------|
+| Windows | `%APPDATA%\tupidapps\butterbror\`       |
+| Linux / macOS | `~/.local/share/tupidapps/butterbror\` |
 
 Chat modules are loaded from the `Chat/` subdirectory and command modules from `Command/`. Any `.pag` file placed in the correct folder will be picked up automatically on the next startup or reload
 
@@ -332,10 +332,10 @@ The generated `module.manifest.json` inside the archive has the following struct
 
 If you used `--no-install` or want to install a pre-built package manually, copy the `.pag` file to the appropriate AppData directory:
 
-| Module type | Windows | Linux / macOS |
-|-------------|---------|---------------|
-| Chat | `%APPDATA%\SillyApps\ButterBror2\Chat\` | `~/.local/share/SillyApps/ButterBror2/Chat/` |
-| Command | `%APPDATA%\SillyApps\ButterBror2\Command\` | `~/.local/share/SillyApps/ButterBror2/Command/` |
+| Module type | Windows                               | Linux / macOS                              |
+|-------------|---------------------------------------|--------------------------------------------|
+| Chat | `%APPDATA%\tupid\butterbror\chat\`    | `~/.local/share/tupid/butterbror/chat/`    |
+| Command | `%APPDATA%\tupid\butterbror\command\` | `~/.local/share/tupid/butterbror/command/` |
 
 After placing the file, restart the host (or trigger a hot-reload) and the module will be discovered automatically
 

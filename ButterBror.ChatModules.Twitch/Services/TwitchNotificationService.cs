@@ -12,7 +12,7 @@ public sealed class TwitchNotificationService : ITwitchNotificationService
 {
     private readonly ITwitchChatTransport _chatTransport;
     private readonly IOptions<TwitchConfiguration> _options;
-    private readonly ILocalizationService _localization;
+    private readonly ILocaleService _locale;
     private readonly ILogger<TwitchNotificationService> _logger;
     private readonly TwitchMessageRender _messageRender;
     private ITwitchClient? _twitchClient;
@@ -20,13 +20,13 @@ public sealed class TwitchNotificationService : ITwitchNotificationService
     public TwitchNotificationService(
         ITwitchChatTransport chatTransport,
         IOptions<TwitchConfiguration> options,
-        ILocalizationService localization,
+        ILocaleService locale,
         TwitchMessageRender render,
         ILogger<TwitchNotificationService> logger)
     {
         _chatTransport = chatTransport;
         _options = options;
-        _localization = localization;
+        _locale = locale;
         _logger = logger;
         _messageRender = render;
 
@@ -100,7 +100,7 @@ public sealed class TwitchNotificationService : ITwitchNotificationService
         string message;
         try
         {
-            message = await _localization.GetStringAsync(key, "EN_US", channelLogin, executor).ConfigureAwait(false);
+            message = await _locale.GetStringAsync(key, "EN_US", channelLogin, executor).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

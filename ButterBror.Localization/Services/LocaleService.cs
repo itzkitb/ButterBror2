@@ -9,11 +9,11 @@ namespace ButterBror.Localization.Services;
 /// <summary>
 /// Main localization service
 /// </summary>
-public class LocalizationService(
+public class LocaleService(
     LocaleRegistryService registry,
-    TranslationFileLoader fileLoader,
-    ILogger<LocalizationService> logger)
-    : ILocalizationService
+    LocaleFileLoader fileLoader,
+    ILogger<LocaleService> logger)
+    : ILocaleService
 {
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _translationCache
         = new(StringComparer.OrdinalIgnoreCase);

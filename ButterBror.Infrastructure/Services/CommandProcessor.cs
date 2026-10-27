@@ -14,7 +14,7 @@ public class CommandProcessor(
     ICommandRegistry commandRegistry,
     ILogger<CommandProcessor> logger,
     IBanphraseService banphraseService,
-    ILocalizationService localization,
+    ILocaleService locale,
     IErrorTrackingService errorTrackingService,
     IRestrictionService restrictionService)
     : ICommandProcessor
@@ -46,7 +46,7 @@ public class CommandProcessor(
             if (commandMeta == null)
             {
                 return CommandResult.Failure(
-                    await localization.GetStringAsync("core.bot.command.not_found", user.PreferredLocale,
+                    await locale.GetStringAsync("core.bot.command.not_found", user.PreferredLocale,
                         context.CommandName),
                     sendResult: false);
             }
@@ -71,7 +71,7 @@ public class CommandProcessor(
 
             if (userStatus.IsBlocked)
             {
-                var blockMessage = await localization.GetStringAsync("core.bot.user_blocked", context.Locale);
+                var blockMessage = await locale.GetStringAsync("core.bot.user_blocked", context.Locale);
                 return CommandResult.Failure(blockMessage, sendResult: userStatus.ShouldNotify);
             }
 
@@ -92,7 +92,7 @@ public class CommandProcessor(
                     _ => "core.bot.command.blocked"
                 };
 
-                var message = await localization.GetStringAsync(reasonMessageKey, context.Locale, commandMeta.Id);
+                var message = await locale.GetStringAsync(reasonMessageKey, context.Locale, commandMeta.Id);
                 return CommandResult.Failure(message);
             }
 
@@ -130,7 +130,7 @@ public class CommandProcessor(
                     );
 
                     result.Message =
-                        new Message(await localization.GetStringAsync("core.bot.banphrase", context.Locale));
+                        new Message(await locale.GetStringAsync("core.bot.banphrase", context.Locale));
                     result.Success = false;
                 }
             }
@@ -176,7 +176,7 @@ public class CommandProcessor(
             );
             
             return CommandResult.Failure(
-                await localization.GetStringAsync("core.bot.command.compatibility", user.PreferredLocale,
+                await locale.GetStringAsync("core.bot.command.compatibility", user.PreferredLocale,
                     commandName,
                     context.PlatformId),
                 sendResult: false);
@@ -192,7 +192,7 @@ public class CommandProcessor(
             );
             
             return CommandResult.Failure(
-                await localization.GetStringAsync("core.bot.command.permission", user.PreferredLocale));
+                await locale.GetStringAsync("core.bot.command.permission", user.PreferredLocale));
         }
 
         // s2: cooldown check
@@ -207,7 +207,7 @@ public class CommandProcessor(
                 meta.CooldownSeconds
             );
             return CommandResult.Failure(
-                await localization.GetStringAsync("core.bot.command.cooldown", user.PreferredLocale,
+                await locale.GetStringAsync("core.bot.command.cooldown", user.PreferredLocale,
                     commandName,
                     meta.CooldownSeconds - ((TimeSpan)betweenUses).TotalSeconds),
                 sendResult:false);

@@ -63,8 +63,8 @@ CORE_ASSEMBLY_PREFIXES = [
 ASSEMBLY_EXTENSIONS = {".dll", ".pdb"}
 DEFAULT_TARGET_FRAMEWORK = "net10.0"
 
-APP_DATA_VENDOR = "SillyApps"
-APP_DATA_APP = "ButterBror2"
+APP_DATA_VENDOR = "tupid"
+APP_DATA_APP = "butterbror"
 
 # ---------------------------------------------------------------------------
 # Module type descriptor
@@ -85,13 +85,13 @@ class ModuleTypeConfig:
 
 CHAT_TYPE = ModuleTypeConfig(
     module_type=ModuleType.CHAT,
-    appdata_subdir="Chat",
+    appdata_subdir="chat",
     label="Chat",
 )
 
 COMMAND_TYPE = ModuleTypeConfig(
     module_type=ModuleType.COMMAND,
-    appdata_subdir="Command",
+    appdata_subdir="command",
     label="Command",
 )
 

@@ -8,7 +8,7 @@ public interface IConfigurationService
     /// <summary>
     /// Load custom configuration
     /// </summary>
-    /// <param name="key">Configuration file name ({AppData}/SillyApps/ButterBror2/{Config}.json)</param>
+    /// <param name="key">Configuration file name ({AppData}/tupid/butterbror/{Config}.json)</param>
     /// <typeparam name="T">Data type in configuration</typeparam>
     /// <returns>Configuration data</returns>
     Task<T?> LoadConfigurationAsync<T>(string key);
@@ -16,7 +16,7 @@ public interface IConfigurationService
     /// <summary>
     /// Save custom configuration
     /// </summary>
-    /// <param name="key">Configuration file name ({AppData}/SillyApps/ButterBror2/{Config}.json)</param>
+    /// <param name="key">Configuration file name ({AppData}/tupid/butterbror/{Config}.json)</param>
     /// <param name="value">Data</param>
     /// <typeparam name="T">Data type in configuration</typeparam>
     /// <returns></returns>

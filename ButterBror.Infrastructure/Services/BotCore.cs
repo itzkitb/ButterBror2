@@ -11,7 +11,7 @@ public class BotCore(
     IPlatformModuleManager moduleManager,
     ICommandProcessor commandProcessor,
     IBotStatsService statsService,
-    ILocalizationService localizationService,
+    ILocaleService localeService,
     IBanphraseService banphraseService,
     ICommandRegistry commandRegistry,
     IPermissionManager permissionManager,
@@ -34,14 +34,14 @@ public class BotCore(
             moduleManager.InitializeAsync(this, ct),
             commandRegistry.InitializeAsync(ct),
             statsService.StartAsync(ct),
-            localizationService.InitializeAsync(ct),
+            localeService.InitializeAsync(ct),
             banphraseService.ReloadGlobalCategoriesAsync(),
             InitDashboardAdmin(),
             deviceStatsService.InitializeAsync(ct),
             dashboardService.StartAsync(ct)
         );
         
-        localizationService.RegisterModuleTranslations("butterbror:system", Application.Localization.DefaultTranslations);
+        localeService.RegisterModuleTranslations("butterbror:system", Application.Localization.DefaultTranslations);
     }
 
     private async Task InitDashboardAdmin()

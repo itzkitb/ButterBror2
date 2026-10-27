@@ -15,12 +15,12 @@ Twitch integration module for ButterBror2. This module enables your bot to conne
 
 <img src="https://tupid.lol/i/bb2/configuration.png" width="100%">
 
-The module loads settings from `Twitch.json` in the ButterBror2 AppData directory:
+The module loads settings from `twitch.json` in the ButterBror2 AppData directory:
 
-| OS | Path |
-|----|------|
-| Windows | `%APPDATA%\SillyApps\ButterBror2\Twitch.json` |
-| Linux / macOS | `~/.local/share/SillyApps/ButterBror2/Twitch.json` |
+| OS | Path                                              |
+|----|---------------------------------------------------|
+| Windows | `%APPDATA%\tupidapps\butterbror\twitch.json`      |
+| Linux / macOS | `~/.local/share/tupidapps/butterbror/twitch.json` |
 
 ### `Twitch.json` Structure
 

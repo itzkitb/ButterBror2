@@ -15,7 +15,7 @@ public class DeleteChannelCommand(
     : ICommand
 {
     private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
-    private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
+    private readonly ILocaleService _locale = serviceProvider.GetRequiredService<ILocaleService>();
 
     public async Task<CommandResult> ExecuteAsync(
         CommandContext context,
@@ -25,7 +25,7 @@ public class DeleteChannelCommand(
         if (context.Arguments.Count < 1)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.del_channel.usage", context.Locale));
+                await _locale.GetStringAsync("command.del_channel.usage", context.Locale));
         }
 
         var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
@@ -39,13 +39,13 @@ public class DeleteChannelCommand(
         if (!hasPermission)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.del_channel.permission", context.Locale));
+                await _locale.GetStringAsync("command.del_channel.permission", context.Locale));
         }
 
         var channel = await twitchClient.ResolveChannelAsync(channelName);
         if (channel is null)
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.twitch.channel_not_found", context.Locale));
+                await _locale.GetStringAsync("command.twitch.channel_not_found", context.Locale));
         await channelManager.RemoveChannelAsync(channel.Id);
 
         // s4: connect on the fly
@@ -53,7 +53,7 @@ public class DeleteChannelCommand(
         await notificationService.NotifyChannelRemovedAsync(channel.Login, context.User.DisplayName, context.CancellationToken);
 
         return CommandResult.Successfully(
-            await _localization.GetStringAsync("command.del_channel.success", context.Locale,
+            await _locale.GetStringAsync("command.del_channel.success", context.Locale,
                 channelName));
     }
 }

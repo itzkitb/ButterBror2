@@ -13,7 +13,7 @@ using Microsoft.Extensions.Options;
 namespace ButterBror.ChatModules.Twitch.Services.Auth;
 
 public sealed class TwitchAuthPollingService(
-    ILocalizationService? localization,
+    ILocaleService? localization,
     IHttpClientFactory httpClientFactory,
     IOptions<TwitchConfiguration> options,
     ITwitchClient twitchClient,

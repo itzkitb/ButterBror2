@@ -3,7 +3,7 @@ namespace ButterBror.Core.Interfaces;
 /// <summary>
 /// Provides localized strings with fallback support
 /// </summary>
-public interface ILocalizationService
+public interface ILocaleService
 {
     /// <summary>
     /// Initialize service

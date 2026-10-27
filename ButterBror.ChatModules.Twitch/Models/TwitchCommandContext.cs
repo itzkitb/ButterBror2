@@ -16,7 +16,7 @@ namespace ButterBror.ChatModules.Twitch.Models;
     public IPlatformUser PlatformUser { get; } = user;
     public IPlatformChannel Chat { get; } = channel;
     public DateTime ExecutedAt { get; } = executedAt;
-    public string PlatformId { get; } = "sillyapps:twitch";
+    public string PlatformId { get; } = "tupidapps:twitch"; // YEP
     public Guid CorrelationId { get; } = Guid.NewGuid();
     public CancellationToken CancellationToken { get; set; }
 }

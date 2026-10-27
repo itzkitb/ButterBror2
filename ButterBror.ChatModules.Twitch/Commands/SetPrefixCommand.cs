@@ -13,7 +13,7 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
     public static string GetPrefixKey(string channelId) => $"twitch:channel_prefix:{channelId}";
     private readonly ILogger<SetPrefixCommand> _logger = serviceProvider.GetRequiredService<ILogger<SetPrefixCommand>>();
     private readonly ICustomDataRepository _customRepo = serviceProvider.GetRequiredService<ICustomDataRepository>();
-    private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
+    private readonly ILocaleService _locale = serviceProvider.GetRequiredService<ILocaleService>();
 
     public async Task<CommandResult> ExecuteAsync(
         CommandContext context,
@@ -26,14 +26,14 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
         if (!hasPermission)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.part.permission", context.Locale));
+                await _locale.GetStringAsync("command.part.permission", context.Locale));
         }
         
         // s1: validate argument
         if (context.Arguments.Count == 0)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.set_prefix.usage", context.Locale));
+                await _locale.GetStringAsync("command.set_prefix.usage", context.Locale));
         }
 
         var newPrefix = context.Arguments[0];
@@ -41,13 +41,13 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
         if (string.IsNullOrWhiteSpace(newPrefix))
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.set_prefix.empty", context.Locale));
+                await _locale.GetStringAsync("command.set_prefix.empty", context.Locale));
         }
 
         if (newPrefix.Length > 32)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.set_prefix.32chars", context.Locale));
+                await _locale.GetStringAsync("command.set_prefix.32chars", context.Locale));
         }
         
         // s2: persist the new prefix
@@ -62,7 +62,7 @@ public class SetPrefixCommand(IServiceProvider serviceProvider, TwitchModule mod
             context.Chat.Name, context.Chat.Id, newPrefix, context.User.DisplayName);
 
         return CommandResult.Successfully(
-            await _localization.GetStringAsync("command.set_prefix.success", context.Locale,
+            await _locale.GetStringAsync("command.set_prefix.success", context.Locale,
                 context.Chat.Name,
                 newPrefix));
     }

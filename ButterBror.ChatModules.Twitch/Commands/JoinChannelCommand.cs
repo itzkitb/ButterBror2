@@ -17,7 +17,7 @@ public class JoinChannelCommand(
 {
     private readonly ILogger<JoinChannelCommand> _logger = serviceProvider.GetRequiredService<ILogger<JoinChannelCommand>>();
     private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
-    private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
+    private readonly ILocaleService _locale = serviceProvider.GetRequiredService<ILocaleService>();
 
     public async Task<CommandResult> ExecuteAsync(
         CommandContext context,
@@ -27,7 +27,7 @@ public class JoinChannelCommand(
         if (context.Arguments.Count == 0)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.join.usage", context.Locale));
+                await _locale.GetStringAsync("command.join.usage", context.Locale));
         }
 
         var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
@@ -43,20 +43,20 @@ public class JoinChannelCommand(
         if (!hasPermission)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.join.permission", context.Locale));
+                await _locale.GetStringAsync("command.join.permission", context.Locale));
         }
 
         var channel = await twitchClient.ResolveChannelAsync(channelName);
         if (channel is null)
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.twitch.channel_not_found", context.Locale));
+                await _locale.GetStringAsync("command.twitch.channel_not_found", context.Locale));
         await channelManager.AddChannelAsync(channel);
         await twitchClient.JoinChannelAsync(channel.Login);
         await notificationService.NotifyChannelJoinedAsync(channel.Login, context.User.DisplayName, context.CancellationToken);
         _logger.LogInformation("[tw] joined channel '{Channel}' by user '{User}'", channelName, context.User.DisplayName);
 
         return CommandResult.Successfully(
-            await _localization.GetStringAsync("command.join.success", context.Locale,
+            await _locale.GetStringAsync("command.join.success", context.Locale,
                 channelName));
     }
 }

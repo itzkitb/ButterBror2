@@ -17,7 +17,7 @@ public sealed class CommandModuleLoader(
     IAppDataPathProvider pathProvider,
     IServiceProvider serviceProvider,
     ILogger<CommandModuleLoader> logger,
-    ILocalizationService localizationService)
+    ILocaleService localeService)
     : IDisposable, ICommandModuleLoader
 {
     private readonly List<AssemblyLoadContext> _loadContexts = [];
@@ -35,7 +35,7 @@ public sealed class CommandModuleLoader(
         _loadedModules.Clear();
         _loadContexts.Clear();
 
-        var commandsPath = Path.Combine(pathProvider.GetAppDataPath(), "Command");
+        var commandsPath = Path.Combine(pathProvider.GetAppDataPath(), "command");
         
         if (!Directory.Exists(commandsPath))
         {
@@ -136,7 +136,7 @@ public sealed class CommandModuleLoader(
                         // store mapping from module ID to archive path
                         _moduleIdToArchivePath[commandModule.ModuleId] = path;
                         // register built-in locales
-                        localizationService.RegisterModuleTranslations(
+                        localeService.RegisterModuleTranslations(
                             commandModule.ModuleId,
                             commandModule.DefaultTranslations);
                     }
@@ -273,7 +273,7 @@ public sealed class CommandModuleLoader(
             else
             {
                 // s1: try to find archive by name
-                var commandModulesPath = Path.Combine(pathProvider.GetAppDataPath(), "Command");
+                var commandModulesPath = Path.Combine(pathProvider.GetAppDataPath(), "command");
                 
                 // s2: try exact file name match
                 var exactArchivePath = Path.Combine(commandModulesPath, $"{moduleId}.pag");

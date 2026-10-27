@@ -15,7 +15,7 @@ public class AddChannelCommand(
     : ICommand
 {
     private readonly IPermissionManager _permissionManager = serviceProvider.GetRequiredService<IPermissionManager>();
-    private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
+    private readonly ILocaleService _locale = serviceProvider.GetRequiredService<ILocaleService>();
 
     public async Task<CommandResult> ExecuteAsync(
         CommandContext context,
@@ -25,7 +25,7 @@ public class AddChannelCommand(
         if (context.Arguments.Count < 1)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.add_channel.usage", context.Locale));
+                await _locale.GetStringAsync("command.add_channel.usage", context.Locale));
         }
 
         var channelName = context.Arguments[0].TrimStart('#').TrimStart('@').TrimEnd(',').ToLowerInvariant();
@@ -39,14 +39,14 @@ public class AddChannelCommand(
         if (!hasPermission)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.add_channel.permission", context.Locale));
+                await _locale.GetStringAsync("command.add_channel.permission", context.Locale));
         }
 
         // S3: Persist to Redis
         var channel = await twitchClient.ResolveChannelAsync(channelName);
         if (channel is null)
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.twitch.channel_not_found", context.Locale));
+                await _locale.GetStringAsync("command.twitch.channel_not_found", context.Locale));
         await channelManager.AddChannelAsync(channel);
 
         // S4: Connect on the fly
@@ -54,7 +54,7 @@ public class AddChannelCommand(
         await notificationService.NotifyChannelAddedAsync(channelName, context.User.DisplayName, context.CancellationToken);
 
         return CommandResult.Successfully(
-            await _localization.GetStringAsync("command.add_channel.success", context.Locale,
+            await _locale.GetStringAsync("command.add_channel.success", context.Locale,
                 channelName));
     }
 }

@@ -6,7 +6,7 @@ namespace ButterBror.Dashboard.Models;
 public class AdminCommandRequest
 {
     /// <summary>
-    /// Full command line, e.g.: "sillyapps:twitch join forsen"
+    /// Full command line, e.g.: "tupidapps:twitch join forsen"
     /// First token = moduleId (or empty for global), rest = commandName + args
     /// </summary>
     public string CommandLine { get; set; } = string.Empty;

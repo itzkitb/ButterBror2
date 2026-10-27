@@ -10,7 +10,7 @@ public sealed class TwitchAuthFileWatcher(
     ITwitchTokenManager tokenManager,
     ILogger<TwitchAuthFileWatcher> logger) : IAsyncDisposable
 {
-    private readonly string _path = Path.Combine(appDataPathProvider.GetAppDataPath(), "TwitchAuth.json");
+    private readonly string _path = Path.Combine(appDataPathProvider.GetAppDataPath(), "twitch_auth.json");
     private readonly CancellationTokenSource _shutdown = new();
     
     private readonly Lock _lock = new(); 
@@ -98,7 +98,7 @@ public sealed class TwitchAuthFileWatcher(
         }
         catch (JsonException exception)
         {
-            logger.LogError(exception, "[tw:afw] twitchauth.json is invalid; deleting it");
+            logger.LogError(exception, "[tw:afw] twitch_auth.json is invalid; deleting it");
             DeleteFile();
             return;
         }
@@ -110,7 +110,7 @@ public sealed class TwitchAuthFileWatcher(
         if (auth is null || string.IsNullOrWhiteSpace(auth.OAuthToken) ||
             string.IsNullOrWhiteSpace(auth.RefreshToken) || auth.Ttl <= 0)
         {
-            logger.LogError("[tw:afw] twitchauth.json is missing required credential fields; deleting it");
+            logger.LogError("[tw:afw] twitch_auth.json is missing required credential fields; deleting it");
             DeleteFile();
             return;
         }
@@ -129,7 +129,7 @@ public sealed class TwitchAuthFileWatcher(
         }
         catch (ArgumentOutOfRangeException)
         {
-            logger.LogError("[tw:afw] twitchauth.json contains an invalid expiration timestamp; deleting it");
+            logger.LogError("[tw:afw] twitch_auth.json contains an invalid expiration timestamp; deleting it");
             DeleteFile();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -138,7 +138,7 @@ public sealed class TwitchAuthFileWatcher(
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "[tw:afw] twitchauth.json credential import failed");
+            logger.LogError(exception, "[tw:afw] twitch_auth.json credential import failed");
             DeleteFile();
         }
     }

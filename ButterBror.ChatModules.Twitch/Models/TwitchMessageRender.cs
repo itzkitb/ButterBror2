@@ -5,7 +5,7 @@ using ButterBror.Core.Messaging.Enums;
 
 namespace ButterBror.ChatModules.Twitch.Models;
 
-public class TwitchMessageRender(IPasteBinService pasteBinService, ILocalizationService localization)
+public class TwitchMessageRender(IPasteBinService pasteBinService, ILocaleService locale)
 {
     private const int MaxTwitchMessageLength = 500;
     
@@ -32,7 +32,7 @@ public class TwitchMessageRender(IPasteBinService pasteBinService, ILocalization
         string markdownText = RenderMarkdownMessage(message);
         string url = await pasteBinService.UploadTextAsync(markdownText, cancellationToken);
         
-        return await localization.GetStringAsync("core.bot.twitch.long_text", "EN_US", url);
+        return await locale.GetStringAsync("core.bot.twitch.long_text", "EN_US", url);
     }
     
     // ><> Twitch render

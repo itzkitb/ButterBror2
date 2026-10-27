@@ -289,7 +289,7 @@ public class BotStatsService(
     private string GetStatsFilePath()
     {
         var appDataPath = pathProvider.GetAppDataPath();
-        return Path.Combine(appDataPath, "Stats.json");
+        return Path.Combine(appDataPath, "stats.json");
     }
 
     private static void PruneOldTicks(Queue<(DateTime At, int Count)> queue)

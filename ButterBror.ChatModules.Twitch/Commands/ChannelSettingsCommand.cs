@@ -14,7 +14,7 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
     : ICommand
 {
     private readonly ICustomDataRepository _customRepo = serviceProvider.GetRequiredService<ICustomDataRepository>();
-    private readonly ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
+    private readonly ILocaleService _locale = serviceProvider.GetRequiredService<ILocaleService>();
 
     public async Task<CommandResult> ExecuteAsync(
         CommandContext context,
@@ -26,21 +26,21 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
         if (!hasPermission)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.channel_settings.permission", context.Locale));
+                await _locale.GetStringAsync("command.channel_settings.permission", context.Locale));
         }
 
         // s1: check args
         if (context.Arguments.Count < 2)
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.channel_settings.usage", context.Locale));
+                await _locale.GetStringAsync("command.channel_settings.usage", context.Locale));
         }
 
         var target = context.Arguments[0].ToLowerInvariant();
         if (!bool.TryParse(context.Arguments[1], out var value))
         {
             return CommandResult.Failure(
-                await _localization.GetStringAsync("command.channel_settings.value", context.Locale));
+                await _locale.GetStringAsync("command.channel_settings.value", context.Locale));
         }
 
         var channelId = context.Chat.Id;
@@ -61,7 +61,7 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
                 break;
             default:
                 return CommandResult.Failure(
-                    await _localization.GetStringAsync("command.channel_settings.unknown", context.Locale));
+                    await _locale.GetStringAsync("command.channel_settings.unknown", context.Locale));
         }
 
         await _customRepo.SetDataAsync($"twitch:settings:{channelId}", JsonSerializer.Serialize(settings));
@@ -70,7 +70,7 @@ public class ChannelSettingsCommand(IServiceProvider serviceProvider, ITwitchCli
         twitchClient.InvalidateChannelSettingsCache(channelId);
 
         return CommandResult.Successfully(
-            await _localization.GetStringAsync("command.channel_settings.unknown", context.Locale,
+            await _locale.GetStringAsync("command.channel_settings.unknown", context.Locale,
                 target,
                 value));
     }

@@ -10,23 +10,22 @@ public class AppDataStorageProvider : IAppDataPathProvider
         {
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "SillyApps",
-                "ButterBror2"
+                "tupid",
+                "butterbror"
             );
         }
-        else if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".local",
                 "share",
-                "SillyApps",
-                "ButterBror2"
+                "tupid",
+                "butterbror"
             );
         }
-        else
-        {
-            throw new PlatformNotSupportedException("Unsupported operating system");
-        }
+
+        throw new PlatformNotSupportedException("Unsupported operating system");
     }
 }

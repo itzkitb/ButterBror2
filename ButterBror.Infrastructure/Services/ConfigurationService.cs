@@ -4,24 +4,18 @@ using ButterBror.Core.Interfaces;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class ConfigurationService : IConfigurationService
+public class ConfigurationService(IAppDataPathProvider appDataPathProvider) : IConfigurationService
 {
-    private readonly IAppDataPathProvider _appDataPathProvider;
     private readonly JsonSerializerOptions _options = new()
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() }
     };
-    
-    public ConfigurationService(IAppDataPathProvider appDataPathProvider)
-    {
-        _appDataPathProvider = appDataPathProvider;
-    }
-    
+
     public async Task<T?> LoadConfigurationAsync<T>(string key)
     {
-        var appDataPath = _appDataPathProvider.GetAppDataPath();
+        var appDataPath = appDataPathProvider.GetAppDataPath();
         var configPath = Path.Combine(appDataPath, $"{key}.json");
 
         if (!File.Exists(configPath)) return default;
@@ -40,7 +34,7 @@ public class ConfigurationService : IConfigurationService
             throw new ArgumentNullException(nameof(value), "The configuration cannot be null");
         }
 
-        var appDataPath = _appDataPathProvider.GetAppDataPath();
+        var appDataPath = appDataPathProvider.GetAppDataPath();
         
         if (!Directory.Exists(appDataPath))
         {

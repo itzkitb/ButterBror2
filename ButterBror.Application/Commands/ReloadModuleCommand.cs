@@ -10,7 +10,7 @@ public class ReloadModuleCommand : ICommand
         CommandContext context,
         ICommandServiceProvider serviceProvider)
     {
-        var localization = serviceProvider.GetService<ILocalizationService>();
+        var localization = serviceProvider.GetService<ILocaleService>();
         var moduleManager = serviceProvider.GetService<IPlatformModuleManager>();
 
         if (context.Arguments.Count < 2)

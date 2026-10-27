@@ -12,9 +12,9 @@ internal class JoinChannelCommandMetadata : ICommandMetadata
     public int CooldownSeconds => 1;
     public List<string> RequiredPermissions => ["su:twitch:join"];
     public string ArgumentsHelpText => "<channel>";
-    public string Id => "sillyapps:twitch:join";
+    public string Id => "tupidapps:twitch:join";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-    public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
+    public List<string> PlatformCompatibilityList => ["tupidapps:twitch"];
 }
 
 // ><> part
@@ -25,9 +25,9 @@ internal class PartChannelCommandMetadata : ICommandMetadata
     public int CooldownSeconds => 1;
     public List<string> RequiredPermissions => ["su:twitch:part"];
     public string ArgumentsHelpText => "<channel>";
-    public string Id => "sillyapps:twitch:part";
+    public string Id => "tupidapps:twitch:part";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-    public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
+    public List<string> PlatformCompatibilityList => ["tupidapps:twitch"];
 }
 
 // ><> set prefix
@@ -38,9 +38,9 @@ internal class SetPrefixCommandMetadata : ICommandMetadata
     public int CooldownSeconds => 2;
     public List<string> RequiredPermissions => [];
     public string ArgumentsHelpText => "<prefix>";
-    public string Id => "sillyapps:twitch:setprefix";
+    public string Id => "tupidapps:twitch:setprefix";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-    public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
+    public List<string> PlatformCompatibilityList => ["tupidapps:twitch"];
 }
 
 // ><> auth
@@ -51,9 +51,9 @@ internal class AuthCommandMetadata : ICommandMetadata
     public int CooldownSeconds => 10;
     public List<string> RequiredPermissions => new List<string>();
     public string ArgumentsHelpText => "";
-    public string Id => "sillyapps:twitch:auth";
+    public string Id => "tupidapps:twitch:auth";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-    public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
+    public List<string> PlatformCompatibilityList => ["tupidapps:twitch"];
 }
 
 // ><> add channel
@@ -64,9 +64,9 @@ internal class AddChannelCommandMetadata : ICommandMetadata
     public int CooldownSeconds => 1;
     public List<string> RequiredPermissions => ["su:twitch:addchannel"];
     public string ArgumentsHelpText => "<channel>";
-    public string Id => "sillyapps:twitch:addchannel";
+    public string Id => "tupidapps:twitch:addchannel";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-    public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
+    public List<string> PlatformCompatibilityList => ["tupidapps:twitch"];
 }
 
 // ><> delete channel
@@ -77,9 +77,9 @@ internal class DeleteChannelCommandMetadata : ICommandMetadata
     public int CooldownSeconds => 1;
     public List<string> RequiredPermissions => ["su:twitch:deletechannel"];
     public string ArgumentsHelpText => "<channel>";
-    public string Id => "sillyapps:twitch:deletechannel";
+    public string Id => "tupidapps:twitch:deletechannel";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-    public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
+    public List<string> PlatformCompatibilityList => ["tupidapps:twitch"];
 }
 
 // ><> twitch settings
@@ -90,7 +90,7 @@ internal class ChannelSettingsCommandMetadata : ICommandMetadata
     public int CooldownSeconds => 1;
     public List<string> RequiredPermissions => [];
     public string ArgumentsHelpText => "<online|offline> <true|false>";
-    public string Id => "sillyapps:twitch:settings";
+    public string Id => "tupidapps:twitch:settings";
     public PlatformCompatibilityType PlatformCompatibilityType => PlatformCompatibilityType.Whitelist;
-    public List<string> PlatformCompatibilityList => ["sillyapps:twitch"];
+    public List<string> PlatformCompatibilityList => ["tupidapps:twitch"];
 }

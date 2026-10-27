@@ -9,9 +9,9 @@ namespace ButterBror.Localization.Services;
 /// <summary>
 /// Handles loading and parsing of translation files
 /// </summary>
-public class TranslationFileLoader(
+public class LocaleFileLoader(
     IAppDataPathProvider storageProvider,
-    ILogger<TranslationFileLoader> logger)
+    ILogger<LocaleFileLoader> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -21,7 +21,7 @@ public class TranslationFileLoader(
 
     public string GetLocalizationFilePath(string fileName)
     {
-        var basePath = Path.Combine(storageProvider.GetAppDataPath(), "Localization");
+        var basePath = Path.Combine(storageProvider.GetAppDataPath(), "locales");
         Directory.CreateDirectory(basePath);
         return Path.Combine(basePath, fileName);
     }

@@ -13,7 +13,7 @@ public class CommandDispatcher(
     ICommandRegistry commandRegistry,
     IServiceProvider provider,
     IErrorTrackingService errorTrackingService,
-    ILocalizationService localization)
+    ILocaleService locale)
     : ICommandDispatcher
 {
     private readonly IDashboardBridge _dashboardBridge = provider.GetRequiredService<IDashboardBridge>();
@@ -29,7 +29,7 @@ public class CommandDispatcher(
             if (factory == null)
             {
                 return CommandResult.Failure(
-                    await localization.GetStringAsync("core.bot.command.not_found", context.Locale,
+                    await locale.GetStringAsync("core.bot.command.not_found", context.Locale,
                         context.CommandName),
                     sendResult: false);
             }

@@ -7,7 +7,7 @@ namespace ButterBror.Localization.Services;
 /// Manages locale registry and alias resolution
 /// </summary>
 public class LocaleRegistryService(
-    TranslationFileLoader fileLoader,
+    LocaleFileLoader fileLoader,
     ILogger<LocaleRegistryService> logger)
 {
     private AvailableLocales? _registry;

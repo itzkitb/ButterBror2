@@ -6,5 +6,5 @@ public class TwitchChat(string channelName, string channelId) : IPlatformChat
 {
     public string Id { get; } = channelId;
     public string Name { get; } = channelName;
-    public string Platform { get; } = "sillyapps:twitch";
+    public string Platform { get; } = "tupidapps:twitch";
 }

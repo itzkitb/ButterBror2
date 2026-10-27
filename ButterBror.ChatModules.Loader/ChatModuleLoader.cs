@@ -18,7 +18,7 @@ public sealed class ChatModuleLoader(
     IAppDataPathProvider pathProvider,
     IServiceProvider serviceProvider,
     ILogger<ChatModuleLoader> logger,
-    ILocalizationService localizationService)
+    ILocaleService localeService)
     : IChatModuleLoader, IDisposable
 {
     private readonly List<AssemblyLoadContext> _loadContexts = [];
@@ -36,7 +36,7 @@ public sealed class ChatModuleLoader(
         _loadedModules.Clear();
         _loadContexts.Clear();
 
-        var chatsPath = Path.Combine(pathProvider.GetAppDataPath(), "Chat");
+        var chatsPath = Path.Combine(pathProvider.GetAppDataPath(), "chat");
 
         if (!Directory.Exists(chatsPath))
         {
@@ -141,7 +141,7 @@ public sealed class ChatModuleLoader(
                         // s7: store mapping from module platform name to archive path
                         _moduleToArchivePath[chatModule.ModuleId] = path;
                         // s8: register built-in locales
-                        localizationService.RegisterModuleTranslations(
+                        localeService.RegisterModuleTranslations(
                             chatModule.ModuleId,
                             chatModule.DefaultTranslations);
                         logger.LogInformation(
@@ -292,7 +292,7 @@ public sealed class ChatModuleLoader(
             else
             {
                 // s1: try to find archive by name
-                var chatModulesPath = Path.Combine(pathProvider.GetAppDataPath(), "Chat");
+                var chatModulesPath = Path.Combine(pathProvider.GetAppDataPath(), "chat");
                 
                 // s2: first try exact file name match
                 var exactArchivePath = Path.Combine(chatModulesPath, $"{moduleId}.pag");

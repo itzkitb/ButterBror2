@@ -3,7 +3,7 @@ using ButterBror.Core.Interfaces;
 
 namespace ButterBror.Infrastructure.Services;
 
-public class FormatterService(ILocalizationService localizationService) : IFormatterService
+public class FormatterService(ILocaleService localeService) : IFormatterService
 {
     public async Task<string> FormatTimeSpanAsync(TimeSpan ts, string locale)
     {
@@ -124,6 +124,6 @@ public class FormatterService(ILocalizationService localizationService) : IForma
     
     private async Task<string> GetL(string locale, string unit)
     {
-        return await localizationService.GetStringAsync($"word.{unit}", locale);
+        return await localeService.GetStringAsync($"word.{unit}", locale);
     }
 }

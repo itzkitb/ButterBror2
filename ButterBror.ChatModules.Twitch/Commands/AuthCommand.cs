@@ -13,7 +13,7 @@ public class AuthCommand(IServiceProvider serviceProvider, IOptions<TwitchConfig
 {
     private readonly TwitchConfiguration _config = config.Value;
     private readonly ILogger<AuthCommand> _logger = serviceProvider.GetRequiredService<ILogger<AuthCommand>>();
-    private ILocalizationService _localization = serviceProvider.GetRequiredService<ILocalizationService>();
+    private ILocaleService _locale = serviceProvider.GetRequiredService<ILocaleService>();
 
     public async Task<CommandResult> ExecuteAsync(
         CommandContext context,
@@ -22,7 +22,7 @@ public class AuthCommand(IServiceProvider serviceProvider, IOptions<TwitchConfig
         var botAuthUrl = _config.RedirectUri;
         _logger.LogInformation("[tw] auth url generated. url={Url}", botAuthUrl);
 
-        var response = await _localization.GetStringAsync(
+        var response = await _locale.GetStringAsync(
             "command.auth.success",
             context.Locale,
             botAuthUrl);

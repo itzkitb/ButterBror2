@@ -10,6 +10,6 @@ public class TwitchUser(
 {
     public string Id { get; } = userId;
     public string DisplayName { get; } = username;
-    public string Platform { get; } = "sillyapps:twitch";
+    public string Platform { get; } = "tupidapps:twitch";
     public HashSet<PlatformPermission> Permissions { get; } = permissions;
 }

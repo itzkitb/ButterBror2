@@ -104,9 +104,9 @@ builder.Services.AddScoped<IErrorTrackingService, ErrorTrackingService>();
 builder.Services.AddSingleton<IRestrictionService, RestrictionService>();
 
 // ^ localization
-builder.Services.AddSingleton<TranslationFileLoader>();
+builder.Services.AddSingleton<LocaleFileLoader>();
 builder.Services.AddSingleton<LocaleRegistryService>();
-builder.Services.AddSingleton<ILocalizationService, LocalizationService>();
+builder.Services.AddSingleton<ILocaleService, LocaleService>();
 
 // ^ external integrations
 builder.Services.AddHttpClient<IPasteBinService, PasteBinService>()

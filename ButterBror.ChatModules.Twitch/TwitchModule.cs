@@ -22,7 +22,7 @@ namespace ButterBror.ChatModules.Twitch;
 public class TwitchModule : IChatModule
 {
     // ><> metadata
-    public string ModuleId => "sillyapps:twitch";
+    public string ModuleId => "tupidapps:twitch";
     public Version Version { get; } = new(1, 5, 7);
     public List<ChatModuleFlags> Flags { get; } = [ ChatModuleFlags.CanSendMessages ];
 
@@ -38,7 +38,7 @@ public class TwitchModule : IChatModule
     private TwitchConfiguration _config = null!;
     private ICustomDataRepository _db = null!;
     private IDashboardBridge? _dashboardBridge;
-    private ILocalizationService? _localization;
+    private ILocaleService? _localization;
 
     private TwitchClient _twitchClient = null!;
     private IServiceProvider? _moduleServiceProvider;
@@ -132,7 +132,7 @@ public class TwitchModule : IChatModule
     private static async Task<TwitchConfiguration> LoadConfigurationAsync(IServiceProvider sp)
     {
         var configurationService = sp.GetRequiredService<IConfigurationService>();
-        return await configurationService.LoadConfigurationAsync<TwitchConfiguration>("Twitch") 
+        return await configurationService.LoadConfigurationAsync<TwitchConfiguration>("twitch") 
                ?? new TwitchConfiguration();
     }
 
@@ -143,8 +143,8 @@ public class TwitchModule : IChatModule
         _db = sp.GetRequiredService<ICustomDataRepository>();
         _botCore = sp.GetRequiredService<IBotCore>();
         _dashboardBridge = sp.GetService<IDashboardBridge>();
-        _localization = sp.GetService<ILocalizationService>();
-        var localization = sp.GetRequiredService<ILocalizationService>();
+        _localization = sp.GetService<ILocaleService>();
+        var localization = sp.GetRequiredService<ILocaleService>();
         var pastebinService = sp.GetRequiredService<IPasteBinService>();
         _messageRender = new TwitchMessageRender(pastebinService, localization);
     }
@@ -154,14 +154,14 @@ public class TwitchModule : IChatModule
         var services = new ServiceCollection();
         services.AddSingleton(host.GetRequiredService<IBotCore>());
         services.AddSingleton(host.GetRequiredService<ICustomDataRepository>());
-        services.AddSingleton(host.GetRequiredService<ILocalizationService>());
+        services.AddSingleton(host.GetRequiredService<ILocaleService>());
         services.AddSingleton(host.GetRequiredService<IPasteBinService>());
         services.AddSingleton(host.GetRequiredService<IConfigurationService>());
         services.AddSingleton(host.GetRequiredService<IAppDataPathProvider>());
         services.AddSingleton(host.GetRequiredService<ILoggerFactory>());
         services.AddSingleton(_messageRender ?? new TwitchMessageRender(
             host.GetRequiredService<IPasteBinService>(), 
-            host.GetRequiredService<ILocalizationService>()));
+            host.GetRequiredService<ILocaleService>()));
         services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
         if (host.GetService<IDashboardBridge>() is { } dashboard)
             services.AddSingleton(dashboard);
