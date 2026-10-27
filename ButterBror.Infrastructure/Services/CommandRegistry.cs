@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using ButterBror.Application.Commands;
 using ButterBror.Application.Commands.Meta;
 using ButterBror.Core.Interfaces;
@@ -45,8 +45,8 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
                 new LocaleCommandMeta()
             );
             RegisterGlobalCommand(
-                () => new ReloadModuleCommand(),
-                new ReloadModuleMeta()
+                () => new ModuleCommand(),
+                new ModuleMeta()
             );
             RegisterGlobalCommand(
                 () => new BlockCommand(),
@@ -210,7 +210,7 @@ public class CommandRegistry(IServiceProvider serviceProvider, ILogger<CommandRe
 
         if (removedCount > 0)
         {
-            logger.LogDebug("Unregistered {Count} command(s) for module '{ModuleId}'", removedCount, moduleId);
+            logger.LogDebug("unregistered {Count} command(s) for module '{ModuleId}'", removedCount, moduleId);
         }
     }
 }
